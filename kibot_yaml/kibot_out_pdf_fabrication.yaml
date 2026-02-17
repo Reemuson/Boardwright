@@ -16,7 +16,7 @@ outputs:
     color_theme: '@COLOR_THEME@'
     output: '%f-fabrication%I%v.%x'
     format: 'PDF'
-    title: '@DOC_TITLE@ Document'
+    title: '@DOC_TITLE@ DOCUMENT'
     realistic_solder_mask: false
     dpi: 1200
     dnf_filter: _kibom_dnf_Config
@@ -77,8 +77,8 @@ outputs:
     pages:
       - scaling: @SCALING@
         title: '@DOC_TITLE@'
-        sheet: 'Top Fabrication (Scale @SCALING@:1)'
-        layer_var: 'Top Fabrication (Scale @SCALING@:1)'
+        sheet: 'TOP FABRICATION (SCALE @SCALING@:1)'
+        layer_var: 'TOP FABRICATION (SCALE @SCALING@:1)'
         sheet_reference_color: '#000000'
         colored_holes: true
         holes_color: "#FFFFFF"
@@ -104,8 +104,8 @@ outputs:
         mirror: true
         mirror_pcb_text: false
         title: '@DOC_TITLE@'
-        sheet: 'Bottom Fabrication (Scale @SCALING@:1)'
-        layer_var: 'Bottom Fabrication (Scale @SCALING@:1)'
+        sheet: 'BOTTOM FABRICATION (SCALE @SCALING@:1)'
+        layer_var: 'BOTTOM FABRICATION (SCALE @SCALING@:1)'
         sheet_reference_color: '#000000'
         colored_holes: true
         holes_color: "#FFFFFF"
@@ -129,8 +129,8 @@ outputs:
 
       - scaling: @SCALING@
         title: '@DOC_TITLE@'
-        sheet: 'Drill Drawing (%lp)'
-        layer_var: 'Drill Drawing %lp (Scale @SCALING@:1)'
+        sheet: 'DRILL DRAWING (%lp)'
+        layer_var: 'DRILL DRAWING %lp (SCALE @SCALING@:1)'
         sheet_reference_color: '#000000'
         colored_holes: true
         holes_color: "#FFFFFF"
@@ -144,8 +144,8 @@ outputs:
 
       - scaling: @SCALING@
         title: '@DOC_TITLE@'
-        sheet: 'Top Test Points (Scale @SCALING@:1)'
-        layer_var: 'Top Test Points (Scale @SCALING@:1)'
+        sheet: 'TOP TEST POINTS (SCALE @SCALING@:1)'
+        layer_var: 'TOP TEST POINTS (SCALE @SCALING@:1)'
         sheet_reference_color: '#000000'
         colored_holes: true
         holes_color: "#FFFFFF"
@@ -172,8 +172,8 @@ outputs:
         mirror : true
         mirror_pcb_text: true
         title: '@DOC_TITLE@'
-        sheet: 'Bottom Test Points (Scale @SCALING@:1)'
-        layer_var: 'Bottom Test Points (Scale @SCALING@:1)'
+        sheet: 'BOTTOM TEST POINTS (SCALE @SCALING@:1)'
+        layer_var: 'BOTTOM TEST POINTS (SCALE @SCALING@:1)'
         sheet_reference_color: '#000000'
         colored_holes: true
         holes_color: "#FFFFFF"
@@ -197,8 +197,8 @@ outputs:
             color: '#000000'
 
       - scaling: @SCALING@
-        sheet: '%ln (Scale @SCALING@:1)'
-        layer_var: '%ln (Scale @SCALING@:1)'
+        sheet: '%ln (SCALE @SCALING@:1)'
+        layer_var: '%ln (SCALE @SCALING@:1)'
         title: '@DOC_TITLE@'
         sheet_reference_color: '#000000'
         colored_holes: true
@@ -213,7 +213,7 @@ definitions:
   NAME: pdf_fabrication
   COMMENT: Fabrication document in PDF format
   DIR: Manufacturing/Fabrication
-  DOC_TITLE: Fabrication
+  DOC_TITLE: FABRICATION
   COLOR_THEME: Altium_Theme
   SHEET_WKS: ${KIPRJMOD}/Templates/KDT_Template_PCB_GIT_A4.kicad_wks
   SCALING: 1.0

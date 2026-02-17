@@ -557,11 +557,11 @@ definitions:
 
   # Metadata ===================================================================
 
-  PROJECT_NAME: Project Name
-  BOARD_NAME: Board Name
+  PROJECT_NAME: PROJECT NAME
+  BOARD_NAME: BOARD NAME
 
-  COMPANY: Company Name
-  DESIGNER: Author
+  COMPANY: COMPANY
+  DESIGNER: F. LAST
 
   LOGO: 'Logos/dummy_logo.png'
   GIT_URL: 'https://github.com/nguyen-v/KDT_Hierarchical_KiBot'
@@ -573,7 +573,7 @@ definitions:
 
   # BoM ========================================================================
 
-  MPN_FIELD: 'Manufacturer Part Number'
+  MPN_FIELD: 'MPN'
   MAN_FIELD: 'Manufacturer'
 
   # Drill table and drill map parameters =======================================
@@ -603,7 +603,7 @@ definitions:
   3D_VIEWER_ROT_Y: -1
   3D_VIEWER_ROT_Z: 1
   3D_VIEWER_ZOOM: -1
-  KEY_COLOR: '#00FF00' # Background color to remove. Use a color different from your PCB
+  KEY_COLOR: '#FF00FF' # Background color to remove. Use a color different from your PCB
 
   # Output directories =========================================================
 

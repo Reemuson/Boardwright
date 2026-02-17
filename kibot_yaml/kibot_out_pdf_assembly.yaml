@@ -16,7 +16,7 @@ outputs:
     color_theme: '@COLOR_THEME@'
     output: '%f-assembly%I%v.%x'
     format: 'PDF'
-    title: '@DOC_TITLE@ Document'
+    title: '@DOC_TITLE@ DOCUMENT'
     realistic_solder_mask: false
     dpi: 1200
     dnf_filter: _kibom_dnf_Config
@@ -39,16 +39,16 @@ outputs:
       - scaling: @SCALING@
         layer_var: ''
         title: '@DOC_TITLE@'
-        sheet: Top/Bottom View
+        sheet: TOP/BOTTOM VIEW
         sheet_reference_color: '#000000'
         layers:
           - layer: '@LAYER_TITLE_PAGE@'
             color: '#000000'
 
       - scaling: @SCALING@
-        layer_var: "Top Assembly (Scale @SCALING@:1)"
+        layer_var: "TOP ASSEMBLY (SCALE @SCALING@:1)"
         title: '@DOC_TITLE@'
-        sheet: Top Assembly (Scale @SCALING@:1)
+        sheet: TOP ASSEMBLY (SCALE @SCALING@:1)
         sheet_reference_color: '#000000'
         colored_holes: true
         holes_color: "#FFFFFF"
@@ -72,11 +72,11 @@ outputs:
             color: '#D63034'
 
       - scaling: @SCALING@
-        layer_var: "Bottom Assembly (Scale @SCALING@:1)"
+        layer_var: "BOTTOM ASSEMBLY (SCALE @SCALING@:1)"
         mirror: true
         mirror_pcb_text: false
         title: '@DOC_TITLE@'
-        sheet: Bottom Assembly (Scale @SCALING@:1)
+        sheet: BOTTOM ASSEMBLY (SCALE @SCALING@:1)
         sheet_reference_color: '#000000'
         colored_holes: true
         holes_color: "#FFFFFF"
@@ -104,7 +104,7 @@ definitions:
   NAME: pdf_assembly
   COMMENT: Assembly document in PDF format
   DIR: Manufacturing/Assembly
-  DOC_TITLE: Assembly
+  DOC_TITLE: ASSEMBLY
   COLOR_THEME: Altium_Theme
   SHEET_WKS: ${KIPRJMOD}/Templates/KDT_Template_PCB_GIT_A4.kicad_wks
   SCALING: 1.0
