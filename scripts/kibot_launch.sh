@@ -19,7 +19,7 @@ pid_file="/tmp/kibot_server.pid"
 # Display help
 function display_help() {
     echo -e "USAGE"
-    echo -e "  ./kibot_launch.sh [OPTIONS]"
+    echo -e "  ./scripts/kibot_launch.sh [OPTIONS]"
     echo
     echo -e "OPTIONS"
     echo -e "  -v, --variant VARIANT       Specify a variant name. Supported variants:"
@@ -31,15 +31,15 @@ function display_help() {
     echo -e "  -h, --help                  Display this help message."
     echo
     echo -e "EXAMPLES"
-    echo -e "  ./kibot_launch.sh                        Run with default options."
-    echo -e "  ./kibot_launch.sh -v RELEASED            Run with RELEASED variant."
-    echo -e "  ./kibot_launch.sh --costs                Compute XLSX costs spreadsheet. Results in Manufacturing/Assembly folder"
-    echo -e "  ./kibot_launch.sh -v DRAFT               Run with DRAFT variant."
-    echo -e "  ./kibot_launch.sh -v PRELIMINARY         Run with PRELIMINARY variant."
-    echo -e "  ./kibot_launch.sh -v CUSTOM_VARIANT      Run with a custom variant, saved in the Variants folder."
-    echo -e "  ./kibot_launch.sh --server               Start an HTTP server on port 8000."
-    echo -e "  ./kibot_launch.sh --server 8080          Start an HTTP server on port 8080."
-    echo -e "  ./kibot_launch.sh --stop-server          Stop the running HTTP server."
+    echo -e "  ./scripts/kibot_launch.sh                        Run with default options."
+    echo -e "  ./scripts/kibot_launch.sh -v RELEASED            Run with RELEASED variant."
+    echo -e "  ./scripts/kibot_launch.sh --costs                Compute XLSX costs spreadsheet. Results in Manufacturing/Assembly folder"
+    echo -e "  ./scripts/kibot_launch.sh -v DRAFT               Run with DRAFT variant."
+    echo -e "  ./scripts/kibot_launch.sh -v PRELIMINARY         Run with PRELIMINARY variant."
+    echo -e "  ./scripts/kibot_launch.sh -v CUSTOM_VARIANT      Run with a custom variant, saved in the Variants folder."
+    echo -e "  ./scripts/kibot_launch.sh --server               Start an HTTP server on port 8000."
+    echo -e "  ./scripts/kibot_launch.sh --server 8080          Start an HTTP server on port 8080."
+    echo -e "  ./scripts/kibot_launch.sh --stop-server          Stop the running HTTP server."
     echo
     echo -e "VARIANT DESCRIPTIONS"
     echo -e "  DRAFT: only schematic in progress, will only generate schematic PDF, netlist and BoM"

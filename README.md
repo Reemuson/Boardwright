@@ -295,16 +295,16 @@ The easiest way to install KiBot if custom development is not required is with d
   ```
   ***
 
-Once in the docker, you can use the [`kibot_launch.sh`](kibot_launch.sh) script to generate and visualize outputs.
+Once in the docker, you can use the [`kibot_launch.sh`](scripts/kibot_launch.sh) script to generate and visualize outputs.
 
 ```
-./kibot_launch.sh
+./scripts/kibot_launch.sh
 ```
 
 You can get more information about the usage with
 
 ```
-./kibot_launch.sh --help
+./scripts/kibot_launch.sh --help
 ```
 
 When running the script with no arguments, it will default to the `CHECKED` variant and generate all outputs. A variant can be set with the `-v` flag. If a custom variant is used (i.e. other than the default variants `DRAFT`, `PRELIMINARY`, `CHECKED`, `RELEASED`), the outputs will be generated in the `Variants` folder.
@@ -339,14 +339,14 @@ Each default variant will have different KiBot flags, which is useful for differ
 To run KiCost, you will need to create a file `kicost_config_local.yaml` in [`kicost_yaml`](kicost_yaml). You can use the [`kicost_config_local_template.yaml`](kicost_yaml/kicost_config_local.yaml) file as a base. Once you have filled in the API keys for the desired manufacturers, KiCost can be run with:
 
 ```
-./kibot_launch.sh --costs
+./scripts/kibot_launch.sh --costs
 ```
 This will create a spreadsheet in [`Manufacturing/Assembly`](Manufacturing/Assembly/) folder.
 
 You can also specify a variant if desired:
 
 ```
-./kibot_launch.sh -v <VARIANT> --costs
+./scripts/kibot_launch.sh -v <VARIANT> --costs
 ```
 
 For more information, please have a look at the official [documentation](https://hildogjr.github.io/KiCost/docs/_build/singlehtml/index.html)
@@ -373,11 +373,11 @@ For more information, please have a look at the official [documentation](https:/
 The outputs of KiBot can be visualized in a webpage (excepted for the `DRAFT` variant). This can be done by running:
 
 ```
-./kibot_launch.sh --server
+./scripts/kibot_launch.sh --server
 ```
 And opening `http://localhost:8000` in your favorite browser. The server can be shut down with:
 ```
-./kibot_launch.sh --stop-server
+./scripts/kibot_launch.sh --stop-server
 ```
 
 > [!TIP]

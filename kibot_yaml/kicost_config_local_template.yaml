@@ -3,7 +3,7 @@
 # kibost_config_local.yaml should NOT be shared as it contains API keys
 # By default, kicost_config_local.yaml is in the .gitignore
 # To run KiCost, you can run the following:
-# ./kibot_launch.sh -v <VARIANT> --costs
+# ./scripts/kibot_launch.sh -v <VARIANT> --costs
 kicost:
   version: 1
   # Prices are valid for a day
