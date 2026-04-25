@@ -26,6 +26,39 @@ class TuiTests(unittest.TestCase):
             tui._notification_severity((ValidationIssue("error", "Broken"),)),
         )
 
+    def test_issue_summary(self) -> None:
+        self.assertEqual("validation ok", tui._issue_summary(()))
+        self.assertIn(
+            "warning",
+            tui._issue_summary((ValidationIssue("warning", "Careful"),)),
+        )
+
+    def test_timeline_contains_release_steps(self) -> None:
+        state = tui.collect_dashboard_state()
+        text = tui._format_timeline(tui._workflow_steps(state)).plain
+
+        self.assertIn("Edit in KiCad", text)
+        self.assertIn("Record changes", text)
+        self.assertIn("Preview CI", text)
+        self.assertIn("Accept to main", text)
+
+    def test_inspector_shows_next_action(self) -> None:
+        state = tui.collect_dashboard_state()
+        text = tui._format_inspector(state)
+
+        self.assertTrue(text.strip())
+        self.assertIn("Latest CI", text)
+        self.assertIn("Preview runs from dev pushes", text)
+
+    def test_ci_status_shortens(self) -> None:
+        self.assertEqual("CI not polled", tui._ci_status_short("CI not polled"))
+        self.assertLessEqual(len(tui._ci_status_short("x" * 80)), 36)
+
+    def test_top_status_is_rich_text(self) -> None:
+        state = tui.collect_dashboard_state()
+
+        self.assertTrue(tui._format_top_status(state.status, state.issues, "CI not polled").plain)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,7 +21,7 @@ permissions:
   actions: read
 
 env:
-  KIBOT_CONFIG: kibot_yaml/kibot_main.yaml
+  KIBOT_CONFIG: boardwright_resources/kibot/yaml/kibot_main.yaml
   KIBOT_LOG: kibot_preview.log
   KICAD_VERSION: "9"
   PREVIEW_DIR: boardwright-preview
@@ -104,7 +104,7 @@ jobs:
           rm -rf "$PREVIEW_DIR"
           mkdir -p "$PREVIEW_DIR"
 
-          for path in Schematic Manufacturing Images HTML KiRI 3D Testing Reports README.md; do
+          for path in Schematic Manufacturing assets HTML KiRI Testing Reports README.md; do
             if [[ -e "$path" ]]; then
               cp -a "$path" "$PREVIEW_DIR/"
             fi

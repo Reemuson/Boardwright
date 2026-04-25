@@ -53,8 +53,7 @@ def main(argv: list[str] | None = None) -> int:
             return _tui()
         if args.command == "suggest-commit":
             return _suggest_commit(args)
-        parser.print_help()
-        return 0
+        return _tui()
     except BoardwrightError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -109,13 +108,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers.add_parser("validate", help="Validate core Boardwright project files.")
-    subparsers.add_parser("tui", help="Show the initial Boardwright TUI shell.")
+    subparsers.add_parser("tui", help="Open the Boardwright TUI.")
 
     preview = subparsers.add_parser("preview", help="Plan or dispatch preview outputs.")
     preview.add_argument(
         "--variant",
         "-v",
-        help="Preview variant. Defaults to variants.dev_default from project.yaml.",
+        help="Preview variant. Defaults to variants.preview_default from project.yaml.",
     )
     preview.add_argument(
         "--dispatch",

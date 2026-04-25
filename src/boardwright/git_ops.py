@@ -22,6 +22,19 @@ def latest_tag(root: Path) -> str | None:
     return tag or None
 
 
+def ahead_behind(root: Path) -> tuple[int, int]:
+    """Return commits ahead/behind the configured upstream branch."""
+    output = _git(root, "rev-list", "--left-right", "--count", "@{u}...HEAD", check=False)
+    parts = output.split()
+    if len(parts) != 2:
+        return (0, 0)
+    try:
+        behind, ahead = int(parts[0]), int(parts[1])
+    except ValueError:
+        return (0, 0)
+    return (ahead, behind)
+
+
 def changed_paths(root: Path) -> list[str]:
     paths: list[str] = []
     for line in dirty_files(root):
@@ -39,9 +52,40 @@ def commit_all(root: Path, message: str, dry_run: bool = True) -> str:
             return "No changes to commit."
         return "Would commit:\n" + "\n".join(files)
 
-    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    staged = subprocess.run(
+        ["git", "add", "-A"],
+        cwd=root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if staged.returncode != 0:
+        return staged.stderr.strip() or staged.stdout.strip()
+
     completed = subprocess.run(
         ["git", "commit", "-m", message],
+        cwd=root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return completed.stdout.strip() or completed.stderr.strip()
+
+
+def push_current_branch(root: Path) -> str:
+    branch = current_branch(root)
+    if not branch or branch == "detached":
+        return "Cannot push from a detached HEAD."
+
+    return push_branch(root, branch)
+
+
+def push_branch(root: Path, branch: str) -> str:
+    if not branch:
+        return "Cannot push: branch name is empty."
+
+    completed = subprocess.run(
+        ["git", "push", "-u", "origin", branch],
         cwd=root,
         text=True,
         capture_output=True,

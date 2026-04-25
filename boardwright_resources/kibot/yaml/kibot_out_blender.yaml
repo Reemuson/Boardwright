@@ -102,4 +102,4 @@ outputs:
 definitions:
   NAME: blender
   COMMENT: PCB 3D model in PCB3D Blender format
-  DIR: 3D
+  DIR: assets/3d

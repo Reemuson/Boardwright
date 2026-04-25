@@ -561,7 +561,7 @@ definitions:
   COMPANY: COMPANY
   DESIGNER: F. LAST
 
-  LOGO: 'Logos/rd-logo.png'
+  LOGO: 'assets/logos/rd-logo.png'
   GIT_URL: ''
 
   # Preflight ==================================================================
@@ -618,9 +618,9 @@ definitions:
   FAB_DRILL_TABLES_DIR: '@FABRICATION_DIR@/Drill Tables'
   TESTING_DIR: Testing
   TESTPOINTS_DIR: '@TESTING_DIR@/Testpoints'
-  IMAGES_DIR: Images
-  3D_DIR: 3D
-  RESOURCES_DIR: kibot_resources
+  IMAGES_DIR: assets/renders
+  3D_DIR: assets/3d
+  RESOURCES_DIR: boardwright_resources/kibot/resources
   REPORT_TEMPLATE_DIR: '@RESOURCES_DIR@/templates'
   SCRIPTS_DIR: '@RESOURCES_DIR@/scripts'
 

@@ -1,6 +1,6 @@
 import unittest
 
-from kibot_resources.scripts.get_revision_history_var import unquote
+from boardwright_resources.kibot.resources.scripts.get_revision_history_var import unquote
 
 
 class RevisionHistoryScriptTests(unittest.TestCase):

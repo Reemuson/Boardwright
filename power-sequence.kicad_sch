@@ -541,8 +541,7 @@
 		(at 93.8276 34.6456 0)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 3 3)
+				(size 2 2)
 				(thickness 0.4)
 				(bold yes)
 				(color 0 0 0 1)
@@ -556,7 +555,6 @@
 		(at 262.89 41.783 0)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 2 2)
 				(thickness 0.4)
 				(bold yes)
@@ -571,8 +569,7 @@
 		(at 265.303 117.221 0)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 3 3)
+				(size 2 2)
 				(thickness 0.4)
 				(bold yes)
 				(color 0 0 0 1)
@@ -588,15 +585,14 @@
 		(margins 0.9524 0.9524 0.9524 0.9524)
 		(stroke
 			(width -0.0001)
-			(type default)
+			(type solid)
 		)
 		(fill
 			(type none)
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 1.27 1.27)
+				(size 0.8 0.8)
 				(color 0 0 0 1)
 			)
 		)
@@ -616,7 +612,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -637,7 +632,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -658,7 +652,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -679,7 +672,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -693,7 +685,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -701,8 +693,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -723,7 +714,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -745,7 +735,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -759,15 +748,14 @@
 		(margins 0.9524 0.9524 0.9524 0.9524)
 		(stroke
 			(width -0.0001)
-			(type default)
+			(type solid)
 		)
 		(fill
 			(type none)
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 1.27 1.27)
+				(size 0.8 0.8)
 				(color 0 0 0 1)
 			)
 		)
@@ -787,7 +775,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -801,15 +788,14 @@
 		(margins 0.9524 0.9524 0.9524 0.9524)
 		(stroke
 			(width -0.0001)
-			(type default)
+			(type solid)
 		)
 		(fill
 			(type none)
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 1.27 1.27)
+				(size 0.8 0.8)
 				(color 0 0 0 1)
 			)
 		)
@@ -829,7 +815,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -843,7 +828,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -851,8 +836,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -873,7 +857,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -894,7 +877,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -909,7 +891,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -917,8 +899,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -932,7 +913,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -940,8 +921,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -962,7 +942,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -976,7 +955,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -984,8 +963,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 2 2)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -999,7 +977,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -1007,8 +985,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 2 2)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -1029,7 +1006,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1043,7 +1019,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -1051,8 +1027,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -1073,7 +1048,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1087,7 +1061,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -1095,8 +1069,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 2 2)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -1117,7 +1090,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1138,7 +1110,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1160,7 +1131,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1181,7 +1151,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1202,7 +1171,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 3 3)
 				(color 0 0 0 1)
 			)
@@ -1216,7 +1184,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -1224,8 +1192,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -1246,7 +1213,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1267,7 +1233,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1289,7 +1254,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1325,7 +1289,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -1333,8 +1297,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -1355,7 +1318,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1377,7 +1339,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1398,7 +1359,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1412,7 +1372,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -1420,8 +1380,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -1442,7 +1401,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1456,7 +1414,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -1464,8 +1422,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -1479,7 +1436,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -1487,8 +1444,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -1502,7 +1458,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -1510,8 +1466,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -1525,7 +1480,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -1533,8 +1488,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -1548,7 +1502,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -1556,8 +1510,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -1578,7 +1531,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1600,7 +1552,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1621,7 +1572,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1643,7 +1593,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1664,7 +1613,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1686,7 +1634,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1700,7 +1647,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -1708,8 +1655,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -1730,7 +1676,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 3 3)
 				(color 0 0 0 1)
 			)
@@ -1751,7 +1696,6 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -1765,7 +1709,7 @@
 		(margins 1.7145 1.7145 1.7145 1.7145)
 		(stroke
 			(width 0)
-			(type default)
+			(type solid)
 			(color 0 0 0 1)
 		)
 		(fill
@@ -1773,8 +1717,7 @@
 		)
 		(effects
 			(font
-				(face "Times New Roman")
-				(size 2.286 2.286)
+				(size 1.5 1.5)
 				(bold yes)
 				(color 0 0 127 1)
 			)
@@ -2488,4 +2431,10 @@
 		)
 		(uuid "f90643b4-a30a-42fa-903d-6b9324bb08a3")
 	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
 )

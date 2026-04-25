@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -35,11 +36,21 @@ class WorkflowAction:
         return tuple(args)
 
 
+@dataclass(frozen=True)
+class WorkflowRunStatus:
+    workflow: str
+    status: str
+    conclusion: str
+    branch: str
+    title: str
+    database_id: str
+
+
 def build_preview_action(
     config: BoardwrightConfig,
     variant: str | None = None,
 ) -> WorkflowAction:
-    selected_variant = normalize_variant(variant or config.default_variant)
+    selected_variant = normalize_variant(variant or config.preview_variant)
     return WorkflowAction(
         name="preview",
         workflow=config.preview_workflow,
@@ -117,6 +128,57 @@ def dispatch_workflow_action(config: BoardwrightConfig, action: WorkflowAction) 
     if completed.returncode != 0:
         message = completed.stderr.strip() or completed.stdout.strip()
         raise BoardwrightError(f"GitHub workflow dispatch failed: {message}")
+
+
+def list_recent_workflow_runs(
+    config: BoardwrightConfig,
+    limit: int = 5,
+) -> tuple[WorkflowRunStatus, ...]:
+    gh = _gh_command()
+    if gh is None:
+        raise BoardwrightError("GitHub CLI is not installed. Install gh to poll CI.")
+
+    command = [
+        gh,
+        "run",
+        "list",
+        "--limit",
+        str(limit),
+        "--json",
+        "databaseId,workflowName,status,conclusion,headBranch,displayTitle",
+    ]
+    if config.github_repo:
+        command.extend(("--repo", config.github_repo))
+
+    completed = subprocess.run(
+        command,
+        cwd=config.root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        message = completed.stderr.strip() or completed.stdout.strip()
+        raise BoardwrightError(f"Could not poll GitHub Actions: {message}")
+
+    try:
+        runs = json.loads(completed.stdout or "[]")
+    except json.JSONDecodeError as exc:
+        raise BoardwrightError(f"Could not parse GitHub Actions status: {exc}") from exc
+
+    parsed: list[WorkflowRunStatus] = []
+    for run in runs:
+        parsed.append(
+            WorkflowRunStatus(
+                workflow=str(run.get("workflowName") or "unknown"),
+                status=str(run.get("status") or "unknown"),
+                conclusion=str(run.get("conclusion") or ""),
+                branch=str(run.get("headBranch") or ""),
+                title=str(run.get("displayTitle") or ""),
+                database_id=str(run.get("databaseId") or ""),
+            )
+        )
+    return tuple(parsed)
 
 
 def _gh_command() -> str | None:

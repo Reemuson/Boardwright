@@ -13,6 +13,8 @@ class ProjectStatus:
     project_name: str
     branch: str
     dirty_count: int
+    ahead: int
+    behind: int
     latest_tag: str | None
     unreleased_changes: bool
     variant: str
@@ -20,6 +22,7 @@ class ProjectStatus:
 
 def collect_status(config: BoardwrightConfig) -> ProjectStatus:
     dirty = git_ops.dirty_files(config.root)
+    ahead, behind = git_ops.ahead_behind(config.root)
     try:
         changelog_text = read_changelog(config.root)
         has_unreleased = unreleased_has_content(changelog_text)
@@ -31,6 +34,8 @@ def collect_status(config: BoardwrightConfig) -> ProjectStatus:
         project_name=config.project_name,
         branch=git_ops.current_branch(config.root),
         dirty_count=len(dirty),
+        ahead=ahead,
+        behind=behind,
         latest_tag=git_ops.latest_tag(config.root),
         unreleased_changes=has_unreleased,
         variant=config.default_variant,

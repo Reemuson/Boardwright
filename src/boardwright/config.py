@@ -37,7 +37,7 @@ outputs:
   release_include_source_archive: false
 
 assets:
-  logo: Logos/rd-logo.png
+  logo: assets/logos/rd-logo.png
   product_image: ""
 """,
     "branches.yaml": """branches:
@@ -104,6 +104,21 @@ class BoardwrightConfig:
     def default_variant(self) -> str:
         variants = self.project.get("variants", {})
         return str(variants.get("dev_default", "CHECKED"))
+
+    @property
+    def preview_variant(self) -> str:
+        variants = self.project.get("variants", {})
+        return str(variants.get("preview_default", self.default_variant))
+
+    @property
+    def main_variant(self) -> str:
+        variants = self.project.get("variants", {})
+        return str(variants.get("main_default", "CHECKED"))
+
+    @property
+    def release_variant(self) -> str:
+        variants = self.project.get("variants", {})
+        return str(variants.get("release_default", "RELEASED"))
 
     @property
     def preview_workflow(self) -> str:

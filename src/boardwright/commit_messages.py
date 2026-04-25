@@ -19,7 +19,7 @@ def _suggest_scope(paths: list[str]) -> str:
         return "template"
     if "readme" in lowered or lowered.endswith(".md"):
         return "docs"
-    if ".github/" in lowered or "kibot_yaml" in lowered:
+    if ".github/" in lowered or "boardwright_resources/kibot/yaml" in lowered:
         return "ci"
     if "license" in lowered or "notice" in lowered:
         return "legal"
@@ -36,7 +36,7 @@ def _suggest_type(paths: list[str]) -> str:
         return "chore"
     if "readme" in lowered or lowered.endswith(".md"):
         return "docs"
-    if ".github/" in lowered or "kibot_yaml" in lowered:
+    if ".github/" in lowered or "boardwright_resources/kibot/yaml" in lowered:
         return "ci"
     return "chore"
 

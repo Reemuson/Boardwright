@@ -26,7 +26,7 @@
 	)
 	(rectangle
 		(start 317.5 39.37)
-		(end 373.38 240.03)
+		(end 373.38 205.74)
 		(stroke
 			(width 1)
 			(type default)
@@ -49,19 +49,6 @@
 			(type none)
 		)
 		(uuid 5d23fe69-1b57-41a7-86cd-8987bca3e109)
-	)
-	(rectangle
-		(start 45.72 210.82)
-		(end 134.62 240.03)
-		(stroke
-			(width 1)
-			(type default)
-			(color 200 200 200 1)
-		)
-		(fill
-			(type none)
-		)
-		(uuid 8b07e48f-2db7-43ad-80d6-e91fd34b7137)
 	)
 	(rectangle
 		(start 229.87 186.69)
@@ -90,19 +77,6 @@
 		(uuid 91e86061-3695-4d86-a73e-d25af3bfe9b8)
 	)
 	(rectangle
-		(start 139.7 210.82)
-		(end 224.79 240.03)
-		(stroke
-			(width 1)
-			(type default)
-			(color 200 200 200 1)
-		)
-		(fill
-			(type none)
-		)
-		(uuid d99cdb64-d2e4-4f1f-8584-4020073b6248)
-	)
-	(rectangle
 		(start 45.72 39.37)
 		(end 134.62 167.64)
 		(stroke
@@ -127,19 +101,6 @@
 			(type none)
 		)
 		(uuid ed78b7e7-9d87-4eba-bb13-ab88d26954ef)
-	)
-	(rectangle
-		(start 229.87 210.82)
-		(end 312.42 240.03)
-		(stroke
-			(width 1)
-			(type default)
-			(color 200 200 200 1)
-		)
-		(fill
-			(type none)
-		)
-		(uuid f026768c-915f-4378-b3f2-b0a2f2a348b8)
 	)
 	(text "Flexible I/O worked examples"
 		(exclude_from_sim no)
@@ -207,29 +168,6 @@
 		)
 		(uuid "22f68459-86b0-4160-81dc-9d64d58e4265")
 	)
-	(text_box "Block Description"
-		(exclude_from_sim no)
-		(at 140.97 228.6 0)
-		(size 82.55 9.525)
-		(margins 1.9049 1.9049 1.9049 1.9049)
-		(stroke
-			(width -0.0001)
-			(type default)
-		)
-		(fill
-			(type none)
-		)
-		(effects
-			(font
-				(size 2.54 2.54)
-				(thickness 0.508)
-				(bold yes)
-				(color 162 22 34 1)
-			)
-			(justify bottom)
-		)
-		(uuid "5050590c-bc0b-438f-ac65-a11e5219903d")
-	)
 	(text_box "[${#}] ${TITLE}"
 		(exclude_from_sim no)
 		(at 20.32 10.16 0)
@@ -251,29 +189,6 @@
 			)
 		)
 		(uuid "524c500e-48b2-4d74-9c30-5c34bf6c2558")
-	)
-	(text_box "Block Description"
-		(exclude_from_sim no)
-		(at 46.99 228.6 0)
-		(size 86.36 9.525)
-		(margins 1.9049 1.9049 1.9049 1.9049)
-		(stroke
-			(width -0.0001)
-			(type default)
-		)
-		(fill
-			(type none)
-		)
-		(effects
-			(font
-				(size 2.54 2.54)
-				(thickness 0.508)
-				(bold yes)
-				(color 162 22 34 1)
-			)
-			(justify bottom)
-		)
-		(uuid "67a85d80-fe45-4492-a23f-f4ed25b939a9")
 	)
 	(text_box "DESIGN NOTE:\nblabla"
 		(exclude_from_sim no)
@@ -297,29 +212,6 @@
 			(justify left top)
 		)
 		(uuid "7118d66d-27ed-4a42-9d0f-29873dd1133d")
-	)
-	(text_box "Block Description"
-		(exclude_from_sim no)
-		(at 231.14 228.6 0)
-		(size 80.01 9.525)
-		(margins 1.9049 1.9049 1.9049 1.9049)
-		(stroke
-			(width -0.0001)
-			(type default)
-		)
-		(fill
-			(type none)
-		)
-		(effects
-			(font
-				(size 2.54 2.54)
-				(thickness 0.508)
-				(bold yes)
-				(color 162 22 34 1)
-			)
-			(justify bottom)
-		)
-		(uuid "7283beb6-c696-4e44-ac80-edfae78c644b")
 	)
 	(text_box "LAYOUT NOTE:\nblabla"
 		(exclude_from_sim no)
@@ -417,7 +309,7 @@
 	)
 	(text_box "Block Description"
 		(exclude_from_sim no)
-		(at 231.14 194.31 0)
+		(at 231.14 194.945 0)
 		(size 80.01 9.525)
 		(margins 1.9049 1.9049 1.9049 1.9049)
 		(stroke
@@ -437,30 +329,6 @@
 			(justify bottom)
 		)
 		(uuid "a0355043-f06f-4f70-9556-f7b249e99a87")
-	)
-	(text_box "Block Description"
-		(exclude_from_sim no)
-		(at 318.77 228.6 0)
-		(size 53.34 9.525)
-		(margins 1.9049 1.9049 1.9049 1.9049)
-		(stroke
-			(width -0.0001)
-			(type default)
-		)
-		(fill
-			(type none)
-		)
-		(effects
-			(font
-				(face "Times New Roman")
-				(size 2.54 2.54)
-				(thickness 0.508)
-				(bold yes)
-				(color 162 22 34 1)
-			)
-			(justify bottom)
-		)
-		(uuid "ac59a6b3-731c-4363-a803-7459ac300c4a")
 	)
 	(text_box "DESIGN NOTE:\nblabla"
 		(exclude_from_sim no)
@@ -487,7 +355,7 @@
 	)
 	(text_box "Block Description"
 		(exclude_from_sim no)
-		(at 140.97 194.31 0)
+		(at 140.97 194.945 0)
 		(size 82.55 9.525)
 		(margins 1.9049 1.9049 1.9049 1.9049)
 		(stroke
@@ -507,5 +375,28 @@
 			(justify bottom)
 		)
 		(uuid "d975f102-c262-465d-91fc-7f6c552cfb8d")
+	)
+	(text_box "Block Description"
+		(exclude_from_sim no)
+		(at 318.77 195.58 0)
+		(size 53.34 9.525)
+		(margins 1.9049 1.9049 1.9049 1.9049)
+		(stroke
+			(width -0.0001)
+			(type default)
+		)
+		(fill
+			(type none)
+		)
+		(effects
+			(font
+				(size 2.54 2.54)
+				(thickness 0.508)
+				(bold yes)
+				(color 162 22 34 1)
+			)
+			(justify bottom)
+		)
+		(uuid "ef7af1ce-e13e-46f4-9e24-888436ec7e1e")
 	)
 )

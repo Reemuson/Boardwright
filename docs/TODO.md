@@ -14,6 +14,9 @@ lives in `ROADMAP.md`.
 - [x] Add legal/notice generation.
 - [x] Add README template validation.
 - [x] Add optional Textual TUI with console fallback.
+- [x] Make plain `boardwright` open the TUI.
+- [x] Add user/global and project-local install helper for the `boardwright`
+      command.
 - [x] Add TUI changelog-entry form.
 - [x] Add safe git status and dry-run commit helpers.
 - [x] Add GitHub Actions preview workflow.
@@ -31,14 +34,27 @@ lives in `ROADMAP.md`.
 - [x] Add `prepare-release.yaml` workflow.
 - [x] Commit `.boardwright/release.env` during release preparation.
 - [x] Make tag workflow read release metadata for variant and release kind.
-- [ ] Let Boardwright dispatch CI-owned tag creation.
-- [ ] Add TUI controls for Promote To Main and Create Release.
-- [ ] Add workflow status polling where GitHub CLI is available.
-- [ ] Add preview artifact download/fetch helper.
+- [x] Let Boardwright dispatch CI-owned tag creation.
+- [x] Add initial TUI controls for preview, accept/promote, and release flows.
+- [x] Add TUI commit and push controls for the normal dev loop.
+- [x] Add workflow status polling where GitHub CLI is available.
+- [x] Add preview artifact download/fetch helper.
+- [x] Consolidate visible project media under `assets/`.
+- [x] Collapse TUI primary actions to Record Changes, Commit + Push, Review
+      Artifacts, Accept to Main, Create Release, and Refresh.
+- [x] Make Record Changes automatically validate and regenerate revision-history
+      variables.
+- [x] Make Commit + Push automatically validate, regenerate revision-history
+      variables, commit, and push to `origin/dev`.
+- [x] Rename Promote/Accept flow to `Accept to Main`.
+- [x] Treat preview generation as push-triggered by default; keep manual rerun
+      as advanced/fallback only.
+- [ ] Add artifact freshness checks against the latest pushed `dev` commit.
+- [x] Add ahead/behind remote state to the TUI status bar and next-action logic.
 
 ## Active: Generated Main README
 
-- [ ] Refresh `kibot_resources/templates/readme.txt` for Boardwright projects.
+- [ ] Refresh `boardwright_resources/kibot/resources/templates/readme.txt` for Boardwright projects.
 - [ ] Add CI status badges.
 - [ ] Add current revision and variant.
 - [ ] Add board dimensions.
@@ -47,6 +63,14 @@ lives in `ROADMAP.md`.
 - [ ] Add latest release/package links.
 - [x] Keep board images side by side in README and release markdown.
 
+## Active: CI Retest After Asset Move
+
+- [ ] Preview workflow uses `assets/renders` and `assets/3d` correctly.
+- [ ] Main-output workflow commits only README/render snapshot assets.
+- [ ] Prepare-release workflow commits release state plus README/render snapshot
+      assets.
+- [ ] Release workflow packages `assets/` and attaches board renders.
+
 ## Verification Targets
 
 - [x] Dummy repo can generate preview outputs.
@@ -54,10 +78,10 @@ lives in `ROADMAP.md`.
 - [x] Revision history populates on generated schematic.
 - [x] Revision variable populates on generated schematic.
 - [x] Cover ToC includes nested sheets.
+- [x] Prepare-release workflow can create a prerelease tag from `main`.
 - [ ] Prepare-release workflow can create a draft tag from `main`.
-- [ ] Prepare-release workflow can create a prerelease tag from `main`.
 - [ ] Prepare-release workflow can create a full release tag from `main`.
-- [ ] TUI can drive the full happy path without manual git commands.
+- [ ] TUI can drive the full happy path after the asset-path workflow retest.
 
 ## Later
 

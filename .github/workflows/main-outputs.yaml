@@ -24,7 +24,7 @@ permissions:
   actions: read
 
 env:
-  KIBOT_CONFIG: kibot_yaml/kibot_main.yaml
+  KIBOT_CONFIG: boardwright_resources/kibot/yaml/kibot_main.yaml
   KIBOT_LOG: kibot_main_outputs.log
   KICAD_VERSION: "9"
 
@@ -103,10 +103,9 @@ jobs:
           path: |
             Schematic
             Manufacturing
-            Images
+            assets
             HTML
             KiRI
-            3D
             Testing
             Reports
             README.md
@@ -126,8 +125,8 @@ jobs:
           git config user.name "boardwright[bot]"
           git config user.email "boardwright[bot]@users.noreply.github.com"
 
-          git rm -r --ignore-unmatch 3D HTML KiRI Manufacturing Reports Schematic Testing
-          git add README.md Images/*.png || true
+          git rm -r --ignore-unmatch HTML KiRI Manufacturing Reports Schematic Testing
+          git add README.md assets/renders/*.png || true
 
           if git diff --cached --quiet; then
             echo "No README snapshot changes to commit."

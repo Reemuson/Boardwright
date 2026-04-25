@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from boardwright.actions import (
+    build_preview_action,
     build_prepare_release_action,
     build_promote_action,
 )
@@ -18,7 +19,7 @@ def _config() -> BoardwrightConfig:
                 "name": "Test",
                 "github_repo": "owner/repo",
             },
-            "variants": {"dev_default": "DRAFT"},
+            "variants": {"dev_default": "DRAFT", "preview_default": "PRELIMINARY"},
             "outputs": {
                 "main_workflow": "main-outputs.yaml",
                 "prepare_release_workflow": "prepare-release.yaml",
@@ -31,6 +32,12 @@ def _config() -> BoardwrightConfig:
 
 
 class ActionTests(unittest.TestCase):
+    def test_build_preview_action_uses_preview_default(self) -> None:
+        action = build_preview_action(_config())
+
+        self.assertEqual("preview", action.name)
+        self.assertIn(("variant", "PRELIMINARY"), action.fields)
+
     def test_build_promote_action(self) -> None:
         action = build_promote_action(_config(), "checked")
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 class KiBotRevisionHistoryTests(unittest.TestCase):
     def test_preflight_defines_revision_history_ceiling(self) -> None:
-        text = Path("kibot_yaml/kibot_pre_set_text_variables.yaml").read_text(
+        text = Path("boardwright_resources/kibot/yaml/kibot_pre_set_text_variables.yaml").read_text(
             encoding="utf-8"
         )
 

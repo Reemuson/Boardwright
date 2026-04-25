@@ -32,7 +32,7 @@ permissions:
   actions: write
 
 env:
-  KIBOT_CONFIG: kibot_yaml/kibot_main.yaml
+  KIBOT_CONFIG: boardwright_resources/kibot/yaml/kibot_main.yaml
   KIBOT_LOG: kibot_prepare_release.log
   KICAD_VERSION: "9"
 
@@ -141,9 +141,9 @@ jobs:
           version="${{ inputs.version }}"
           variant="${{ inputs.variant }}"
 
-          git rm -r --ignore-unmatch 3D HTML KiRI Manufacturing Reports Schematic Testing
+          git rm -r --ignore-unmatch HTML KiRI Manufacturing Reports Schematic Testing
           git add CHANGELOG.md .boardwright/revision_history_variables.env .boardwright/release.env
-          git add README.md Images/*.png || true
+          git add README.md assets/renders/*.png || true
 
           if git diff --cached --quiet; then
             echo "No release changes to commit." >&2

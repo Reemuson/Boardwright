@@ -25,5 +25,5 @@ outputs:
   release_include_source_archive: false
 
 assets:
-  logo: Logos/rd-logo.png
+  logo: assets/logos/rd-logo.png
   product_image: ""

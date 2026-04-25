@@ -8,6 +8,7 @@ _autosave-*
 *.kicad_pro-bak
 *.kicad_pcb-bak
 *.kicad_prl-bak
+*.kicad_prl
 fp-info-cache
 *Zone.Identifier
 kibot_*.kicad_pcb
@@ -28,16 +29,18 @@ dist/
 venv/
 
 # Boardwright local scratch/output
+.boardwright/revision_history_variables.env
 .boardwright-sandbox/
 boardwright-preview/
 boardwright-release/
 boardwright-*-release.zip
-3D/
 HTML/
 KiRI/
 Manufacturing/
 Schematic/
 Testing/
+assets/3d/*
+!assets/3d/.gitkeep
 
 # KiBot / workflow logs and generated run detritus
 kibot*.log

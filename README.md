@@ -1,4 +1,4 @@
-<h1 align="center">KiCad 8/9 Template for CI/CD with KiBot</h1>
+<h1 align="center">Boardwright KiCad/KiBot Template</h1>
 
 <p align="center">
   <a href=https://www.kicad.org/>
@@ -10,17 +10,69 @@
   </a>
 </p>
 
-A **KiCad 8/9** template for **automated**, professional documentation generation with **Continuous Integration and Continuous Development** (CI/CD) using [KiBot](https://github.com/INTI-CMNB/KiBot/tree/master).
+Boardwright is a guided KiCad/KiBot project template and workflow tool for
+boring, repeatable PCB/PCBA previews, accepted outputs, and GitHub releases.
 
-A video tutorial for setting up this template is available [here](https://www.youtube.com/watch?v=63R6Wnx44uY).
+The intended loop is:
 
-An example project using this template can be found [here](https://github.com/nguyen-v/amulet_controller_kibot/tree/master).
+```text
+edit in KiCad -> record change -> validate/revision history -> commit/push
+-> preview -> review artifacts -> promote or release
+```
+
+Boardwright is derived from Nguyen Vincent's KiCad/KiBot template work. See
+`THIRD_PARTY_NOTICES.md` for the current acknowledgement and inherited-material
+notes.
 
 > [!NOTE]
 > This file will be overridden by a KiBot run.
 
+## BOARDWRIGHT QUICK START
+
+From the repository root, install the Boardwright command once:
+
+```powershell
+.\scripts\install_boardwright.ps1
+```
+
+Then open the TUI with:
+
+```powershell
+boardwright
+```
+
+The console command is installed from `pyproject.toml`. Running plain
+`boardwright` opens the TUI; `boardwright --help` lists scriptable CLI
+commands. If the Textual TUI dependency is not installed, Boardwright falls
+back to a console status view and prints the install hint.
+
+For a project-pinned install, use:
+
+```powershell
+.\scripts\install_boardwright.ps1 -Scope Project
+.\boardwright.ps1
+```
+
+That creates `.venv/` inside the project and a local launcher. To make the
+plain `boardwright` command prefer the nearest project-local install before
+falling back to the user/global install, run:
+
+```powershell
+.\scripts\install_boardwright.ps1 -Scope Project -InstallProfileCommand
+```
+
+The TUI currently provides:
+
+- top status bar with branch, git, variant, tag, CI, and validation state
+- action rail for local, git, and CI actions
+- workflow timeline for the normal board-development loop
+- next-action panel
+- validation and changed-file panels
+- preview dispatch, CI polling, and preview artifact fetch via GitHub CLI
+
 ## TABLE OF CONTENTS
 
+- [BOARDWRIGHT QUICK START](#boardwright-quick-start)
 - [TABLE OF CONTENTS](#table-of-contents)
 - [FEATURES](#features)
 - [GETTING STARTED](#getting-started)
@@ -81,35 +133,35 @@ An example project using this template can be found [here](https://github.com/ng
 2. Clone the repository
 
     ```
-    git clone https://github.com/nguyen-v/KDT_Hierarchical_KiBot.git
+    git clone https://github.com/Reemuson/Boardwright.git
     ```
 
-3. Install the fonts inside of [`kibot_resources/fonts`](kibot_resources/fonts) if not already installed on the system.
+3. Install the fonts inside of [`boardwright_resources/kibot/resources/fonts`](boardwright_resources/kibot/resources/fonts) if not already installed on the system.
 
    **Linux**:
 
    ```
-   cp -i KDT_Hierarchical_KiBot/kibot_resources/fonts/*.ttf ~/.fonts/
+   cp -i Boardwright/boardwright_resources/kibot/resources/fonts/*.ttf ~/.fonts/
    fc-cache
    ```
 
-5. A custom color theme ([`Altium_Theme.json`](kibot_resources/colors/Altium_Theme.json)) is also provided in [`kibot_resources/colors`](kibot_resources/colors).
+5. A custom color theme ([`Altium_Theme.json`](boardwright_resources/kibot/resources/colors/Altium_Theme.json)) is also provided in [`boardwright_resources/kibot/resources/colors`](boardwright_resources/kibot/resources/colors).
 You should move this file to your KiCad Themes folder.
 
     **Windows**:
 
-    `xcopy "KDT_Hierarchical_KiBot\kibot_resources\colors\Altium_Theme.json" "C:\Users\%USERNAME%\AppData\Roaming\kicad\8.0\colors\" /-Y`
+    `xcopy "Boardwright\boardwright_resources\kibot\resources\colors\Altium_Theme.json" "C:\Users\%USERNAME%\AppData\Roaming\kicad\8.0\colors\" /-Y`
 
     **Linux**:
 
-    `cp -i KDT_Hierarchical_KiBot/kibot_resources/colors/Altium_Theme.json ~/.config/kicad/8.0/colors/`
+    `cp -i Boardwright/boardwright_resources/kibot/resources/colors/Altium_Theme.json ~/.config/kicad/8.0/colors/`
 
 > [!NOTE]
 > In the steps above, replace ```8.0``` with ```9.0``` for KiCad 9
 
 5. Create a new project with:
 
-    **File → New Project From Template** and select `KDT_Hierarchical_KiBot`
+    **File -> New Project From Template** and select `Boardwright`
 
 > [!CAUTION]
 > Under Linux, the ```.github``` folder from the template needs to be copied at the root of the project directory, as it is not copied when creating a project from a template in KiCad.
@@ -120,7 +172,7 @@ You should move this file to your KiCad Themes folder.
    git checkout -b dev
    ```
    
-7. Modify the following fields in [`kibot_main.yaml`](kibot_yaml/kibot_main.yaml#L556) according to your project:
+7. Modify the following fields in [`kibot_main.yaml`](boardwright_resources/kibot/yaml/kibot_main.yaml#L556) according to your project:
     ```
       # Metadata ===================================================================
 
@@ -130,8 +182,8 @@ You should move this file to your KiCad Themes folder.
       COMPANY: Company Name
       DESIGNER: Author
 
-      LOGO: 'Logos/dummy_logo.png'
-      GIT_URL: 'https://github.com/nguyen-v/KDT_Hierarchical_KiBot'
+      LOGO: 'assets/logos/rd-logo.png'
+      GIT_URL: 'https://github.com/Reemuson/Boardwright'
 
       # Preflight ==================================================================
 
@@ -173,11 +225,11 @@ You should move this file to your KiCad Themes folder.
       KEY_COLOR: '#00FF00' # background color to remove
     ```
 
-8. The files inside of [`kibot_resources/templates`](kibot_resources/templates) should also be modified according to your project. These include Assembly and Fabrication notes, Impedance table and README file templates.
+8. The files inside of [`boardwright_resources/kibot/resources/templates`](boardwright_resources/kibot/resources/templates) should also be modified according to your project. These include Assembly and Fabrication notes, Impedance table and README file templates.
 
-9. Edit the [`*.kicad_dru`](KDT_Hierarchical_KiBot.kicad_dru) if necessary according to your design rules. Right now, it has been set for PCBWay 6-layer PCBs with 2oz outer 1oz inner, focusing on lowest cost.
+9. Edit the [`*.kicad_dru`](boardwright.kicad_dru) if necessary according to your design rules. Right now, it has been set for PCBWay 6-layer PCBs with 2oz outer 1oz inner, focusing on lowest cost.
 
-10.  Edit the [`kibot_out_csv_bom.yaml`](kibot_yaml/kibot_out_csv_bom.yaml), [`kibot_out_html_bom.yaml`](kibot_yaml/kibot_out_html_bom.yaml) and [`kibot_out_xlsx_bom.yaml`](kibot_yaml/kibot_out_xlsx_bom.yaml) files according to the component fields that you use. You can refer to the [KiCost Documentation](https://hildogjr.github.io/KiCost/docs/_build/singlehtml/index.html) for the field names.
+10.  Edit the [`kibot_out_csv_bom.yaml`](boardwright_resources/kibot/yaml/kibot_out_csv_bom.yaml), [`kibot_out_html_bom.yaml`](boardwright_resources/kibot/yaml/kibot_out_html_bom.yaml) and [`kibot_out_xlsx_bom.yaml`](boardwright_resources/kibot/yaml/kibot_out_xlsx_bom.yaml) files according to the component fields that you use. You can refer to the [KiCost Documentation](https://hildogjr.github.io/KiCost/docs/_build/singlehtml/index.html) for the field names.
 
 ## USAGE
 
@@ -185,7 +237,7 @@ You should move this file to your KiCad Themes folder.
 
 This template is meant to be used in a CI/CD environment on GitHub. The workflow is as follows:
 
-- Any custom font used in the project must be added to the [`kibot_resources/fonts`](kibot_resources/fonts) folder.
+- Any custom font used in the project must be added to the [`boardwright_resources/kibot/resources/fonts`](boardwright_resources/kibot/resources/fonts) folder.
 
 > [!NOTE]
 > KiCad 9 allows for fonts to be embedded in the schematic. However, it is still good practice to add the fonts in the folder mentioned.
@@ -214,7 +266,7 @@ This template is meant to be used in a CI/CD environment on GitHub. The workflow
 
 - To avoid conflicts, you should avoid modifying the `.kicad_pro` file locally before pulling from the remote (after the completion of a KiBot run). Otherwise, you will need to solve merge conflicts when pulling the file.
 
-- To synchronise the Revision History of the schematic with the `CHANGELOG.md` file, you should create new text variables in [kibot_pre_set_text_variables.yaml](kibot_yaml/kibot_pre_set_text_variables.yaml#L39). The text variables should then be added in the text boxes of the Revision History sheet.
+- To synchronise the Revision History of the schematic with the `CHANGELOG.md` file, you should create new text variables in [kibot_pre_set_text_variables.yaml](boardwright_resources/kibot/yaml/kibot_pre_set_text_variables.yaml#L39). The text variables should then be added in the text boxes of the Revision History sheet.
 
   ```
   - variable: '@RELEASE_TITLE_VAR@x.x.x'
@@ -262,7 +314,7 @@ The easiest way to install KiBot if custom development is not required is with d
 
 1.  Install **and run** [Docker Desktop](https://docs.docker.com/desktop/)
   
-2.  Run the script `docker_kibot_windows.bat` or `docker_kibot_linux.sh` depending on your platform in [`kibot_resources/scripts`](kibot_resources/scripts). Currently tested on Windows and WSL2. This should pull and start a docker running the `dev` branch of KiBot. You should have access to your local files.
+2.  Run the script `docker_kibot_windows.bat` or `docker_kibot_linux.sh` depending on your platform in [`boardwright_resources/kibot/resources/scripts`](boardwright_resources/kibot/resources/scripts). Currently tested on Windows and WSL2. This should pull and start a docker running the `dev` branch of KiBot. You should have access to your local files.
 
 ***
 **KiCad 8**
@@ -352,7 +404,7 @@ You can also specify a variant if desired:
 For more information, please have a look at the official [documentation](https://hildogjr.github.io/KiCost/docs/_build/singlehtml/index.html)
 
 > [!CAUTION]
-> KiCost expects the **MPN (Manufacturer Part Number)** and **Manufacturer** fields to be named in a certain way. To cater for different naming conventions, we rename user-defined fields to KiCost-compatible fields in the KiBot run. You can set your user-defined field for **MPN** and **Manufacturer** in the [`kibot_yaml/kibot_main.yaml`](kibot_yaml/kibot_main.yaml#L576) by editing the `MPN_FIELD` and `MAN_FIELD` definitions.
+> KiCost expects the **MPN (Manufacturer Part Number)** and **Manufacturer** fields to be named in a certain way. To cater for different naming conventions, we rename user-defined fields to KiCost-compatible fields in the KiBot run. You can set your user-defined field for **MPN** and **Manufacturer** in the [`boardwright_resources/kibot/yaml/kibot_main.yaml`](boardwright_resources/kibot/yaml/kibot_main.yaml#L576) by editing the `MPN_FIELD` and `MAN_FIELD` definitions.
 
 <p align="center">
   <img alt="XLSX BoM" src="https://github.com/user-attachments/assets/e7683ae3-efcc-4f64-b4b7-c4c39c3c9d48">
@@ -401,7 +453,7 @@ You should keep the folder structure as defined in [DIRECTORY STRUCTURE](#direct
 
 You should select [`Templates/KDT_Template_GIT.kicad_wks`](Templates/KDT_Template_GIT.kicad_wks) as your Drawing Sheet in:
 
-**File → Page Settings → Drawing Sheet**
+**File -> Page Settings -> Drawing Sheet**
 
 On the same page, The `Revision` and `Company` fields should be set to `${REVISION}` and `${COMPANY}` and exported to all sheets.
 
@@ -409,7 +461,7 @@ On the same page, The `Revision` and `Company` fields should be set to `${REVISI
   <img alt="Drawing Sheet" src="https://github.com/user-attachments/assets/311f4e13-cdb9-45cb-9fcf-1a88f8432416">
 </p>
 
-For an automated table of contents, you should copy the root page of the template into your project, or use the `${SHEET_NAME_X}` text variables. These variables will be replaced by the sheet name (page `X`) when running KiBot. Currently the maximum number of pages is set to 40. You are free to add new text variables in [`kibot_yaml/kibot_pre_set_text_variables`](kibot_yaml/kibot_pre_set_text_variables.yaml#L160).
+For an automated table of contents, you should copy the root page of the template into your project, or use the `${SHEET_NAME_X}` text variables. These variables will be replaced by the sheet name (page `X`) when running KiBot. Currently the maximum number of pages is set to 40. You are free to add new text variables in [`boardwright_resources/kibot/yaml/kibot_pre_set_text_variables`](boardwright_resources/kibot/yaml/kibot_pre_set_text_variables.yaml#L160).
 
 The `${VARIANT}` text variable is replaced by the current variant name (e.g. DRAFT or RELEASED). 
 
@@ -425,7 +477,7 @@ To get 3D pictures of the PCB in the schematic, you can create text boxes with t
 
 
 
-To synchronise the Revision History of the schematic with the `CHANGELOG.md` file, you should create new text variables in [kibot_pre_set_text_variables.yaml](kibot_yaml/kibot_pre_set_text_variables.yaml#L39). The text variables (`${RELEASE_TITLE_VAR<VERSION>}` and `${RELEASE_BODY_VAR<VERSION>`) should then be added in the text boxes of the Revision History sheet.
+To synchronise the Revision History of the schematic with the `CHANGELOG.md` file, you should create new text variables in [kibot_pre_set_text_variables.yaml](boardwright_resources/kibot/yaml/kibot_pre_set_text_variables.yaml#L39). The text variables (`${RELEASE_TITLE_VAR<VERSION>}` and `${RELEASE_BODY_VAR<VERSION>`) should then be added in the text boxes of the Revision History sheet.
 
   ```
   - variable: '@RELEASE_TITLE_VAR@x.x.x'
@@ -438,7 +490,7 @@ To synchronise the Revision History of the schematic with the `CHANGELOG.md` fil
 
 ### PCB
 
-The layer names of the PCB should follow the ones defined in [kibot_main.yaml](kibot_yaml/kibot_main.yaml#L631). 
+The layer names of the PCB should follow the ones defined in [kibot_main.yaml](boardwright_resources/kibot/yaml/kibot_main.yaml#L631).
 
 ```
   LAYER_TITLE_PAGE: TitlePage
@@ -459,13 +511,13 @@ The layer names of the PCB should follow the ones defined in [kibot_main.yaml](k
 
 The layer names can be set in 
 
-**File → Board Setup → Board Stackup → Board Editor Layers**
+**File -> Board Setup -> Board Stackup -> Board Editor Layers**
 
 Each layer has a specific function, and must be setup in a particular way.
 
 In the following explanation, when a group must be created, this can be done using KiCad's **Draw Rectangle** tool, and then a group can be created with:
 
-**Right-Click → Grouping → Group Items**
+**Right-Click -> Grouping -> Group Items**
 
 Pressing **E** then allows you to rename the group. The size and position of the group usually determines the size and location of the element to be drawn. To change the font inside a group, you can create a textbox with the desired font in the group. You can set the border width to 0.
 
@@ -549,7 +601,7 @@ This layer hold the assembly drawing and 3D render for the backside of the PCB. 
 This layer holds information about the PCB stackup and dimensions, impedance table and fabrication notes. The PCB stackup can be added by creating a group named `kibot_fancy_stackup`. The impedance table with a group named `kibot_table_csv_impedance_table` and the fabrication notes are included with the text variable `${FABRICATION_NOTES}`.
 
 > [!NOTE]
-> The text variable ${FABRICATION_NOTE} is dependent on the [`kibot_resources/templates/fabrication_notes.txt`](kibot_resources/templates/fabrication_notes.txt) file. Modify it to your needs.
+> The text variable ${FABRICATION_NOTE} is dependent on the [`boardwright_resources/kibot/resources/templates/fabrication_notes.txt`](boardwright_resources/kibot/resources/templates/fabrication_notes.txt) file. Modify it to your needs.
 
 <p align="center">
   <img alt="F.Dimensions" src="https://github.com/user-attachments/assets/6f47fa22-8bc8-4a65-97d7-891e124f82a2">
@@ -577,7 +629,7 @@ This layer is used to hold information about the testpoints locations and nets. 
 
 Test point locations are computed from the drill origin, which can be set with:
 
-**Place → Drill/Place File Origin**.
+**Place -> Drill/Place File Origin**.
 
 > [!TIP]
 > It is usually good practice to set the origin at the bottom left of the board.
@@ -623,43 +675,25 @@ Similar to the front testpoint layer. The group should be named `kibot_table_csv
 | **B.TestPointList**           | Lists testpoint locations and nets for the bottom layer.                                           | Add group: `kibot_table_csv_testpoints_bottom`. Adjust left-side placements for inverted print alignment.                     |
 
 ## DIRECTORY STRUCTURE
-The following directory structure is used in the template. Folders marked as 'optional' are not crucial for KiBot to work. Other folders will be generated automatically during a KiBot run.
+The source template keeps KiCad project files at the repository root and moves Boardwright/KiBot automation into dedicated support folders. KiBot output folders such as `Manufacturing`, `Schematic`, `Reports`, `HTML`, `KiRI`, and `Testing` are generated during CI runs and are not part of the clean source tree.
 
-```
-├─ Computations       # Misc calculations (optional)
-├─ HTML               # HTML files for generated webpage
-├─ Images             # Pictures and renders
-│
-├─ kibot_resources
-│  ├─ colors          # Color theme for KiCad
-│  ├─ fonts           # Fonts used in the project
-│  ├─ scripts         # External scripts used with KiBot
-│  └─ templates       # Templates for KiBot generated reports
-│
-├─ kibot_yaml         # KiBot YAML config files
-├─ KiRI               # KiRI (PCB diff viewer) files
-│
-├─ lib                # Footprint and symbol libraries (optional)
-│  ├─ 3d_models       # Component 3D models
-│  ├─ lib_fp          # Footprint libraries
-│  └─ lib_sym         # Symbol libraries
-│
-├─ Logos              # Logos (optional)
-│
-├─ Manufacturing
-│  ├─ Assembly        # Assembly documents (BoM, pos, notes)
-│  │
-│  └─ Fabrication     # Fabrication documents (ZIP, notes)
-│     ├─ Drill Tables # CSV drill tables
-│     └─ Gerbers      # Gerbers
-│
-├─ Report             # Reports for ERC/DRC
-├─ Schematic          # PDF of schematic
-├─ Templates          # Title block templates
-├─ Testing
-│  └─ Testpoints      # Testpoints tables      
-│
-└─ Variants           # Outputs for assembly variants (optional)
+```text
+.
+|- .boardwright/                    # Boardwright project metadata
+|- .github/workflows/               # Preview, output, and release automation
+|- boardwright_resources/kibot/
+|  |- resources/                    # KiBot scripts, report templates, fonts, colors
+|  `- yaml/                         # KiBot configuration
+|- docs/                            # Spec, roadmap, and working TODO
+|- assets/
+|  |- 3d/                           # Generated STEP/3D exports
+|  |- logos/                        # Project logos used by generated docs
+|  `- renders/                      # Generated README board renders
+|- meta/                            # KiCad template splash metadata
+|- scripts/                         # Local helper scripts
+|- src/boardwright/                 # Boardwright CLI/TUI package
+|- Templates/                       # KiCad worksheet/title-block templates
+`- tests/                           # Boardwright regression tests
 ```
 
 ## CREDITS

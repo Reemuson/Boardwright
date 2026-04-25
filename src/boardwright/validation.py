@@ -137,12 +137,12 @@ def _validate_revision_history_config(
 
 
 def _validate_readme_template(root: Path, issues: list[ValidationIssue]) -> None:
-    template = root / "kibot_resources" / "templates" / "readme.txt"
+    template = root / "boardwright_resources/kibot/resources" / "templates" / "readme.txt"
     if not template.exists():
         issues.append(
             ValidationIssue(
                 "warning",
-                "Missing README template: kibot_resources/templates/readme.txt",
+                "Missing README template: boardwright_resources/kibot/resources/templates/readme.txt",
             )
         )
         return
@@ -164,9 +164,9 @@ def _validate_kicad_and_kibot(root: Path, issues: list[ValidationIssue]) -> None
         issues.append(ValidationIssue("error", "No KiCad schematic (*.kicad_sch) found"))
     if not list(root.glob("*.kicad_pcb")):
         issues.append(ValidationIssue("error", "No KiCad PCB (*.kicad_pcb) found"))
-    if not (root / "kibot_yaml" / "kibot_main.yaml").exists():
+    if not (root / "boardwright_resources/kibot/yaml" / "kibot_main.yaml").exists():
         issues.append(
-            ValidationIssue("error", "Missing KiBot config: kibot_yaml/kibot_main.yaml")
+            ValidationIssue("error", "Missing KiBot config: boardwright_resources/kibot/yaml/kibot_main.yaml")
         )
 
 

@@ -32,7 +32,7 @@ outputs:
 definitions:
   NAME: png_3d_viewer
   COMMENT: 3D viewer PCB render in PNG format
-  DIR: Images
+  DIR: assets/renders
   SUFFIX: ""
   VIEW: top
   RAYTRACING: true

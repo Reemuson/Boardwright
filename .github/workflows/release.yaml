@@ -11,7 +11,7 @@ permissions:
   actions: read
 
 env:
-  KIBOT_CONFIG: kibot_yaml/kibot_main.yaml
+  KIBOT_CONFIG: boardwright_resources/kibot/yaml/kibot_main.yaml
   KIBOT_LOG: kibot_release.log
   KICAD_VERSION: "9"
   RELEASE_DIR: boardwright-release
@@ -105,9 +105,9 @@ jobs:
 
           top_image=""
           bottom_image=""
-          if [[ -d Images ]]; then
-            top_image="$(find Images -maxdepth 1 -type f \( -iname '*angled_top*.png' -o -iname '*top*.png' \) | sort | head -n 1 || true)"
-            bottom_image="$(find Images -maxdepth 1 -type f \( -iname '*angled_bottom*.png' -o -iname '*bottom*.png' \) | sort | head -n 1 || true)"
+          if [[ -d assets/renders ]]; then
+            top_image="$(find assets/renders -maxdepth 1 -type f \( -iname '*angled_top*.png' -o -iname '*top*.png' \) | sort | head -n 1 || true)"
+            bottom_image="$(find assets/renders -maxdepth 1 -type f \( -iname '*angled_bottom*.png' -o -iname '*bottom*.png' \) | sort | head -n 1 || true)"
           fi
 
           {
@@ -142,7 +142,7 @@ jobs:
             echo "## Assets"
             echo
             echo "- Full release package: \`boardwright-${tag}-release.zip\`"
-            echo "- Generated README: included in the release package and generated from \`kibot_resources/templates/readme.txt\`"
+            echo "- Generated README: included in the release package and generated from \`boardwright_resources/kibot/resources/templates/readme.txt\`"
           } > RELEASE_NOTES.md
 
           if [[ -n "$top_image" ]]; then
@@ -158,7 +158,7 @@ jobs:
           rm -rf "$RELEASE_DIR"
           mkdir -p "$RELEASE_DIR"
 
-          for path in Schematic Manufacturing Images HTML KiRI 3D Testing Reports README.md NOTICE.md THIRD_PARTY_NOTICES.md LICENSE; do
+          for path in Schematic Manufacturing assets HTML KiRI Testing Reports README.md NOTICE.md THIRD_PARTY_NOTICES.md LICENSE; do
             if [[ -e "$path" ]]; then
               cp -a "$path" "$RELEASE_DIR/"
             fi

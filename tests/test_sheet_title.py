@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from kibot_resources.scripts.get_sheet_title import (
+from boardwright_resources.kibot.resources.scripts.get_sheet_title import (
     _title_from_schematic,
     get_sheet_title,
 )
@@ -11,7 +11,7 @@ class SheetTitleTests(unittest.TestCase):
     def test_falls_back_to_kicad_schematic(self) -> None:
         title = _title_from_schematic(Path("boardwright.kicad_sch"), 6, 8)
 
-        self.assertEqual("Power - Sequencing", title)
+        self.assertEqual("POWER SEQUENCE", title)
 
     def test_missing_sheet_returns_dots(self) -> None:
         title = _title_from_schematic(Path("boardwright.kicad_sch"), 99, 8)
