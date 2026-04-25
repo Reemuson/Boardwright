@@ -1,18 +1,22 @@
 <p align="center" width="100%">
-  <img alt="Logo" width="33%" src="Logos/dummy_logo.svg">
+  <img alt="Logo" width="33%" src="Logos/rd-logo.png">
 </p>
 
 <h1 align="center">${BOARD_NAME}</h1>
 
 <p align="center" width="100%">
-  <a href="${GIT_URL}/actions/workflows/ci.yaml">
-    <img alt="CI Badge" src="${GIT_URL}/actions/workflows/ci.yaml/badge.svg?branch=">
+  <a href="${GIT_URL}/actions/workflows/dev-preview.yaml">
+    <img alt="Preview" src="${GIT_URL}/actions/workflows/dev-preview.yaml/badge.svg">
+  </a>
+  <a href="${GIT_URL}/actions/workflows/main-outputs.yaml">
+    <img alt="Main Outputs" src="${GIT_URL}/actions/workflows/main-outputs.yaml/badge.svg">
+  </a>
+  <a href="${GIT_URL}/actions/workflows/release.yaml">
+    <img alt="Release" src="${GIT_URL}/actions/workflows/release.yaml/badge.svg">
   </a>
 </p>
 
-<p align="center" width="100%">
-    <img src="Images/dummy_image.png">
-</p>
+> Hardware photographs are not available for this revision yet.
 
 ***
 
@@ -28,6 +32,8 @@
 
 | Parameter | Value | 
 | --- | --- |
+| Revision | ${REVISION} |
+| Variant | ${VARIANT} |
 | Dimensions | ${bb_w_mm} × ${bb_h_mm} mm |
 
 ***
@@ -69,3 +75,15 @@
     │  └─ Testpoints      # Testpoints tables      
     │
     └─ Variants           # Outputs for assembly variants
+***
+
+## LEGAL
+
+This repository contains open hardware design files, protected project branding,
+and third-party workflow content.
+
+- The primary hardware licence is listed in `LICENSE`.
+- Project-specific scope notes, branding exclusions, compatibility wording,
+  non-affiliation wording, and safety notes are in `NOTICE.md`.
+- Third-party copyright and licence notices are preserved in
+  `THIRD_PARTY_NOTICES.md`.

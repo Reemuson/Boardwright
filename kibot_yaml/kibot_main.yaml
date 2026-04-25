@@ -80,8 +80,6 @@ groups:
     outputs:
       - @NETLIST_OUTPUT@
       - @PDF_SCHEMATIC_OUTPUT@
-      - @CSV_BOM_OUTPUT@
-      - @HTML_BOM_OUTPUT@
 
   - name: fab
     outputs:
@@ -467,7 +465,7 @@ import:
       COMMENT: Schematic in PDF format
       COLOR_THEME: @COLOR_THEME@
       DIR: @SCHEMATIC_DIR@
-      DEFAULT_FONT: 'Times New Roman'
+      DEFAULT_FONT: 'KiCad Font'
 
   # Fabrication Document in PDF format
   - file: kibot_out_pdf_fabrication.yaml
@@ -563,8 +561,8 @@ definitions:
   COMPANY: COMPANY
   DESIGNER: F. LAST
 
-  LOGO: 'Logos/dummy_logo.png'
-  GIT_URL: 'https://github.com/nguyen-v/KDT_Hierarchical_KiBot'
+  LOGO: 'Logos/rd-logo.png'
+  GIT_URL: ''
 
   # Preflight ==================================================================
 

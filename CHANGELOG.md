@@ -2,18 +2,6 @@
 
 ## [Unreleased]
 
-### Fixed
-
--   Fixes
-
 ### Added
 
--   Additions
-
-### Changed
-
--   Changes
-
-### Removed
-
--   Deletions
+- Add Boardwright project workflow tooling and KiCad/KiBot template updates.
