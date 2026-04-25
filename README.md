@@ -145,16 +145,16 @@ The TUI currently provides:
    fc-cache
    ```
 
-5. A custom color theme ([`Altium_Theme.json`](boardwright_resources/kibot/resources/colors/Altium_Theme.json)) is also provided in [`boardwright_resources/kibot/resources/colors`](boardwright_resources/kibot/resources/colors).
+5. A KiCad color theme ([`KiCad_Theme.json`](boardwright_resources/kibot/resources/colors/KiCad_Theme.json)) is also provided in [`boardwright_resources/kibot/resources/colors`](boardwright_resources/kibot/resources/colors).
 You should move this file to your KiCad Themes folder.
 
     **Windows**:
 
-    `xcopy "Boardwright\boardwright_resources\kibot\resources\colors\Altium_Theme.json" "C:\Users\%USERNAME%\AppData\Roaming\kicad\8.0\colors\" /-Y`
+    `xcopy "Boardwright\boardwright_resources\kibot\resources\colors\KiCad_Theme.json" "C:\Users\%USERNAME%\AppData\Roaming\kicad\8.0\colors\" /-Y`
 
     **Linux**:
 
-    `cp -i Boardwright/boardwright_resources/kibot/resources/colors/Altium_Theme.json ~/.config/kicad/8.0/colors/`
+    `cp -i Boardwright/boardwright_resources/kibot/resources/colors/KiCad_Theme.json ~/.config/kicad/8.0/colors/`
 
 > [!NOTE]
 > In the steps above, replace ```8.0``` with ```9.0``` for KiCad 9
@@ -207,7 +207,7 @@ You should move this file to your KiCad Themes folder.
 
       # Schematic parameters =======================================================
 
-      COLOR_THEME: Altium_Theme
+      COLOR_THEME: KiCad_Theme
       SHEET_WKS: ${KIPRJMOD}/Templates/KDT_Template_PCB_GIT_A4.kicad_wks
       FAB_SCALING: 1
       ASSEMBLY_SCALING: 1

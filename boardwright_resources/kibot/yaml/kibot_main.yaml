@@ -586,7 +586,7 @@ definitions:
 
   # Schematic parameters =======================================================
 
-  COLOR_THEME: Altium_Theme
+  COLOR_THEME: KiCad_Theme
   SHEET_WKS: ${KIPRJMOD}/Templates/KDT_Template_PCB_GIT_A4.kicad_wks
   FAB_SCALING: 1
   ASSEMBLY_SCALING: 1
