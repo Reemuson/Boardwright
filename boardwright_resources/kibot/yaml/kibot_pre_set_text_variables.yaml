@@ -10,15 +10,19 @@ preflight:
 
     # Git related information
     - variable: 'REVISION'
-      command: 'git describe --tags --exact-match 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo ""'
+      command: 'if [ -f .boardwright/release.env ]; then . .boardwright/release.env; fi; if [ -n "$RELEASE_VERSION" ]; then echo "$RELEASE_VERSION"; else git describe --tags --exact-match 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo ""; fi'
+    - variable: 'BOARD_REVISION'
+      text: '@BOARD_REVISION@'
+    - variable: 'RELEASE_VERSION'
+      command: 'if [ -f .boardwright/release.env ]; then . .boardwright/release.env; fi; if [ -n "$RELEASE_VERSION" ]; then echo "$RELEASE_VERSION"; else git describe --tags --exact-match 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo ""; fi'
     - variable: 'RELEASE_DATE'
       command: 'git log -1 --format="%ad" --date="format:%d-%b-%Y"'
     - variable: 'RELEASE_DATE_NUM'
       command: 'git log -1 --format="%ad" --date=short'
     - variable: 'GIT_HASH_SCH'
-      command: 'git log -1 --format="%h" $KIBOT_SCH_NAME'
+      command: 'git log --no-merges -1 --format="%h" -- "$KIBOT_SCH_NAME"'
     - variable: 'GIT_HASH_PCB'
-      command: 'git log -1 --format="%h" $KIBOT_PCB_NAME'
+      command: 'git log --no-merges -1 --format="%h" -- "$KIBOT_PCB_NAME"'
     - variable: 'GIT_URL'
       text: '@GIT_URL@'
 
@@ -87,13 +91,13 @@ preflight:
     # Fabrication notes
     - variable: 'FABRICATION_NOTES'
       expand_in_command: true
-      command: '[ -f "@FABRICATION_DIR@/%f-fabrication_notes%v.txt" ] && cat "@FABRICATION_DIR@/%f-fabrication_notes%v.txt" || echo ""'
+      command: '[ -s "@FABRICATION_DIR@/%f-fabrication_notes%v.txt" ] && cat "@FABRICATION_DIR@/%f-fabrication_notes%v.txt" || cat "@REPORT_TEMPLATE_DIR@/fabrication_notes.txt"'
 
 
     # Fabrication notes
     - variable: 'ASSEMBLY_NOTES'
       expand_in_command: true
-      command: '[ -f "@ASSEMBLY_DIR@/%f-assembly_notes%v.txt" ] && cat "@ASSEMBLY_DIR@/%f-assembly_notes%v.txt" || echo ""'
+      command: '[ -s "@ASSEMBLY_DIR@/%f-assembly_notes%v.txt" ] && cat "@ASSEMBLY_DIR@/%f-assembly_notes%v.txt" || cat "@REPORT_TEMPLATE_DIR@/assembly_notes.txt"'
 
     # Page titles for automatic ToC
     - variable: '@SHEET_NAME_VAR@1'
@@ -181,6 +185,7 @@ preflight:
 definitions:
   PROJECT_NAME: ""
   BOARD_NAME: ""
+  BOARD_REVISION: A
   COMPANY: ""
   DESIGNER: ""
   REVISION: ""
@@ -189,6 +194,7 @@ definitions:
   GIT_URL: ""
   SHEET_NAME_VAR: SHEET_NAME_
   SCRIPTS_DIR: boardwright_resources/kibot/resources/scripts
+  REPORT_TEMPLATE_DIR: boardwright_resources/kibot/resources/templates
   GET_SHEET_CMD: python3 @SCRIPTS_DIR@/get_sheet_title.py -f "${KIBOT_SCH_NAME}" --dots-number 32 -p
   GET_REVHIST_CMD: python3 @SCRIPTS_DIR@/get_revision_history_var.py
   FABRICATION_DIR: Manufacturing/Fabrication

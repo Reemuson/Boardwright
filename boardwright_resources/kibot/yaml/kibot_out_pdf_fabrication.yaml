@@ -49,18 +49,6 @@ outputs:
           bottom_rule_width: 0.2
           column_spacing: 2
           force_font_width: 1.27 # mm
-        - name: '@NAME_IMPEDANCE_TABLE@'
-          text_alignment: 'left'
-          invert_columns_order: false
-          border_width: 0.4
-          header_rule_width: 0.2
-          horizontal_rule_width: 0
-          vertical_rule_width: 0.2
-          top_rule_width: 0.2
-          bottom_rule_width: 0.2
-          row_spacing: 3
-          column_spacing: 2
-          row_spacing: 3
         - name: '@NAME_DRILL_TABLE@'
           text_alignment: 'left'
           invert_columns_order: false
@@ -73,7 +61,6 @@ outputs:
           row_spacing: 3
           column_spacing: 2
           force_font_width: 1 # mm
-
     pages:
       - scaling: @SCALING@
         title: '@DOC_TITLE@'
@@ -222,8 +209,7 @@ definitions:
   LAYER_TP_LIST_TOP: F.TestPointList
   LAYER_TP_LIST_BOTTOM: B.TestPointList
   PTH_NPTH: 'yes'
-  GROUP_ROUND_SLOTS: true 
+  GROUP_ROUND_SLOTS: true
   NAME_TP_TOP: csv_testpoints_top
   NAME_TP_BOTTOM: csv_testpoints_bottom
-  NAME_IMPEDANCE_TABLE: csv_impedance_table
   NAME_DRILL_TABLE: csv_drill_table

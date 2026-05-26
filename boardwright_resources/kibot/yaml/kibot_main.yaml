@@ -124,11 +124,13 @@ groups:
 
   - name: tables
     outputs:
-      - @CSV_COMP_COUNT_OUPUT@
-      - @CSV_IMPEDANCE_TABLE_OUTPUT@
+      - table_sources
+      - notes
+
+  - name: table_sources
+    outputs:
       - @CSV_DRILL_TABLE_OUTPUT@
       - testpoints
-      - notes
 
   - name: testpoints
     outputs:
@@ -153,6 +155,7 @@ import:
   - file: kibot_globals.yaml
     definitions:
       OUTPUT_DIR: @OUTPUT_DIR@
+      RESOURCES_DIR: @RESOURCES_DIR@
       LAYER_DNP_TOP: @LAYER_DNP_TOP@
       LAYER_DNP_BOTTOM: @LAYER_DNP_BOTTOM@
 
@@ -196,9 +199,11 @@ import:
     definitions:
       PROJECT_NAME: @PROJECT_NAME@
       BOARD_NAME: @BOARD_NAME@
+      BOARD_REVISION: @BOARD_REVISION@
       COMPANY: @COMPANY@
       DESIGNER: @DESIGNER@
       SCRIPTS_DIR: @SCRIPTS_DIR@
+      REPORT_TEMPLATE_DIR: @REPORT_TEMPLATE_DIR@
       FABRICATION_DIR: @FABRICATION_DIR@
       ASSEMBLY_DIR: @ASSEMBLY_DIR@
 
@@ -218,14 +223,6 @@ import:
     definitions:
       GERBER_OUTPUT: @GERBER_OUTPUT@
       NOTE: @STACKUP_TABLE_NOTE@
-
-  # Include tables in PCB for testpoint lists
-  # - file: kibot_pre_include_table.yaml
-  #   definitions:
-  #     NAME_TP_TOP: @CSV_TP_TOP_OUTPUT@
-  #     NAME_TP_BOTTOM: @CSV_TP_BOTTOM_OUTPUT@
-  #     NAME_COMP_COUNT: @CSV_COMP_COUNT_OUPUT@
-  #     NAME_IMPEDANCE_TABLE: @CSV_IMPEDANCE_TABLE_OUTPUT@
 
 # Generated outputs ============================================================
 
@@ -364,24 +361,6 @@ import:
       TITLE: @BOARD_NAME@ Assembly
       MPN_FIELD: @MPN_FIELD@
 
-  # CSV components count report ------------------------------------------------
-  - file: kibot_out_csv_report.yaml
-    definitions:
-      NAME: @CSV_COMP_COUNT_OUPUT@
-      COMMENT: Component report (count) in CSV format
-      DIR: @ASSEMBLY_DIR@
-      OUTPUT_ID: components_count
-      TEMPLATE: total_components
-
-  # CSV Impedance/Transmission line table
-  - file: kibot_out_csv_report.yaml
-    definitions:
-      NAME: @CSV_IMPEDANCE_TABLE_OUTPUT@
-      COMMENT: Impedance table in CSV format
-      DIR: @FABRICATION_DIR@
-      OUTPUT_ID: impedance_table
-      TEMPLATE: @REPORT_TEMPLATE_DIR@/impedance_table.txt
-
   # TXT fabrication notes ------------------------------------------------------
   - file: kibot_out_txt_report.yaml
     definitions:
@@ -463,7 +442,6 @@ import:
     definitions:
       NAME: @PDF_SCHEMATIC_OUTPUT@
       COMMENT: Schematic in PDF format
-      COLOR_THEME: @COLOR_THEME@
       DIR: @SCHEMATIC_DIR@
       DEFAULT_FONT: 'KiCad Font'
 
@@ -484,7 +462,6 @@ import:
       LAYER_TP_LIST_BOTTOM: @LAYER_TP_LIST_BOTTOM@
       NAME_TP_TOP: @CSV_TP_TOP_OUTPUT@
       NAME_TP_BOTTOM: @CSV_TP_BOTTOM_OUTPUT@
-      NAME_IMPEDANCE_TABLE: @CSV_IMPEDANCE_TABLE_OUTPUT@
       NAME_DRILL_TABLE: @CSV_DRILL_TABLE_OUTPUT@
 
   # Assembly Document in PDF format
@@ -502,7 +479,6 @@ import:
       LAYER_ASSEMBLY_TEXT_BOTTOM: @LAYER_ASSEMBLY_TEXT_BOTTOM@
       LAYER_DNP_CROSS_TOP: @LAYER_DNP_CROSS_TOP@
       LAYER_DNP_CROSS_BOTTOM: @LAYER_DNP_CROSS_BOTTOM@
-      NAME_COMP_COUNT: @CSV_COMP_COUNT_OUPUT@
 
   # Compress fabrication files into ZIP archive --------------------------------
   - file: kibot_out_compress_fab.yaml
@@ -557,6 +533,7 @@ definitions:
 
   PROJECT_NAME: PROJECT NAME
   BOARD_NAME: BOARD NAME
+  BOARD_REVISION: A
 
   COMPANY: COMPANY
   DESIGNER: F. LAST
@@ -667,8 +644,6 @@ definitions:
   XLSX_BOM_OUTPUT: xlsx_bom
   HTML_IBOM_OUTPUT: html_bom_interactive
   HTML_BOM_OUTPUT: html_bom
-  CSV_COMP_COUNT_OUPUT: csv_comp_count
-  CSV_IMPEDANCE_TABLE_OUTPUT: csv_impedance_table
 
   TXT_FAB_NOTES_OUTPUT: txt_fabrication_notes
   TXT_ASSEMBLY_NOTES_OUTPUT: txt_assembly_notes

@@ -1,4 +1,5 @@
-name: Boardwright Prepare Release
+name: Boardwright Prepare Release Tag
+run-name: Prepare ${{ inputs.version }} (${{ inputs.variant }}, ${{ inputs.release_kind }})
 
 on:
   workflow_dispatch:
@@ -31,6 +32,10 @@ permissions:
   contents: write
   actions: write
 
+concurrency:
+  group: boardwright-main
+  cancel-in-progress: false
+
 env:
   KIBOT_CONFIG: boardwright_resources/kibot/yaml/kibot_main.yaml
   KIBOT_LOG: kibot_prepare_release.log
@@ -38,6 +43,7 @@ env:
 
 jobs:
   prepare:
+    name: Prepare ${{ inputs.version }} release state
     runs-on: ubuntu-latest
     if: github.ref_type == 'branch' && github.ref_name == 'main'
     steps:
@@ -52,6 +58,14 @@ jobs:
         run: |
           git config user.name "boardwright[bot]"
           git config user.email "boardwright[bot]@users.noreply.github.com"
+
+      - name: Cache Python packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install Boardwright
         shell: bash
@@ -72,14 +86,23 @@ jobs:
           RELEASE_KIND=$release_kind
           EOF
 
-      - name: Select KiBot generation mode
+          {
+            echo "## Boardwright Prepare Release"
+            echo
+            echo "- Version: \`${version}\`"
+            echo "- Variant: \`${variant}\`"
+            echo "- Release kind: \`${release_kind}\`"
+            echo "- Target branch: \`main\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Choose KiBot variant and output set
         shell: bash
         run: |
           variant="${{ inputs.variant }}"
 
           case "$variant" in
             DRAFT)
-              additional_args="--skip-pre erc,drc --log $KIBOT_LOG draft_group md_readme"
+              additional_args="--skip-pre draw_fancy_stackup,erc,drc --log $KIBOT_LOG draft_group md_readme"
               ;;
             PRELIMINARY)
               additional_args="--skip-pre erc,drc --log $KIBOT_LOG all_group_k9"
@@ -100,18 +123,38 @@ jobs:
         run: mkdir -p ~/cache_3d
 
       - name: Cache 3D models
-        uses: set-soft/cache@main
+        uses: actions/cache@v4
         with:
           path: ~/cache_3d
-          key: cache-3d-kicad-${{ env.KICAD_VERSION }}
+          key: ${{ runner.os }}-kicad-${{ env.KICAD_VERSION }}-3d
+          restore-keys: |
+            ${{ runner.os }}-kicad-${{ env.KICAD_VERSION }}-3d-
 
-      - name: Generate notes
+      - name: Install bundled KiCad/PDF fonts
+        shell: bash
+        run: |
+          mkdir -p ~/.local/share/fonts
+          cp boardwright_resources/kibot/resources/fonts/*.ttf ~/.local/share/fonts/
+          fc-cache -f ~/.local/share/fonts || true
+
+      - name: Prepare Boardwright PDF table placeholders
+        if: env.KIBOT_VARIANT != 'DRAFT'
+        shell: bash
+        run: python boardwright_resources/kibot/resources/scripts/prepare_pcb_tables.py .
+
+      - name: Generate KiBot PDF table CSV sources
+        if: env.KIBOT_VARIANT != 'DRAFT'
         uses: INTI-CMNB/KiBot@v2_dk9
         with:
-          skip: all
+          additional_args: --skip-pre draw_fancy_stackup,erc,drc --log kibot_prepare_tables.log table_sources
           variant: ${{ env.KIBOT_VARIANT }}
           config: ${{ env.KIBOT_CONFIG }}
-          additional_args: --log kibot_prepare_notes.log notes
+          cache3D: YES
+
+      - name: Prune empty conditional PDF pages
+        if: env.KIBOT_VARIANT != 'DRAFT'
+        shell: bash
+        run: python boardwright_resources/kibot/resources/scripts/prune_pdf_pages.py .
 
       - name: Generate accepted outputs
         uses: INTI-CMNB/KiBot@v2_dk9
@@ -121,6 +164,14 @@ jobs:
           config: ${{ env.KIBOT_CONFIG }}
           cache3D: YES
 
+      - name: Normalize generated output ownership
+        shell: bash
+        run: sudo chown -R "$USER:$USER" Schematic Manufacturing assets HTML KiRI Testing Reports README.md 2>/dev/null || true
+
+      - name: Clean generated outputs
+        shell: bash
+        run: python boardwright_resources/kibot/resources/scripts/clean_generated_outputs.py .
+
       - name: Check generated README
         shell: bash
         run: |
@@ -129,9 +180,10 @@ jobs:
             exit 1
           fi
 
-      - name: Discard KiCad source side effects
+      - name: Discard generated source side effects
         shell: bash
         run: |
+          git checkout HEAD -- boardwright_resources/kibot/yaml/kibot_main.yaml 2>/dev/null || true
           git checkout HEAD -- '*.kicad_pcb' '*.kicad_pro' '*.kicad_dru' '*.kicad_prl' '*.kicad_sch' || true
           git clean -f '*.kicad_pcb' '*.kicad_pro' '*.kicad_dru' '*.kicad_prl' '*.kicad_sch' || true
 
@@ -142,7 +194,8 @@ jobs:
           variant="${{ inputs.variant }}"
 
           git rm -r --ignore-unmatch HTML KiRI Manufacturing Reports Schematic Testing
-          git add CHANGELOG.md .boardwright/revision_history_variables.env .boardwright/release.env
+          git add CHANGELOG.md
+          git add -f .boardwright/revision_history_variables.env .boardwright/release.env
           git add README.md assets/renders/*.png || true
 
           if git diff --cached --quiet; then

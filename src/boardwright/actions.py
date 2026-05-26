@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .config import BoardwrightConfig
 from .errors import BoardwrightError
-from .git_ops import current_branch
+from .git_ops import branch_sha, current_branch, remote_branch_sha
 from .release import _validate_version
 from .variants import normalize_variant
 
@@ -35,6 +35,23 @@ class WorkflowAction:
             args.extend(("-f", f"{key}={value}"))
         return tuple(args)
 
+    @property
+    def manual_fallback(self) -> str:
+        lines = [
+            "GitHub CLI is unavailable or could not complete the request.",
+            "",
+            "Manual fallback:",
+            f"Open GitHub Actions -> {self.workflow} -> Run workflow",
+            f"Ref: {self.ref}",
+        ]
+        if self.repo:
+            lines.append(f"Repository: {self.repo}")
+        if self.fields:
+            lines.append("Inputs:")
+            lines.extend(f"- {key}: {value}" for key, value in self.fields)
+        lines.extend(("", "Equivalent gh command:", " ".join(self.command)))
+        return "\n".join(lines)
+
 
 @dataclass(frozen=True)
 class WorkflowRunStatus:
@@ -51,11 +68,15 @@ def build_preview_action(
     variant: str | None = None,
 ) -> WorkflowAction:
     selected_variant = normalize_variant(variant or config.preview_variant)
+    selected_ref = current_branch(config.root)
     return WorkflowAction(
         name="preview",
         workflow=config.preview_workflow,
-        ref=current_branch(config.root),
-        fields=(("variant", selected_variant),),
+        ref=selected_ref,
+        fields=(
+            ("variant", selected_variant),
+            ("source_label", build_source_label(config.root, selected_ref)),
+        ),
         gh_available=_gh_command() is not None,
         repo=config.github_repo,
         gh_command=_gh_command() or "gh",
@@ -66,15 +87,24 @@ def build_promote_action(
     config: BoardwrightConfig,
     variant: str,
     commit_outputs: bool = True,
+    source_ref: str | None = None,
+    source_sha: str | None = None,
 ) -> WorkflowAction:
     selected_variant = normalize_variant(variant)
+    selected_source_ref = (source_ref or config.dev_branch).strip()
+    selected_source_sha = (source_sha or remote_branch_sha(config.root, "origin", selected_source_ref)).strip()
+    selected_source_label = build_source_label(config.root, selected_source_ref, selected_source_sha)
     return WorkflowAction(
         name="promote",
         workflow=config.main_workflow,
-        ref=config.release_branch,
+        ref=selected_source_ref,
         fields=(
             ("variant", selected_variant),
             ("commit_outputs", str(commit_outputs).lower()),
+            ("source_ref", selected_source_ref),
+            ("source_sha", selected_source_sha),
+            ("source_label", selected_source_label),
+            ("target_branch", config.release_branch),
         ),
         gh_available=_gh_command() is not None,
         repo=config.github_repo,
@@ -110,9 +140,18 @@ def build_prepare_release_action(
     )
 
 
+def build_source_label(root: Path, ref: str, sha: str = "") -> str:
+    clean_ref = (ref or "").strip()
+    clean_sha = (sha or branch_sha(root, "HEAD")).strip()
+    short_sha = clean_sha[:12]
+    if clean_ref and short_sha:
+        return f"{clean_ref}@{short_sha}"
+    return clean_ref or short_sha
+
+
 def dispatch_workflow_action(config: BoardwrightConfig, action: WorkflowAction) -> None:
     if not action.gh_available:
-        raise BoardwrightError("GitHub CLI is not installed. Install gh or run the workflow in GitHub.")
+        raise BoardwrightError(action.manual_fallback)
 
     workflow_path = config.root / ".github" / "workflows" / action.workflow
     if not workflow_path.exists():
@@ -127,7 +166,9 @@ def dispatch_workflow_action(config: BoardwrightConfig, action: WorkflowAction) 
     )
     if completed.returncode != 0:
         message = completed.stderr.strip() or completed.stdout.strip()
-        raise BoardwrightError(f"GitHub workflow dispatch failed: {message}")
+        raise BoardwrightError(
+            f"GitHub workflow dispatch failed: {message}\n\n{action.manual_fallback}"
+        )
 
 
 def list_recent_workflow_runs(

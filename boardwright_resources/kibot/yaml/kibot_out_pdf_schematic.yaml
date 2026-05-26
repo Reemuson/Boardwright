@@ -12,12 +12,10 @@ outputs:
   category: '@DIR@'
   options:
     background_color: false
-    color_theme: '@COLOR_THEME@'
     default_font: '@DEFAULT_FONT@'
 
 definitions:
   NAME: pdf_schematic
   COMMENT: Schematic in PDF format
-  COLOR_THEME: KiCad_Theme
   DEFAULT_FONT: 'KiCad Font'
   DIR: Schematic

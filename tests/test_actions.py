@@ -25,7 +25,7 @@ def _config() -> BoardwrightConfig:
                 "prepare_release_workflow": "prepare-release.yaml",
             },
         },
-        branches={"branches": {"release": "main"}},
+        branches={"branches": {"development": "dev", "release": "main"}},
         legal={"legal": {}},
         revision_history={"revision_history": {}},
     )
@@ -37,17 +37,37 @@ class ActionTests(unittest.TestCase):
 
         self.assertEqual("preview", action.name)
         self.assertIn(("variant", "PRELIMINARY"), action.fields)
+        self.assertTrue(any(key == "source_label" for key, _ in action.fields))
 
     def test_build_promote_action(self) -> None:
         action = build_promote_action(_config(), "checked")
 
         self.assertEqual("promote", action.name)
         self.assertEqual("main-outputs.yaml", action.workflow)
-        self.assertEqual("main", action.ref)
+        self.assertEqual("dev", action.ref)
         self.assertIn(("variant", "CHECKED"), action.fields)
         self.assertIn(("commit_outputs", "true"), action.fields)
+        self.assertIn(("source_ref", "dev"), action.fields)
+        self.assertIn(("target_branch", "main"), action.fields)
+        self.assertTrue(any(key == "source_label" for key, _ in action.fields))
         self.assertIn("--repo", action.command)
         self.assertIn("owner/repo", action.command)
+        self.assertIn("Manual fallback", action.manual_fallback)
+        self.assertIn("main-outputs.yaml", action.manual_fallback)
+        self.assertIn("variant: CHECKED", action.manual_fallback)
+
+    def test_build_promote_action_can_pin_reviewed_source_sha(self) -> None:
+        action = build_promote_action(
+            _config(),
+            "preliminary",
+            source_ref="dev",
+            source_sha="abc123",
+        )
+
+        self.assertIn(("variant", "PRELIMINARY"), action.fields)
+        self.assertIn(("source_ref", "dev"), action.fields)
+        self.assertIn(("source_sha", "abc123"), action.fields)
+        self.assertIn(("source_label", "dev@abc123"), action.fields)
 
     def test_build_prepare_release_action(self) -> None:
         action = build_prepare_release_action(

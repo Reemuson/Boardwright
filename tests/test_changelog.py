@@ -6,6 +6,7 @@ from boardwright.changelog import (
     promote_unreleased,
     unreleased_has_content,
 )
+from boardwright.errors import BoardwrightError
 
 
 class ChangelogTests(unittest.TestCase):
@@ -44,6 +45,20 @@ class ChangelogTests(unittest.TestCase):
         updated = promote_unreleased(text, "0.1.0")
 
         self.assertIn("## [Unreleased]\n\n## [0.1.0] - ", updated)
+
+    def test_promote_unreleased_can_create_no_change_release_note(self) -> None:
+        text = "# Changelog\n\n## [Unreleased]\n"
+
+        updated = promote_unreleased(text, "0.1.0", allow_empty=True)
+
+        self.assertIn("## [0.1.0] - ", updated)
+        self.assertIn("- No changelog entries recorded for this release.", updated)
+
+    def test_promote_unreleased_keeps_empty_changelog_strict_by_default(self) -> None:
+        text = "# Changelog\n\n## [Unreleased]\n"
+
+        with self.assertRaises(BoardwrightError):
+            promote_unreleased(text, "0.1.0")
 
 
 if __name__ == "__main__":

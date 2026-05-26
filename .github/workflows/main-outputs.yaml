@@ -1,4 +1,5 @@
-name: Boardwright Main Outputs
+name: Boardwright Accepted Outputs
+run-name: Accept ${{ inputs.variant || 'CHECKED' }} from ${{ inputs.source_label || inputs.source_ref || github.ref_name }} to ${{ inputs.target_branch || 'main' }}
 
 on:
   workflow_dispatch:
@@ -18,10 +19,34 @@ on:
         required: false
         default: false
         type: boolean
+      source_ref:
+        description: Source branch/ref to generate from
+        required: false
+        default: dev
+        type: string
+      source_sha:
+        description: Exact reviewed source commit SHA
+        required: false
+        default: ""
+        type: string
+      source_label:
+        description: Short source label for the run title, such as dev@abc123
+        required: false
+        default: ""
+        type: string
+      target_branch:
+        description: Branch to receive accepted source and snapshot
+        required: false
+        default: main
+        type: string
 
 permissions:
   contents: write
   actions: read
+
+concurrency:
+  group: boardwright-${{ inputs.target_branch || 'main' }}
+  cancel-in-progress: false
 
 env:
   KIBOT_CONFIG: boardwright_resources/kibot/yaml/kibot_main.yaml
@@ -30,15 +55,48 @@ env:
 
 jobs:
   outputs:
+    name: Accept ${{ inputs.variant || 'CHECKED' }} to ${{ inputs.target_branch || 'main' }}
     runs-on: ubuntu-latest
     if: github.ref_type == 'branch'
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.source_sha || inputs.source_ref || github.ref_name }}
           fetch-depth: 0
 
-      - name: Select variant and group
+      - name: Verify reviewed source SHA
+        if: inputs.source_sha != ''
+        shell: bash
+        run: |
+          actual="$(git rev-parse HEAD)"
+          expected="${{ inputs.source_sha }}"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "Checked out $actual, expected reviewed source $expected." >&2
+            exit 1
+          fi
+
+      - name: Summarize accepted output request
+        shell: bash
+        run: |
+          source_sha="$(git rev-parse HEAD)"
+          short_sha="$(git rev-parse --short=12 HEAD)"
+          commit_url="https://github.com/${GITHUB_REPOSITORY}/commit/${source_sha}"
+          source_label="${{ inputs.source_label }}"
+          if [[ -z "$source_label" ]]; then
+            source_label="${{ inputs.source_ref || github.ref_name }}@${short_sha}"
+          fi
+
+          {
+            echo "## Boardwright Accept to Main"
+            echo
+            echo "- Variant: \`${{ inputs.variant || 'CHECKED' }}\`"
+            echo "- Source: [\`${source_label}\`](${commit_url})"
+            echo "- Target branch: \`${{ inputs.target_branch || 'main' }}\`"
+            echo "- Commit README snapshot: \`${{ inputs.commit_outputs }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Choose KiBot variant and output set
         shell: bash
         run: |
           variant="${{ github.event.inputs.variant }}"
@@ -48,7 +106,7 @@ jobs:
 
           case "$variant" in
             DRAFT)
-              additional_args="--skip-pre erc,drc --log $KIBOT_LOG draft_group md_readme"
+              additional_args="--skip-pre draw_fancy_stackup,erc,drc --log $KIBOT_LOG draft_group md_readme"
               ;;
             PRELIMINARY)
               additional_args="--skip-pre erc,drc --log $KIBOT_LOG all_group_k9"
@@ -69,20 +127,40 @@ jobs:
         run: mkdir -p ~/cache_3d
 
       - name: Cache 3D models
-        uses: set-soft/cache@main
+        uses: actions/cache@v4
         with:
           path: ~/cache_3d
-          key: cache-3d-kicad-${{ env.KICAD_VERSION }}
+          key: ${{ runner.os }}-kicad-${{ env.KICAD_VERSION }}-3d
+          restore-keys: |
+            ${{ runner.os }}-kicad-${{ env.KICAD_VERSION }}-3d-
 
-      - name: Generate notes
+      - name: Install bundled KiCad/PDF fonts
+        shell: bash
+        run: |
+          mkdir -p ~/.local/share/fonts
+          cp boardwright_resources/kibot/resources/fonts/*.ttf ~/.local/share/fonts/
+          fc-cache -f ~/.local/share/fonts || true
+
+      - name: Prepare Boardwright PDF table placeholders
+        if: env.KIBOT_VARIANT != 'DRAFT'
+        shell: bash
+        run: python boardwright_resources/kibot/resources/scripts/prepare_pcb_tables.py .
+
+      - name: Generate KiBot PDF table CSV sources
+        if: env.KIBOT_VARIANT != 'DRAFT'
         uses: INTI-CMNB/KiBot@v2_dk9
         with:
-          skip: all
+          additional_args: --skip-pre draw_fancy_stackup,erc,drc --log kibot_main_tables.log table_sources
           variant: ${{ env.KIBOT_VARIANT }}
           config: ${{ env.KIBOT_CONFIG }}
-          additional_args: --log kibot_main_notes.log notes
+          cache3D: YES
 
-      - name: Generate checked outputs
+      - name: Prune empty conditional PDF pages
+        if: env.KIBOT_VARIANT != 'DRAFT'
+        shell: bash
+        run: python boardwright_resources/kibot/resources/scripts/prune_pdf_pages.py .
+
+      - name: Generate accepted output package
         uses: INTI-CMNB/KiBot@v2_dk9
         with:
           additional_args: ${{ env.KIBOT_ADDITIONAL_ARGS }}
@@ -90,13 +168,22 @@ jobs:
           config: ${{ env.KIBOT_CONFIG }}
           cache3D: YES
 
-      - name: Discard KiCad source side effects
+      - name: Normalize generated output ownership
+        shell: bash
+        run: sudo chown -R "$USER:$USER" Schematic Manufacturing assets HTML KiRI Testing Reports README.md 2>/dev/null || true
+
+      - name: Clean generated outputs
+        shell: bash
+        run: python boardwright_resources/kibot/resources/scripts/clean_generated_outputs.py .
+
+      - name: Discard generated source side effects
         shell: bash
         run: |
+          git checkout HEAD -- boardwright_resources/kibot/yaml/kibot_main.yaml 2>/dev/null || true
           git checkout HEAD -- '*.kicad_pcb' '*.kicad_pro' '*.kicad_dru' '*.kicad_prl' '*.kicad_sch' || true
           git clean -f '*.kicad_pcb' '*.kicad_pro' '*.kicad_dru' '*.kicad_prl' '*.kicad_sch' || true
 
-      - name: Upload checked outputs artifact
+      - name: Upload accepted outputs artifact
         uses: actions/upload-artifact@v4
         with:
           name: boardwright-main-outputs-${{ env.KIBOT_VARIANT }}
@@ -122,16 +209,48 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.commit_outputs
         shell: bash
         run: |
+          target_branch="${{ inputs.target_branch || 'main' }}"
+          source_sha="$(git rev-parse HEAD)"
+          snapshot_dir="$(mktemp -d)"
+
+          if [[ ! -s README.md ]]; then
+            echo "README.md was not generated by KiBot." >&2
+            exit 1
+          fi
+
+          mkdir -p "$snapshot_dir/assets"
+          cp README.md "$snapshot_dir/README.md"
+          if [[ -d assets/renders ]]; then
+            cp -a assets/renders "$snapshot_dir/assets/renders"
+          fi
+
+          git checkout HEAD -- README.md assets/renders 2>/dev/null || true
+          git checkout HEAD -- boardwright_resources/kibot/yaml/kibot_main.yaml 2>/dev/null || true
+          git clean -fd -- HTML KiRI Manufacturing Reports Schematic Testing assets/renders 2>/dev/null || true
+          rm -rf HTML KiRI Manufacturing Reports Schematic Testing assets/renders
+
           git config user.name "boardwright[bot]"
           git config user.email "boardwright[bot]@users.noreply.github.com"
+
+          git fetch origin "$target_branch"
+          git switch -C "boardwright-accepted-${target_branch}" "origin/${target_branch}"
+          git merge --no-ff --no-edit -X theirs "$source_sha"
+
+          cp "$snapshot_dir/README.md" README.md
+          rm -rf assets/renders
+          if [[ -d "$snapshot_dir/assets/renders" ]]; then
+            mkdir -p assets
+            cp -a "$snapshot_dir/assets/renders" assets/renders
+          fi
 
           git rm -r --ignore-unmatch HTML KiRI Manufacturing Reports Schematic Testing
           git add README.md assets/renders/*.png || true
 
           if git diff --cached --quiet; then
             echo "No README snapshot changes to commit."
+            git push origin HEAD:"$target_branch"
             exit 0
           fi
 
           git commit -m "chore(outputs): update README snapshot"
-          git push origin HEAD:${{ github.ref_name }}
+          git push origin HEAD:"$target_branch"

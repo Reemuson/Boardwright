@@ -158,16 +158,35 @@ def _validate_readme_template(root: Path, issues: list[ValidationIssue]) -> None
 
 
 def _validate_kicad_and_kibot(root: Path, issues: list[ValidationIssue]) -> None:
+    pcb_files = list(root.glob("*.kicad_pcb"))
     if not list(root.glob("*.kicad_pro")):
         issues.append(ValidationIssue("error", "No KiCad project (*.kicad_pro) found"))
     if not list(root.glob("*.kicad_sch")):
         issues.append(ValidationIssue("error", "No KiCad schematic (*.kicad_sch) found"))
-    if not list(root.glob("*.kicad_pcb")):
+    if not pcb_files:
         issues.append(ValidationIssue("error", "No KiCad PCB (*.kicad_pcb) found"))
+    elif not any(_has_edge_cuts_geometry(path) for path in pcb_files):
+        issues.append(
+            ValidationIssue(
+                "warning",
+                "No Edge.Cuts board outline geometry found; CHECKED/RELEASED CI builds may fail DRC.",
+            )
+        )
     if not (root / "boardwright_resources/kibot/yaml" / "kibot_main.yaml").exists():
         issues.append(
             ValidationIssue("error", "Missing KiBot config: boardwright_resources/kibot/yaml/kibot_main.yaml")
         )
+
+
+def _has_edge_cuts_geometry(path: Path) -> bool:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    for marker in ('(layer "Edge.Cuts")', "(layer Edge.Cuts)"):
+        if marker in text:
+            return True
+    return False
 
 
 def _validate_assets(config: BoardwrightConfig, issues: list[ValidationIssue]) -> None:

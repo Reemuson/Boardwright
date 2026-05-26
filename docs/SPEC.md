@@ -1,104 +1,89 @@
-# Boardwright Specification
+# Boardwright Product Specification
 
-Boardwright is a guided KiCad/KiBot project system for producing clean PCB/PCBA
-repositories, generated review outputs, and GitHub release packages without
-making the user remember brittle git and CI rituals.
+Boardwright is a KiCad/KiBot hardware project template plus a small workflow
+tool. Its job is to make the normal PCB loop predictable:
 
-The intended user experience is boring: work in KiCad, record changes in
-Boardwright, ask Boardwright for previews, promote accepted outputs, and publish
-draft/prerelease/release tags from the TUI.
+```text
+edit in KiCad -> record changes -> commit + push -> review artifacts
+-> accept to main -> create release
+```
 
-## Core Principles
+The user should not need to remember KiBot groups, GitHub Actions inputs, tag
+rituals, or revision-history plumbing during normal design work.
 
-- Tags are immutable.
-- `dev` is for design work and is never mutated by CI.
+## Current Codebase
+
+The repository currently contains three coupled parts:
+
+- KiCad template files at the repository root, with worksheets in `Templates/`.
+- Boardwright Python tooling in `src/boardwright/`.
+- KiBot/GitHub Actions build resources in `boardwright_resources/` and
+  `.github/workflows/`.
+
+The Python package provides:
+
+- project config loading from `.boardwright/`
+- validation of required config, KiCad, KiBot, README, licence, and asset files
+- changelog parsing, writing, and release promotion
+- revision-history variable generation for KiBot/KiCad text variables
+- legal/notice file generation
+- CLI commands for status, validation, change recording, preview planning,
+  promotion planning, release preparation, and git commit dry-runs
+- shared workflow action builders used by CLI and TUI
+- optional Textual TUI with a console fallback
+- GitHub CLI integration for workflow dispatch, CI polling, and preview artifact
+  download when `gh` is available
+
+The current tests are Python `unittest` tests under `tests/`. Run them with:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+`python -m boardwright ...` and `python -m boardwright.cli ...` both work for
+local module execution. The installed console script is `boardwright`.
+
+## Core Rules
+
+- `dev` is the normal KiCad/source development branch.
+- CI must not mutate `dev`.
 - `preview` is disposable and may be force-updated.
-- `main` is the accepted state and may contain generated README/output assets.
-- Tag workflows publish only; they do not mutate `main`.
-- Boardwright owns workflow orchestration through shared CLI/TUI actions.
-- YAML and git commands are plumbing, not the user interface.
+- `main` is the accepted state.
+- `main` may contain source files plus accepted generated README/render snapshot
+  assets, but not wholesale manufacturing output folders.
+- Tags are immutable published package points.
+- Tag workflows publish artifacts only; they do not commit back to branches.
 - Release-affecting operations require explicit user intent.
-- The workflow should be boring when it matters.
+- CLI and TUI should share action logic instead of duplicating workflow rules.
 
 ## Branch And Release Model
 
 ```text
-dev      = normal KiCad/source development
-preview  = disposable generated preview outputs
-main     = accepted source plus accepted generated README/output assets
-tags     = immutable published packages from exact main commits
+dev      = normal design/source work
+preview  = disposable generated preview branch/artifacts
+main     = reviewed and accepted project state
+tags     = immutable published release package points
 ```
 
-Normal work happens on `dev`. Users record changelog entries as they work.
-Preview generation may run on GitHub Actions and publish artifacts or a
-throwaway `preview` branch, but it must not commit back to `dev`.
+Normal work happens on `dev`. Preview CI is explicitly dispatched when the user
+is ready to review generated outputs. Preview CI generates reviewable artifacts
+and can publish the disposable `preview` branch, but must not commit to `dev`.
 
-`main` represents accepted project state. When the user promotes a variant,
-Boardwright dispatches CI to generate outputs, update `README.md`, and commit
-the accepted README snapshot and render assets to `main` when explicitly
-requested. Full manufacturing/release artifacts live in workflow artifacts and
-tagged GitHub Releases rather than being committed wholesale to `main`.
+`main` represents a reviewed state. The `Accept to Main` action dispatches the
+main-output workflow from the exact reviewed `dev` source SHA, with a selected
+variant. CI verifies that source SHA before generation. When requested, that
+workflow pushes the reviewed source plus an accepted `README.md` and render
+snapshot under `assets/renders/` to `main`.
 
-Tags are created by a deliberate Boardwright-controlled CI workflow, not by
-normal CI and not by the tag-publish workflow. The tag workflow checks out the
-tag and publishes release assets only.
-
-## Product Workflow
-
-The target TUI workflow is:
-
-1. Initialise project metadata and workflows.
-2. Edit in KiCad or project files.
-3. Record changes in Boardwright.
-4. Validate, write revision-history variables, commit, and push.
-5. Generate previews from `dev`; poll CI and fetch artifacts locally.
-6. Promote a good build to `main` with a selected variant.
-7. Optionally tag that accepted `main` commit as a draft, prerelease, or release.
-8. Continue development on `dev`.
-
-Variant intent:
-
-| Stage | Variant | GitHub release state |
-| --- | --- | --- |
-| early schematic | `DRAFT` | draft or prerelease |
-| schematic mostly complete | `PRELIMINARY` | prerelease |
-| fabrication package ready | `CHECKED` | prerelease/release candidate |
-| official production release | `RELEASED` | full release |
-
-## CI/CD Architecture
-
-Boardwright-native workflows:
-
-```text
-.github/workflows/dev-preview.yaml
-.github/workflows/main-outputs.yaml
-.github/workflows/prepare-release.yaml
-.github/workflows/release.yaml
-```
-
-`dev-preview.yaml` generates reviewable outputs from `dev` or manual dispatch.
-It may publish `preview` and upload artifacts. It does not mutate `dev`.
-
-`main-outputs.yaml` generates accepted outputs on `main`. It uploads generated
-outputs as artifacts and can commit the accepted README snapshot/render assets
-to `main` when explicitly requested.
-
-`prepare-release.yaml` is manually dispatched by Boardwright. It validates the
-release, promotes `CHANGELOG.md`, writes revision-history variables, generates
-accepted outputs/README, commits accepted release state plus the README
-snapshot/render assets to `main`, records release metadata, creates the tag,
-and pushes the tag.
-
-`release.yaml` runs on semantic version tags. It reads committed release
-metadata, generates the tag package, creates/updates the GitHub Release, and
-uploads assets. It never pushes branch commits.
-
-GitHub Actions is the v1 build engine. GitHub CLI integration is optional and
-used by Boardwright when available for dispatch/status/download convenience.
+Release preparation is CI-owned. Boardwright dispatches `prepare-release.yaml`;
+that workflow promotes the changelog, writes release metadata, generates
+accepted outputs, commits the accepted release state to `main`, creates the tag,
+and dispatches the tag workflow. The tag workflow publishes the release package
+without mutating `main`.
 
 ## Variants
 
-Supported variants:
+Supported variants are:
 
 ```text
 DRAFT
@@ -107,12 +92,39 @@ CHECKED
 RELEASED
 ```
 
-Defaults live in `.boardwright/project.yaml` and can be overridden from CLI/TUI
-without editing workflow YAML.
+Variant intent:
+
+| Stage | Variant | Typical release state |
+| --- | --- | --- |
+| early schematic/design | `DRAFT` | draft or prerelease |
+| schematic mostly complete | `PRELIMINARY` | prerelease |
+| fabrication package ready | `CHECKED` | prerelease or release candidate |
+| official production release | `RELEASED` | full release |
+
+Defaults live in `.boardwright/project.yaml`:
+
+- `variants.dev_default`
+- `variants.preview_default`
+- `variants.main_default`
+- `variants.release_default`
+
+Variant defaults are not the same thing as a CI run's selected output variant:
+
+- `dev_default` is the source project's normal design-stage label and is what
+  the TUI status strip calls `dev`.
+- `preview_default`, `main_default`, and `release_default` seed the selector
+  values for their respective actions.
+- Dispatching preview, accepting to main, or preparing a release must not
+  silently rewrite `.boardwright/project.yaml` on `dev`. Those actions are CI
+  output selections and are recorded in run names, artifacts, job summaries,
+  accepted-main evidence, and `.boardwright/release.env` for releases.
+- If the project has genuinely moved from `DRAFT` to `PRELIMINARY` or
+  `CHECKED`, the user should change `dev_default` deliberately in Project Info
+  and commit that source-state change.
 
 ## Project Config
 
-Boardwright uses `.boardwright/`:
+Boardwright config lives in `.boardwright/`:
 
 ```text
 .boardwright/
@@ -124,172 +136,108 @@ Boardwright uses `.boardwright/`:
   release.env
 ```
 
-`release.env` is committed by release preparation when a tag should carry
-variant/release-state metadata such as `RELEASE_VARIANT=CHECKED` and
-`RELEASE_KIND=prerelease`.
+`project.yaml` holds project identity, GitHub repository settings, variant
+defaults, workflow filenames, output policy, and visible asset paths.
 
-## Revision History
-
-KiCad sheets use fixed slots:
+`branches.yaml` maps the development, preview, and release branches. The
+current default is:
 
 ```text
-${REVHIST_1_TITLE}
-${REVHIST_1_BODY}
+development: dev
+preview: preview
+release: main
 ```
 
-Boardwright always defines every configured slot. The newest release fills slot
-1. This keeps the most relevant changes visible first when a project has many
-revisions. Unused slots resolve to blank strings.
-
-Projects can increase `.boardwright/revision_history.yaml` `slots` and edit or
-add KiCad sheets to consume more variables. The KiBot preflight defines a
-larger blank-capable ceiling.
-
-## Changelog
-
-Boardwright manages `CHANGELOG.md` through CLI/TUI actions. Supported sections:
-
-- Status
-- Added
-- Changed
-- Fixed
-- Removed
-- Notes
-
-Release preparation promotes `Unreleased` before tagging, rejects duplicate
-versions, and updates revision-history variables.
-
-## README
-
-`README.md` is generated from `boardwright_resources/kibot/resources/templates/readme.txt`.
-
-Accepted `main` README content should include, where available:
-
-- CI/build status badges.
-- Current revision/tag.
-- Current variant.
-- Board render images.
-- Board dimensions.
-- Brief stackup/fabrication summary.
-- Component counts, including SMT/THT where KiBot data supports it.
-- Links to latest release assets and generated manufacturing outputs.
-
-The tag workflow also attaches the generated README and board images to the
-GitHub Release. Release body markdown should be generated from changelog and
-release assets, with board renders shown side by side.
-
-## Assets
-
-Visible project media lives under `assets/`:
-
-- `assets/logos/` for project logos used by README and KiBot pages.
-- `assets/renders/` for generated board render PNGs that may be committed to
-  `main` as the accepted README snapshot.
-- `assets/3d/` for generated STEP/3D exports that are packaged as release
-  artifacts but not normally committed to source branches.
-
-KiCad template metadata remains in `meta/`, and KiCad worksheet files remain
-in `Templates/`.
-
-## CLI And TUI
-
-The TUI is the intended everyday interface. The CLI remains scriptable and is
-used by CI. Both call the same internal action layer.
-
-Core actions:
+`release.env` is written and committed by release preparation so the tag
+workflow can read:
 
 ```text
-boardwright
-boardwright init
-boardwright status
-boardwright change
-boardwright preview
-boardwright promote
-boardwright release
-boardwright legal
-boardwright validate
+RELEASE_VERSION=0.1.0
+RELEASE_VARIANT=CHECKED
+RELEASE_KIND=prerelease
 ```
 
-Plain `boardwright` opens the TUI. `boardwright tui` is kept as an explicit
-alias, and `boardwright --help` prints CLI help. Local development installs
-the command with `scripts/install_boardwright.ps1`, which performs an editable
-install with the TUI dependency by default.
+KiCad text-variable naming:
 
-Installation supports two scopes:
+- `${REVISION}` is the semantic release/version value, normally sourced from
+  `.boardwright/release.env` during release preparation or from git tags as a
+  fallback.
+- `${RELEASE_VERSION}` is an explicit alias for the same semantic version.
+- `${BOARD_REVISION}` is the hardware board spin such as `A`, `B`, or `C`,
+  sourced from `project.board_revision`.
 
-- **User/global**: installs the `boardwright` command into the active Python
-  user scripts directory. The command operates on whichever Boardwright project
-  the user runs it from.
-- **Project-local**: installs into `.venv/` inside the current project and
-  writes `boardwright.ps1`. This pins that project to its local Boardwright
-  copy.
+Dashboard tag display:
 
-An optional PowerShell profile function may be installed. It searches upward
-from the current directory for `.venv/Scripts/boardwright.exe` or
-`boardwright.ps1`, then falls back to the global `boardwright.exe`. This keeps
-the terminal command short while allowing separate projects to carry separate
-Boardwright versions.
+- The status bar's tag value is the latest semantic release tag in the
+  repository, not the nearest tag reachable from the current branch tip.
+- Stable semantic-version tags such as `0.1.3` or `v0.1.3` win over
+  prerelease tags.
+- If there are no stable release tags, the latest semantic prerelease tag such
+  as `0.1.3-rc.1` is shown.
+- If there are no semantic release/prerelease tags, the dashboard shows `none`.
 
-### TUI Product Design
+## Project Information And Manufacturing Metadata
 
-The TUI is a minimal cockpit for the normal PCB project workflow. It should not
-expose every internal command. It should expose the decisions the user actually
-cares about while Boardwright handles routine plumbing automatically.
+Boardwright should treat project-specific manufacturing text as structured
+project data, not as hardcoded KiBot YAML. The TUI should expose this as a
+`Project Info` screen with compact tabs or sections:
 
-The TUI should answer three questions:
+- Identity: project name, board name, board revision, company,
+  designer/author, logo path, repository URL, development branch, preview
+  branch, release branch.
+- Variants: dev, preview, accepted-main, and release default variants.
+- Fabrication: surface finish, soldermask color, silkscreen color, material
+  requirements, IPC class, RoHS/Pb-free policy, tented-via policy, controlled
+  impedance enabled/disabled, and editable fabrication notes.
+- Assembly: DNP policy, BOM precedence policy, conformal coating requirement,
+  pin-1/orientation note, and editable assembly notes.
+- Tables: component-count behavior, testpoint policy, impedance table entries,
+  and whether empty side-specific pages should be omitted.
+- Outputs: README/render snapshot policy, release package contents, and
+  generated output cleanup policy.
 
-1. What state is the project currently in?
-2. What should I do next?
-3. What artifacts or release outputs are ready to review?
+The first implementation should avoid a raw YAML editor. It should show fields
+as normal form controls:
 
-#### Design Principle
+- text inputs for names, repository URL, colors, material notes, and freeform
+  note bodies
+- selects for variant defaults, IPC class, surface finish, soldermask color,
+  silkscreen color, and release kind defaults
+- checkboxes for RoHS/Pb-free, conformal coating, tented vias, controlled
+  impedance, and side-specific testpoint pages
+- a small editable impedance table with columns:
+  `Transmission Line`, `Impedance [ohms]`, `Tolerance [ohms]`, `Layer`,
+  `Trace Width [mm]`, `Gap [mm]`, and `Ref. Layers`
 
-Every visible primary action should represent a real user decision. Routine
-operations should be automatic, hidden, or available only through the CLI,
-advanced menu, or debug path.
+The manufacturing-note templates remain parameterized. Boardwright should
+eventually render them from project metadata before KiBot runs, so the KiCad
+text variables receive complete notes even when the report outputs have not
+yet been generated. Freeform edits should be stored as project-local data under
+`.boardwright/`, while the repository template keeps sane defaults.
 
-Routine operations include validation, revision-history variable generation,
-legal/notice regeneration, raw workflow dispatch, and raw git status
-inspection. These should not dominate the main screen.
+Controlled impedance is opt-in. When no impedance entries exist, Boardwright
+must render a short note in the impedance-table placeholder that says there are
+no impedance controlled traces. When entries exist, Boardwright should generate
+the CSV/table from the structured project data and leave the KiCad placeholder
+movable.
 
-#### Core Workflow
+## Changelog And Revision History
+
+`CHANGELOG.md` is the source of release notes and schematic revision-history
+content.
+
+Supported changelog sections are:
 
 ```text
-Edit in KiCad
--> Record Changes
--> Commit + Push
--> Review Artifacts
--> Accept to Main
--> Create Release
+Added
+Changed
+Fixed
+Removed
+Notes
+Status
 ```
 
-#### Primary Actions
-
-The main screen exposes only these primary actions:
-
-```text
-Record Changes
-Commit + Push
-Review Artifacts
-Accept to Main
-Create Release
-Refresh
-```
-
-Optional advanced/fallback actions may exist, but they should not dominate the
-main screen.
-
-#### Record Changes
-
-User intent: the user has made design/project changes and wants to record what
-changed.
-
-User input:
-
-- changelog section
-- changelog text
-
-Supported changelog sections:
+The TUI exposes the everyday sections:
 
 ```text
 Added
@@ -299,313 +247,416 @@ Removed
 Notes
 ```
 
-After the user records a change, Boardwright should automatically:
-
-1. update `CHANGELOG.md`
-2. validate core project files
-3. regenerate revision-history variable/env files
-4. report any blocking issues
-
-There should not normally be separate primary buttons for `Validate` or `Write
-Revision History`; those are implementation details of preparing project state.
-
-#### Commit + Push
-
-User intent: the user wants to save the current project state and push it to
-`dev`.
-
-User input:
-
-- commit message
-
-Boardwright should:
-
-1. check the current branch
-2. check working tree state
-3. check whether a changelog entry exists when source files changed
-4. validate the project
-5. regenerate revision-history variable/env files if needed
-6. commit changed files
-7. push to `origin/dev`
-
-If preview CI already runs automatically on push to `dev`, the TUI does not need
-a normal primary `Generate Preview` action. Preview generation should be treated
-as a consequence of pushing `dev`.
-
-Blocking failures should be stated directly, for example:
+Release preparation no longer fails solely because `Unreleased` is empty. If a
+release is otherwise valid and no changelog entries are waiting, Boardwright
+creates the version heading with a generated note:
 
 ```text
-Cannot commit: no changelog entry recorded.
-Cannot push: no upstream branch configured.
-Cannot push: GitHub authentication unavailable.
-Cannot commit: validation failed.
+No changelog entries recorded for this release.
 ```
 
-#### Review Artifacts
+This keeps release packages traceable while still allowing the TUI to show the
+missing changelog entry as a warning.
 
-User intent: the user wants to inspect generated preview outputs before
-accepting them.
-
-Boardwright should show:
-
-- latest preview workflow status
-- source branch
-- source commit SHA
-- artifact name
-- artifact creation time
-- whether the artifact matches the latest pushed `dev` commit
-- fetch/download option
-- fallback command or GitHub Actions link if GitHub CLI is unavailable
-
-Artifact states should be simple:
+KiCad sheets consume fixed text-variable slots:
 
 ```text
-missing
-running
-failed
-stale
-ready
-downloaded
+${REVHIST_1_TITLE}
+${REVHIST_1_BODY}
 ```
 
-This remains a first-class action because artifact review is a real human
-decision point.
+Boardwright writes every configured slot to
+`.boardwright/revision_history_variables.env`. Newest visible release content
+fills slot 1, and unused slots are written as blank values. The KiBot preflight
+defines a larger ceiling than the default visible slot count so projects can
+expand their revision-history sheets later.
 
-#### Optional Re-run Preview
+## CI/CD Workflows
 
-`Re-run Preview` replaces `Generate Preview` as a normal primary action. It
-should be shown or highlighted only when useful:
-
-- latest preview failed
-- latest preview is missing
-- latest preview is stale
-- user explicitly opens advanced/fallback actions
-
-It should not be primary when preview CI already runs automatically on push to
-`dev`, when the latest preview is running, or when the latest preview is ready
-for the latest pushed commit.
-
-#### Accept to Main
-
-Use the label `Accept to Main`, not `Promote to Main`.
-
-User intent: the user has reviewed preview artifacts and accepts them as the
-current official project state. This means: the current reviewed output is good;
-make it the accepted state on `main`.
-
-Boardwright should:
-
-1. confirm the selected variant
-2. confirm latest preview artifact is ready
-3. confirm preview matches the intended commit
-4. require clean/pushed `dev`, unless explicitly overridden
-5. dispatch or run the accepted-output workflow
-6. update `main` with accepted README/render snapshot assets
-7. report the accepted commit/output state
-
-Variant options:
+Boardwright-native workflows:
 
 ```text
-DRAFT
-PRELIMINARY
-CHECKED
-RELEASED
+.github/workflows/dev-preview.yaml
+.github/workflows/main-outputs.yaml
+.github/workflows/prepare-release.yaml
+.github/workflows/release.yaml
 ```
 
-This action is not mainly about squashing. It exists because `main` represents
-the reviewed and accepted project state, while `dev` is normal working design
-history.
+Workflow run names should be human-readable in the GitHub Actions list. They
+should include the user decision and short source label where practical, for
+example `Preview PRELIMINARY from dev@a9cf86e1d223` and
+`Accept CHECKED from dev@a9cf86e1d223 to main`. Full source SHAs belong in the
+job summary as clickable commit links rather than in long run titles.
 
-#### Create Release
+`dev-preview.yaml`
 
-User intent: the user wants to publish a draft, prerelease, or release from an
-accepted `main` state.
+- runs on manual dispatch for the selected source ref
+- selects a KiBot generation mode from the variant
+- generates preview outputs
+- cleans generated output packages before upload
+- uploads `boardwright-preview-<VARIANT>` artifacts
+- uploads KiBot logs
+- publishes the disposable `preview` branch from `dev`
+- does not mutate `dev`
 
-User input:
+`main-outputs.yaml`
 
-- release kind: `draft`, `prerelease`, or `release`
-- variant: `DRAFT`, `PRELIMINARY`, `CHECKED`, or `RELEASED`
-- version/tag: `vMAJOR.MINOR.PATCH` or the configured semantic-version format
+- runs on manual dispatch
+- checks out and verifies the reviewed source ref/SHA
+- generates accepted outputs from that reviewed source
+- intentionally regenerates outputs rather than copying the preview artifact.
+  Preview artifacts are review evidence; accepted outputs are a reproducible CI
+  build from the reviewed source SHA.
+- cleans generated output packages before upload
+- uploads generated outputs as artifacts
+- discards generated source/config side effects, including temporary KiBot
+  metadata injected into `boardwright_resources/kibot/yaml/kibot_main.yaml`,
+  before switching to the accepted branch
+- optionally pushes the reviewed source plus `README.md` and
+  `assets/renders/*.png` to the target accepted branch
+- when committing the accepted snapshot, merges the reviewed source SHA onto the
+  current target branch first, then reapplies the generated README/render
+  snapshot. This avoids non-fast-forward failures after earlier CI snapshot
+  commits on `main`.
+- always pushes the reviewed-source merge to the target branch, even when the
+  generated README/render snapshot is unchanged. This keeps accepted source
+  changes such as `CHANGELOG.md` from being stranded in the CI runner.
 
-Boardwright should:
+`prepare-release.yaml`
 
-1. validate release metadata
-2. reject duplicate versions/tags
-3. ensure an accepted `main` state exists
-4. prepare release state
-5. create the tag through the controlled CI release-preparation flow
-6. allow the tag workflow to publish artifacts only
+- runs on manual dispatch from `main`
+- installs Boardwright
+- promotes `CHANGELOG.md`
+- writes `.boardwright/release.env`
+- generates accepted outputs/README
+- cleans generated output packages before commit/tag
+- discards generated source/config side effects before committing release state
+- commits accepted release state to `main`
+- creates and pushes the tag
+- dispatches `release.yaml` for the tag
 
-Release-affecting operations must remain explicit. The TUI should make it hard
-to accidentally create a release.
+`release.yaml`
 
-#### Main Screen Layout
+- runs on semantic-version tags or manual dispatch against a tag
+- reads `.boardwright/release.env`
+- generates release outputs
+- cleans generated output packages before packaging
+- creates release notes from changelog content and board renders
+- packages release assets
+- publishes the GitHub Release
+- does not push branch commits
 
-The TUI uses one main cockpit screen:
+CI cache policy:
+
+- Use pinned official `actions/cache@v4` cache steps for Boardwright-owned
+  caches, with restore keys.
+- Treat GitHub cache-save outages as non-fatal infrastructure warnings. The
+  build should still succeed without a cache write.
+- Cache 3D model downloads by runner OS and KiCad major version only. This
+  cache is a best-effort speedup and must not depend on fragile `hashFiles`
+  expressions that can block workflow parsing.
+- Cache Python package downloads where Boardwright is installed in CI.
+
+## CLI
+
+Core commands:
 
 ```text
-+-------------------------------------------------------------+
-| Boardwright | dev | dirty 3 | rev v0.1.2 | PRELIMINARY | CI |
-+----------------+-------------------------+------------------+
-| Actions        | Workflow                | Next Action      |
-|                |                         |                  |
-| Record Changes | 1 Edit        external  | Record changes   |
-| Commit + Push  | 2 Record      needed    | then commit/push |
-| Review Output  | 3 Commit      blocked   |                  |
-| Accept to Main | 4 Preview     waiting   |                  |
-| Create Release | 5 Review      locked    |                  |
-| Refresh        | 6 Accept      locked    |                  |
-|                | 7 Release     locked    |                  |
-+----------------+-------------------------+------------------+
-| Changed files / validation issues / latest CI evidence       |
-+-------------------------------------------------------------+
+boardwright
+boardwright init
+boardwright status
+boardwright change
+boardwright suggest-commit
+boardwright validate
+boardwright revision-history
+boardwright preview
+boardwright promote
+boardwright accepted
+boardwright review
+boardwright release
+boardwright doctor
+boardwright testbench
+boardwright outputs clean
+boardwright legal
+boardwright git-status
+boardwright commit
+boardwright tui
 ```
 
-The top status bar should show project name, current branch, dirty file count,
-ahead/behind remote, latest revision/tag, selected/default variant, CI state,
-and validation state.
+Plain `boardwright` opens the TUI. If Textual is not installed, it prints a
+console status view and an install hint.
 
-The central workflow timeline should show ordered project state:
+The CLI remains scriptable and useful in CI. The TUI is the intended everyday
+interface for designers.
 
-1. Edit
-2. Record
-3. Commit + Push
-4. Preview
-5. Review Artifacts
-6. Accept to Main
-7. Release
+Planned CLI additions:
 
-Each step should use one of these state labels:
+- `boardwright config show`: read-only project configuration summary.
+- `boardwright adopt`: later helper for converting existing KiCad projects.
+
+Implemented accepted-output CLI support:
+
+- `boardwright accepted`: shows latest accepted main-output workflow evidence,
+  including run id, branch, source SHA, expected reviewed `origin/dev` SHA,
+  status, and freshness.
+
+Implemented environment-readiness CLI support:
+
+- `boardwright doctor`: checks local Git/repository state, configured branches
+  and remotes, workflow dispatch shape, GitHub CLI/auth hints, Textual
+  availability, and base project validation. It exits nonzero only for blocking
+  errors; warnings are advisory readiness notes.
+
+Implemented scriptable review/testbench support:
+
+- `boardwright review`: shows preview artifact freshness, run evidence,
+  expected `origin/dev` SHA, and local reviewed-marker state. With `--fetch`,
+  it downloads the fresh preview artifact and marks that exact run/SHA/artifact
+  as reviewed.
+- `boardwright testbench plan`: prints a live-test command sequence for a
+  separate repository.
+- `boardwright testbench init`: copies the template into a separate local
+  testbench repo, excludes generated/local artifacts, optionally sets
+  `project.github_repo`, and initializes local `main`/`dev` branches.
+- `boardwright outputs clean`: removes KiBot packaging noise after generation.
+  It drops numbered PDF page shards when a combined PDF exists and removes empty
+  generated CSV tables for component-count, testpoint, and impedance-style
+  outputs. CI workflows run the same cleanup before upload, commit, tag, or
+  release packaging.
+
+## TUI
+
+The TUI is a small workflow cockpit, not a full git client or KiBot editor.
+It should answer:
+
+1. What state is the project in?
+2. What should I do next?
+3. What artifacts or release outputs are ready to review?
+
+Primary actions:
 
 ```text
-external
-ready
-needed
-blocked
-running
-waiting
-failed
-passed
-locked
-done
+Record Changes
+Commit + Push
+Generate Preview
+Review Artifacts
+Accept to Main
+Create Release
+Project Info
+Refresh
 ```
 
-#### Next Action Logic
+Target main-screen layout:
 
-The TUI should compute one recommended next action.
+- Top status strip: one concise line with project id, branch, git state,
+  variant, latest semantic release/prerelease tag, compact CI summary, and
+  validation summary. CI phases should be named with words (`Preview`,
+  `Accept`, `Release`) rather than single-letter abbreviations. Detailed run
+  ids, titles, and evidence belong in the inspector or action modals, not in
+  the top strip. The strip should scroll horizontally if the terminal is
+  narrow instead of truncating important fields.
+- Left action rail: grouped by intent rather than shown as one flat button
+  pack.
+  - Work: Record Changes, Commit + Push.
+  - Preview: Generate Preview, Review Artifacts, Accept to Main.
+  - Release: Create Release.
+  - Setup: Project Info, Refresh.
+- Center workflow map: a compact seven-step progress map with one line per
+  step. It should show state with simple markers and color, but not repeat long
+  explanatory paragraphs.
+- Right inspector: a structured readout with `Now`, `Evidence`, and `Release`
+  sections. `Now` states the next action and blocker. `Evidence` has separate
+  preview, review, accept, and release rows so mixed CI states do not collapse
+  into one noisy sentence. `Release` summarizes readiness. Raw workflow
+  evidence belongs in the action modal or review screen, not permanently in the
+  main readout.
+- Bottom panels: validation and changed files, both scrollable when needed.
 
-Examples:
+Button and keybind behavior must be identical. Every visible action and every
+keyboard shortcut must pass through the same shared `action_state` gate before
+opening a modal or dispatching work. Disabled actions should explain the lock
+reason in a notification.
 
-```text
-Next: Record Changes
-Reason: Source files changed but no changelog entry has been recorded.
+`Create Release` opens the release checklist once the local dev state is clean
+and pushed. The checklist, not the main button, gates the actual
+`prepare-release.yaml` dispatch against accepted-main evidence, release inputs,
+changelog readiness, and tag availability. This keeps the release path
+discoverable without allowing an accidental publish.
 
-Next: Commit + Push
-Reason: Changelog is updated and validation passed.
-
-Next: Review Artifacts
-Reason: Preview CI passed for the latest pushed dev commit.
-
-Next: Accept to Main
-Reason: Preview artifacts are ready and match the latest dev commit.
-
-Next: Create Release
-Reason: Main has accepted outputs but no release tag has been created.
-```
-
-Approximate decision logic:
-
-```text
-if .boardwright config missing or incomplete:
-    next = initialise/configure project
-elif validation fails:
-    next = fix validation issue
-elif working tree dirty and no changelog entry:
-    next = record changes
-elif working tree dirty:
-    next = commit + push
-elif local dev is ahead of origin/dev:
-    next = push
-elif preview CI is running:
-    next = wait/review CI status
-elif preview missing or stale:
-    next = wait for push-triggered preview or offer re-run preview
-elif preview failed:
-    next = inspect/re-run preview
-elif preview artifact ready and not reviewed:
-    next = review artifacts
-elif preview reviewed and not accepted:
-    next = accept to main
-elif accepted main exists and release is desired:
-    next = create release
-else:
-    next = continue editing in KiCad
-```
-
-#### Hidden Or Advanced Actions
-
-These should not be primary main-screen actions:
+Routine plumbing should be automatic, CLI-only, or advanced/fallback:
 
 ```text
 Validate
 Write Revision History
-Generate Preview
 Legal
 Raw Git Status
 Raw Workflow Dispatch
 ```
 
-They may exist as automatic sub-steps, CLI commands, advanced/debug menu
-entries, or fallback actions when automation is unavailable.
+Current implemented TUI behavior:
 
-#### Fallbacks
+- status bar shows project id, branch, dirty state, remote ahead/behind,
+  variant, latest tag, CI summary, and validation summary
+- workflow timeline shows edit, record, commit/push, preview, review, accept,
+  and release steps as a compact progress map
+- inspector is sectioned into Now, Evidence, and Release instead of showing a
+  raw status dump
+- Record Changes updates `CHANGELOG.md`, writes revision-history variables,
+  validates, and suggests a commit message
+- Commit + Push requires the configured `dev` branch, requires a changelog entry
+  for dirty work, validates, writes revision-history variables, commits, and
+  pushes `origin/dev`
+- Generate Preview dispatches `dev-preview.yaml` for a selected variant after
+  the configured `dev` branch is clean and pushed. It does not run implicitly on
+  every push.
+- Review Artifacts polls recent workflow runs and downloads the latest preview
+  artifact evidence when `gh` is available. It opens a dedicated review screen
+  showing run id, branch, source SHA, expected SHA, artifact name, created time,
+  status, freshness, selected variant, and reviewed marker. The default variant
+  comes from `variants.preview_default`; the operator can override it for manual
+  workflow runs. During fetch, the TUI shows artifact download progress. A
+  successful fetch writes a local review marker under `boardwright-preview/` for
+  the exact artifact, run id, and SHA.
+- Accept to Main dispatches `main-outputs.yaml` only when the selected variant
+  has a fresh preview artifact for the latest pushed `origin/dev` SHA and that
+  exact artifact has been reviewed locally. The dispatch pins that reviewed
+  source SHA and tells CI to push the accepted state to `main`.
+- Create Release opens a release readiness checklist before dispatching
+  `prepare-release.yaml`. The checklist shows accepted-main evidence, release
+  inputs, unreleased changelog readiness, local tag availability, and dispatch
+  target. Dispatch is disabled while any checklist item is blocking.
+- primary action buttons lock/unlock from the shared workflow-state model
+- keybindings use the same action gates as the visible buttons
+- Project Info edits project id, name, company, designer, Git URL, GitHub repo,
+  logo path, product image path, and the dev/preview/main/release variant
+  defaults stored in `.boardwright/project.yaml`.
+- Refresh checks accepted-main evidence when GitHub CLI is available. Create
+  Release is blocked unless accepted main outputs are fresh for the latest
+  pushed `origin/dev` source SHA.
+- CI polling summarizes all three active CI phases in the top status and
+  inspector: preview, accepted-main outputs, and release preparation/publish
+  runs. Preview polling infers the latest variant from the workflow run title
+  instead of always using `variants.preview_default`.
+- The compact CI summary uses human-readable phase names, for example
+  `Preview:CHECKED ready | Accept:ready | Release:prepare running`. Color
+  priority is failure/error first, then running/queued/stale/review-needed
+  states, then ready/success states.
 
-If GitHub CLI is unavailable or unauthenticated, the TUI should not fail
-silently. It should show:
+The TUI renders from a shared workflow-state model rather than keeping its own
+private timeline rules. That model provides:
 
-1. what action could not be automated
-2. the exact command that would have been run, where practical
-3. the manual GitHub Actions fallback
+- current stage
+- next action
+- human-readable reason
+- ordered timeline steps
+- primary action enablement and lock reasons
 
-Example:
+Initial workflow stages:
 
 ```text
-GitHub CLI is unavailable.
-
-Manual fallback:
-Open GitHub Actions -> dev-preview.yaml -> Run workflow
-Branch: dev
-Variant: PRELIMINARY
+validation_blocked
+needs_changelog
+ready_to_commit
+needs_push
+behind_remote
+preview_missing
+preview_running
+preview_failed
+preview_stale
+preview_ready
+preview_reviewed
+accepted_missing
+accepted_running
+release_ready
+editing
 ```
 
-If Textual is not installed, `boardwright` and `boardwright tui` keep the CLI
-usable and print an installation hint.
+Important missing TUI behavior:
 
-#### Out Of Scope For Current TUI
+- first-run metadata editing/onboarding is not implemented
+- project-information editing for identity, fabrication metadata, assembly
+  notes, and controlled-impedance requirements is not implemented
 
-Do not prioritise these yet:
+## README And Assets
+
+The generated project README is produced from:
 
 ```text
-full YAML editor
-full git client
-full GitHub Actions browser
-KiCad file browser
-rich decorative dashboard
-multi-board management
-full metadata editor
+boardwright_resources/kibot/resources/templates/readme.txt
 ```
 
-These can be added later after the normal workflow is reliable.
-## Legal And Notices
+The current template includes project logo, board renders, board revision,
+release version, variant, dimensions, generated-output guidance, and legal
+notes. Workflow badges are deferred until repository URL metadata is reliable
+enough to avoid broken relative links in generated project READMEs.
 
-Boardwright generates:
+The target README should also include, where KiBot data makes it practical:
+
+- latest release/package links
+- stackup/fabrication summary
+- component counts, including SMT/THT if available
+- clearer links to generated manufacturing outputs
+
+Visible project media belongs under:
 
 ```text
-LICENSE
-NOTICE.md
-THIRD_PARTY_NOTICES.md
+assets/logos/
+assets/renders/
+assets/3d/
 ```
 
-The notice system keeps hardware licence scope, branding exclusions,
-compatibility wording, non-affiliation wording, safety notes, and third-party
-notices explicit without implying legal advice or OEM endorsement.
+`assets/renders/` may be committed to `main` as the accepted README snapshot.
+`assets/3d/` is packaged into release artifacts but is not normally committed
+as source state.
+
+## Validation Contract
+
+Validation currently checks:
+
+- required `.boardwright/` config files
+- required root files: `CHANGELOG.md`, `LICENSE`, `README.md`
+- variant values
+- supported preview engine
+- configured workflow files
+- changelog structure and duplicate releases
+- revision-history slot settings
+- presence of KiCad project/schematic/PCB files
+- warns when PCB files have no `Edge.Cuts` outline geometry, because
+  `CHECKED`/`RELEASED` CI runs may fail DRC without a real board outline
+- presence of the KiBot main config
+- configured asset paths
+- README template mentions legal files
+
+Validation should remain fast and local. CI/runtime output freshness and GitHub
+authentication checks belong in status/review actions rather than base project
+validation.
+
+## Known Product Gaps
+
+These are the important gaps between the current code and the intended product:
+
+1. Project Info depth: identity and variant defaults are editable, but
+   fabrication metadata, assembly notes, controlled-impedance entries, and
+   output-policy fields still need proper TUI sections.
+2. TUI full-path polish: the main screen is now structured, but the full
+   record -> commit/push -> preview -> review -> accept -> release loop still
+   needs repeated live use to tune labels, lock reasons, and modal density.
+3. CI retest: workflows need live retesting after moving visible generated media
+   under `assets/renders/` and `assets/3d/`.
+4. README richness: the generated README template is partly refreshed but still
+   lacks stackup/component/latest-release sections.
+5. Onboarding: new/adopted project setup still relies on hand-editing config.
+6. GitHub fallback UX can still be refined with direct URLs after repository
+   metadata is configured.
+
+## Out Of Scope For The Current Build
+
+Do not prioritize these until the normal workflow is reliable:
+
+- full YAML editor
+- full git client
+- full GitHub Actions browser
+- KiCad file browser
+- local KiBot/Docker runner as the primary flow
+- multi-board management
+- complete metadata editor

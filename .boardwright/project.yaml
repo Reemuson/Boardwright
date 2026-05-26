@@ -1,6 +1,7 @@
 project:
   id: BOARDWRIGHT-TEMPLATE
   name: Boardwright KiCad/KiBot Template
+  board_revision: A
   company: RYAN DYNAMICS
   designer: R. HICKS
   git_url: ""

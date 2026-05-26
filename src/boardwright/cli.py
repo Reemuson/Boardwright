@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
+from .accepted import build_accepted_main_state, format_accepted_state
 from .actions import (
     RELEASE_KINDS,
     build_prepare_release_action,
@@ -12,14 +14,19 @@ from .actions import (
 from .changelog import SUPPORTED_SECTIONS, add_unreleased_entry
 from .commit_messages import suggest_commit_message
 from .config import init_config, load_config
+from .doctor import doctor_exit_code, format_doctor_report, run_doctor
 from .errors import BoardwrightError
+from .generated_outputs import clean_generated_outputs, format_cleanup_summary
 from .git_ops import commit_all, dirty_files
 from .legal import generate_legal_files
-from .preview import build_preview_plan, dispatch_preview
+from .preview import build_preview_plan, dispatch_preview, preview_manual_fallback
+from .preview import build_preview_state, fetch_latest_preview_artifact, format_preview_state
 from .release import build_release_plan, prepare_release, validate_release_plan
 from .revision_history import write_revision_variables
 from .status import collect_status
+from .testbench import build_testbench_plan, format_testbench_plan, init_testbench
 from .validation import validate_project
+from .workflow_state import build_workflow_state
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -53,6 +60,16 @@ def main(argv: list[str] | None = None) -> int:
             return _tui()
         if args.command == "suggest-commit":
             return _suggest_commit(args)
+        if args.command == "accepted":
+            return _accepted()
+        if args.command == "doctor":
+            return _doctor()
+        if args.command == "review":
+            return _review(args)
+        if args.command == "testbench":
+            return _testbench(args)
+        if args.command == "outputs":
+            return _outputs(args)
         return _tui()
     except BoardwrightError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -188,6 +205,64 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Actually create the commit. Without this, the command is a dry run.",
     )
 
+    subparsers.add_parser("accepted", help="Show accepted main-output workflow state.")
+    subparsers.add_parser("doctor", help="Check local Boardwright workflow readiness.")
+
+    review = subparsers.add_parser("review", help="Show or fetch preview artifact review state.")
+    review.add_argument(
+        "--variant",
+        "-v",
+        help="Preview variant. Defaults to variants.preview_default from project.yaml.",
+    )
+    review.add_argument(
+        "--fetch",
+        action="store_true",
+        help="Download the fresh preview artifact and mark it reviewed.",
+    )
+    review.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Directory for downloaded preview artifacts. Defaults to boardwright-preview.",
+    )
+
+    testbench = subparsers.add_parser("testbench", help="Plan or create a live-test repo.")
+    testbench_subparsers = testbench.add_subparsers(dest="testbench_command")
+    testbench_plan = testbench_subparsers.add_parser(
+        "plan",
+        help="Print the live-testbench command sequence.",
+    )
+    testbench_plan.add_argument("--target", type=Path, help="Target directory for the testbench.")
+    testbench_plan.add_argument("--github-repo", help="GitHub repo slug, such as OWNER/repo.")
+    testbench_init = testbench_subparsers.add_parser(
+        "init",
+        help="Copy this template into a separate local testbench repo.",
+    )
+    testbench_init.add_argument("--target", type=Path, help="Target directory for the testbench.")
+    testbench_init.add_argument("--github-repo", help="GitHub repo slug, such as OWNER/repo.")
+    testbench_init.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite the target directory if it already exists.",
+    )
+    testbench_init.add_argument(
+        "--no-git-init",
+        action="store_true",
+        help="Copy files without initializing git branches.",
+    )
+
+    outputs = subparsers.add_parser("outputs", help="Manage generated KiBot output packages.")
+    outputs_subparsers = outputs.add_subparsers(dest="outputs_command")
+    outputs_clean = outputs_subparsers.add_parser(
+        "clean",
+        help="Remove packaging noise from generated KiBot outputs.",
+    )
+    outputs_clean.add_argument(
+        "--root",
+        type=Path,
+        default=Path("."),
+        help="Generated output root. Defaults to the current directory.",
+    )
+
     return parser
 
 
@@ -202,14 +277,95 @@ def _init(args: argparse.Namespace) -> int:
 
 
 def _status() -> int:
-    status = collect_status(load_config())
+    config = load_config()
+    status = collect_status(config)
+    issues = tuple(validate_project(config))
+    release_plan = build_release_plan(config, "0.1.0", check_remote=False)
+    release_problems = validate_release_plan(release_plan, allow_dirty=True)
+    release_summary = (
+        "ready for dry-run"
+        if not release_problems
+        else "; ".join(release_problems)
+    )
+    accepted_state = None
+    try:
+        accepted_state = build_accepted_main_state(config)
+    except BoardwrightError:
+        accepted_state = None
+    workflow = build_workflow_state(
+        config,
+        status,
+        issues,
+        release_summary,
+        accepted_state=accepted_state,
+    )
     print(f"Project: {status.project_id} - {status.project_name}")
     print(f"Branch: {status.branch}")
-    print(f"Variant: {status.variant}")
+    print(f"Dev default variant: {status.variant}")
     print(f"Working tree: {'dirty' if status.dirty_count else 'clean'}")
     print(f"Changed files: {status.dirty_count}")
     print(f"Latest tag: {status.latest_tag or 'none'}")
     print(f"Unreleased changes: {'yes' if status.unreleased_changes else 'no'}")
+    print(f"Workflow stage: {workflow.stage}")
+    print(f"Next action: {workflow.next_action} - {workflow.reason}")
+    return 0
+
+
+def _accepted() -> int:
+    state = build_accepted_main_state(load_config())
+    print(format_accepted_state(state))
+    return 0
+
+
+def _doctor() -> int:
+    checks = run_doctor(load_config())
+    print(format_doctor_report(checks))
+    return doctor_exit_code(checks)
+
+
+def _review(args: argparse.Namespace) -> int:
+    config = load_config()
+    if args.fetch:
+        print(fetch_latest_preview_artifact(config, args.variant, args.output_dir))
+        return 0
+
+    state = build_preview_state(config, args.variant, output_dir=args.output_dir)
+    print(format_preview_state(state))
+    if not state.ready:
+        return 1
+    return 0
+
+
+def _testbench(args: argparse.Namespace) -> int:
+    config = load_config()
+    if args.testbench_command in {None, "plan"}:
+        plan = build_testbench_plan(
+            config,
+            getattr(args, "target", None),
+            getattr(args, "github_repo", None) or "",
+        )
+        print(format_testbench_plan(plan))
+        return 0
+    if args.testbench_command == "init":
+        messages = init_testbench(
+            config,
+            args.target,
+            args.github_repo or "",
+            force=args.force,
+            git_init=not args.no_git_init,
+        )
+        for message in messages:
+            print(message)
+        return 0
+    print("usage: boardwright testbench {plan,init}")
+    return 0
+
+
+def _outputs(args: argparse.Namespace) -> int:
+    if args.outputs_command in {None, "clean"}:
+        print(format_cleanup_summary(clean_generated_outputs(args.root)))
+        return 0
+    print("usage: boardwright outputs clean [--root PATH]")
     return 0
 
 
@@ -271,6 +427,9 @@ def _preview(args: argparse.Namespace) -> int:
     print(f"Preview branch: {plan.preview_branch}")
     print(f"Variant: {plan.variant}")
     print(f"GitHub CLI: {'available' if plan.gh_available else 'not found'}")
+    if not plan.gh_available:
+        print()
+        print(preview_manual_fallback(plan))
     print("Expected output paths:")
     for path in plan.output_paths:
         exists = "exists" if path.exists() else "missing"
@@ -299,6 +458,9 @@ def _promote(args: argparse.Namespace) -> int:
         print(f"- {key}: {value}")
     print("Command:")
     print(" ".join(action.command))
+    if not action.gh_available:
+        print()
+        print(action.manual_fallback)
 
     if args.dispatch:
         dispatch_workflow_action(config, action)
@@ -325,6 +487,9 @@ def _release(args: argparse.Namespace) -> int:
             print(f"- {key}: {value}")
         print("Command:")
         print(" ".join(action.command))
+        if not action.gh_available:
+            print()
+            print(action.manual_fallback)
         dispatch_workflow_action(config, action)
         print("Prepare-release workflow dispatched.")
         return 0
@@ -339,7 +504,7 @@ def _release(args: argparse.Namespace) -> int:
         print(f"Prepared release {plan.version}.")
         print("Updated CHANGELOG.md and .boardwright/revision_history_variables.env.")
         print(f"Suggested commit: release: prepare {plan.version}")
-        print("Next steps: review changes, commit release prep, tag, and push.")
+        print("Next steps: review changes and prefer boardwright release --dispatch for CI-owned tagging.")
         return 0
 
     plan = build_release_plan(config, args.version)
