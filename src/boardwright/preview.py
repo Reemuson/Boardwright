@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 from __future__ import annotations
 
 import json
@@ -24,6 +27,7 @@ class PreviewPlan:
     source_label: str
     output_paths: tuple[Path, ...]
     gh_available: bool
+    repo: str = ""
     gh_command: str = "gh"
 
 
@@ -71,6 +75,7 @@ def build_preview_plan(config: BoardwrightConfig, variant: str | None = None) ->
         source_label=build_source_label(config.root, selected_branch),
         output_paths=expected_output_paths(config.root),
         gh_available=_gh_command() is not None,
+        repo=config.github_repo,
         gh_command=_gh_command() or "gh",
     )
 
@@ -102,18 +107,7 @@ def dispatch_preview(plan: PreviewPlan, root: Path) -> None:
         raise BoardwrightError(f"Missing preview workflow: {workflow_path}")
 
     completed = subprocess.run(
-        [
-            plan.gh_command,
-            "workflow",
-            "run",
-            plan.workflow,
-            "--ref",
-            plan.branch,
-            "-f",
-            f"variant={plan.variant}",
-            "-f",
-            f"source_label={plan.source_label}",
-        ],
+        list(_preview_dispatch_command(plan)),
         cwd=root,
         text=True,
         capture_output=True,
@@ -132,19 +126,34 @@ def preview_manual_fallback(plan: PreviewPlan) -> str:
             "GitHub CLI is unavailable or could not dispatch the preview.",
             "",
             "Manual fallback:",
-            f"Open GitHub Actions -> {plan.workflow} -> Run workflow",
+            f"GitHub Actions: {plan.workflow} -> Run workflow",
             f"Ref: {plan.branch}",
             "Inputs:",
             f"- variant: {plan.variant}",
             f"- source_label: {plan.source_label}",
             "",
             "Equivalent gh command:",
-            (
-                f"{plan.gh_command} workflow run {plan.workflow} --ref {plan.branch} "
-                f"-f variant={plan.variant} -f source_label={plan.source_label}"
-            ),
+            " ".join(_preview_dispatch_command(plan)),
         ]
     )
+
+
+def _preview_dispatch_command(plan: PreviewPlan) -> tuple[str, ...]:
+    command = [
+        plan.gh_command,
+        "workflow",
+        "run",
+        plan.workflow,
+        "--ref",
+        plan.branch,
+        "-f",
+        f"variant={plan.variant}",
+        "-f",
+        f"source_label={plan.source_label}",
+    ]
+    if plan.repo:
+        command.extend(("--repo", plan.repo))
+    return tuple(command)
 
 
 def preview_artifact_name(variant: str) -> str:
@@ -167,7 +176,7 @@ def list_preview_runs(
                     "GitHub CLI is not installed, so Boardwright cannot inspect preview artifacts.",
                     "",
                     "Manual fallback:",
-                    f"Open GitHub Actions -> {config.preview_workflow}",
+                    f"GitHub Actions: {config.preview_workflow}",
                     f"Branch: {config.dev_branch}",
                     "Confirm the latest successful run matches the latest pushed dev commit.",
                     "Download artifact: boardwright-preview-<VARIANT>",
@@ -206,7 +215,7 @@ def list_preview_runs(
                     f"Could not list preview workflow runs: {message}",
                     "",
                     "Manual fallback:",
-                    f"Open GitHub Actions -> {config.preview_workflow}",
+                    f"GitHub Actions: {config.preview_workflow}",
                     f"Branch: {config.dev_branch}",
                     "Confirm the latest successful run matches the latest pushed dev commit.",
                 ]
@@ -466,7 +475,7 @@ def fetch_latest_preview_artifact(
                     "GitHub CLI is not installed, so Boardwright cannot fetch preview artifacts.",
                     "",
                     "Manual fallback:",
-                    f"Open GitHub Actions -> {config.preview_workflow}",
+                    f"GitHub Actions: {config.preview_workflow}",
                     f"Branch: {config.dev_branch}",
                     f"Download artifact: {preview_artifact_name(variant or config.preview_variant)}",
                 ]

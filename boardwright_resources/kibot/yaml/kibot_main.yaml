@@ -1,4 +1,4 @@
-# KiBot configuration file for KDT_Hierarchical Template
+# KiBot configuration file for Boardwright Template
 # KiCad 8.0
 
 kibot:
@@ -200,8 +200,20 @@ import:
       PROJECT_NAME: @PROJECT_NAME@
       BOARD_NAME: @BOARD_NAME@
       BOARD_REVISION: @BOARD_REVISION@
+      PCBA_NUMBER: @PCBA_NUMBER@
+      PCB_NUMBER: @PCB_NUMBER@
+      DOCUMENT_REVISION: @DOCUMENT_REVISION@
+      DOCUMENT_REVISION_SCHEME: @DOCUMENT_REVISION_SCHEME@
+      DRAWN_BY: @DRAWN_BY@
+      DRAWN_DATE: @DRAWN_DATE@
+      CHECKED_BY: @CHECKED_BY@
+      CHECKED_DATE: @CHECKED_DATE@
+      APPROVED_BY: @APPROVED_BY@
+      APPROVED_DATE: @APPROVED_DATE@
       COMPANY: @COMPANY@
       DESIGNER: @DESIGNER@
+      SHEET_LEGAL_NOTICE: @SHEET_LEGAL_NOTICE@
+      TEMPLATE_LOGO: @TEMPLATE_LOGO@
       SCRIPTS_DIR: @SCRIPTS_DIR@
       REPORT_TEMPLATE_DIR: @REPORT_TEMPLATE_DIR@
       FABRICATION_DIR: @FABRICATION_DIR@
@@ -444,6 +456,7 @@ import:
       COMMENT: Schematic in PDF format
       DIR: @SCHEMATIC_DIR@
       DEFAULT_FONT: 'KiCad Font'
+      COLOR_THEME: @COLOR_THEME@
 
   # Fabrication Document in PDF format
   - file: kibot_out_pdf_fabrication.yaml
@@ -534,11 +547,22 @@ definitions:
   PROJECT_NAME: PROJECT NAME
   BOARD_NAME: BOARD NAME
   BOARD_REVISION: A
+  PCBA_NUMBER: ''
+  PCB_NUMBER: ''
+  DOCUMENT_REVISION: A
+  DOCUMENT_REVISION_SCHEME: lettered
+  DRAWN_BY: ''
+  DRAWN_DATE: ''
+  CHECKED_BY: ''
+  CHECKED_DATE: ''
+  APPROVED_BY: ''
+  APPROVED_DATE: ''
 
   COMPANY: COMPANY
   DESIGNER: F. LAST
 
-  LOGO: 'assets/logos/rd-logo.png'
+  LOGO: 'assets/logos/logo-wordmark-colour.png'
+  TEMPLATE_LOGO: 'assets/logos/logo-block-black.png'
   GIT_URL: ''
 
   # Preflight ==================================================================
@@ -564,7 +588,8 @@ definitions:
   # Schematic parameters =======================================================
 
   COLOR_THEME: KiCad_Theme
-  SHEET_WKS: ${KIPRJMOD}/Templates/KDT_Template_PCB_GIT_A4.kicad_wks
+  SHEET_WKS: ${KIPRJMOD}/Templates/Boardwright_Template_PCB_GIT_A4.kicad_wks
+  SHEET_LEGAL_NOTICE: 'THIS DESIGN AND/OR DRAWING IS THE PROPERTY OF RYAN HICKS\nAND SHALL NOT BE REPRODUCED WITHOUT AUTHORISATION.'
   FAB_SCALING: 1
   ASSEMBLY_SCALING: 1
 

@@ -1357,7 +1357,7 @@
 		)
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 2 2)
 				(color 0 0 0 1)
 			)
@@ -1380,7 +1380,7 @@
 		)
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 2 2)
 				(color 0 0 0 1)
 			)
@@ -1403,7 +1403,7 @@
 		)
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 2 2)
 				(thickness 0.4)
 				(bold yes)
@@ -1428,7 +1428,7 @@
 		)
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 2 2)
 				(thickness 0.4)
 				(bold yes)
@@ -1473,7 +1473,7 @@
 		)
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 2 2)
 				(color 0 0 0 1)
 			)
@@ -1630,7 +1630,7 @@
 			(at 340.36 312.6609 0)
 			(effects
 				(font
-					(face "Times New Roman")
+					(face "Tinos")
 					(size 1.905 1.905)
 					(bold yes)
 					(color 0 0 0 1)
@@ -1642,7 +1642,7 @@
 			(at 341.63 314.96 0)
 			(effects
 				(font
-					(face "Arial")
+					(face "Arimo")
 					(size 1.27 1.27)
 				)
 				(justify left top)
@@ -1675,7 +1675,7 @@
 			(at 340.36 300.99 0)
 			(effects
 				(font
-					(face "Times New Roman")
+					(face "Tinos")
 					(size 1.905 1.905)
 					(bold yes)
 					(color 0 0 0 1)
@@ -1687,7 +1687,7 @@
 			(at 340.995 303.53 0)
 			(effects
 				(font
-					(face "Arial")
+					(face "Arimo")
 					(size 1.27 1.27)
 				)
 				(justify left top)
@@ -1720,7 +1720,7 @@
 			(at 299.72 301.2309 0)
 			(effects
 				(font
-					(face "Times New Roman")
+					(face "Tinos")
 					(size 1.905 1.905)
 					(bold yes)
 					(color 0 0 0 1)
@@ -1732,7 +1732,7 @@
 			(at 300.99 303.53 0)
 			(effects
 				(font
-					(face "Arial")
+					(face "Arimo")
 					(size 1.27 1.27)
 				)
 				(justify left top)
@@ -1765,7 +1765,7 @@
 			(at 299.72 312.6609 0)
 			(effects
 				(font
-					(face "Times New Roman")
+					(face "Tinos")
 					(size 1.905 1.905)
 					(bold yes)
 					(color 0 0 0 1)
@@ -1777,7 +1777,7 @@
 			(at 300.99 314.96 0)
 			(effects
 				(font
-					(face "Arial")
+					(face "Arimo")
 					(size 1.27 1.27)
 				)
 				(justify left top)

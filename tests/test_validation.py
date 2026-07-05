@@ -1,8 +1,15 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 import unittest
 from pathlib import Path
 
 from boardwright.config import BoardwrightConfig
-from boardwright.validation import _has_edge_cuts_geometry, validate_project
+from boardwright.validation import (
+    _find_known_local_branding,
+    _has_edge_cuts_geometry,
+    validate_project,
+)
 
 
 class ValidationTests(unittest.TestCase):
@@ -49,6 +56,58 @@ class ValidationTests(unittest.TestCase):
         finally:
             if path.exists():
                 path.unlink()
+
+    def test_finds_known_local_branding_in_active_template_files(self) -> None:
+        root = Path("tests/.tmp_branding_validation")
+        path = root / "Templates" / "example.kicad_wks"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("Logo: assets/logos/rd-logo.png", encoding="utf-8")
+
+            hits = _find_known_local_branding(root)
+
+            self.assertEqual(1, len(hits))
+            self.assertTrue(hits[0][0].replace("\\", "/").endswith("Templates/example.kicad_wks"))
+            self.assertEqual("assets/logos/rd-logo.png", hits[0][1])
+        finally:
+            if path.exists():
+                path.unlink()
+            if path.parent.exists():
+                path.parent.rmdir()
+            if root.exists():
+                root.rmdir()
+
+
+    def test_validates_document_revision_scheme_and_signoff_dates(self) -> None:
+        config = BoardwrightConfig(
+            root=Path("."),
+            project={
+                "project": {
+                    "id": "TEST",
+                    "name": "Test",
+                    "company": "Company",
+                    "designer": "Designer",
+                    "document_revision_scheme": "roman",
+                    "drawn_date": "05/07/2026",
+                    "checked_date": "2026-07-05",
+                },
+                "variants": {
+                    "dev_default": "DRAFT",
+                    "preview_default": "CHECKED",
+                    "main_default": "CHECKED",
+                    "release_default": "RELEASED",
+                },
+                "outputs": {"preview_engine": "github-actions"},
+            },
+            branches={"branches": {}},
+            legal={"legal": {}},
+            revision_history={"revision_history": {}},
+        )
+
+        issues = validate_project(config)
+
+        self.assertTrue(any("Unsupported project.document_revision_scheme" in issue.message for issue in issues))
+        self.assertTrue(any(issue.level == "warning" and "project.drawn_date" in issue.message for issue in issues))
 
 
 if __name__ == "__main__":

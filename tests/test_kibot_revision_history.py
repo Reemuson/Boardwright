@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 import unittest
 from pathlib import Path
 
@@ -9,7 +12,10 @@ class KiBotRevisionHistoryTests(unittest.TestCase):
         )
 
         self.assertIn("REVHIST_1_TITLE", text)
+        self.assertIn("REVHIST_1_REVISION", text)
+        self.assertIn("REVHIST_1_APPROVED_DATE", text)
         self.assertIn("REVHIST_12_BODY", text)
+        self.assertIn("REVHIST_12_CHECKED_BY", text)
         self.assertNotIn("RELEASE_BODY_VAR", text)
 
     def test_revision_sheet_uses_title_body_slots(self) -> None:

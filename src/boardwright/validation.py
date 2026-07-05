@@ -1,10 +1,15 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 
 from .changelog import parse_releases, read_changelog
 from .config import BoardwrightConfig, CONFIG_DIR
+from .git_ops import remote_url
 from .variants import VARIANTS
 
 
@@ -31,7 +36,9 @@ def validate_project(config: BoardwrightConfig) -> list[ValidationIssue]:
     _validate_revision_history_config(config, issues)
     _validate_kicad_and_kibot(root, issues)
     _validate_assets(config, issues)
+    _validate_repository_metadata(config, issues)
     _validate_readme_template(root, issues)
+    _validate_known_local_branding(root, issues)
 
     return issues
 
@@ -48,6 +55,25 @@ def _validate_project_config(
     for key in ("id", "name", "company", "designer"):
         if not str(project.get(key, "")).strip():
             issues.append(ValidationIssue("error", f"Missing project.{key} in project.yaml"))
+
+    scheme = str(project.get("document_revision_scheme") or "lettered").strip()
+    if scheme not in {"lettered", "numeric", "semantic"}:
+        issues.append(
+            ValidationIssue(
+                "error",
+                f"Unsupported project.document_revision_scheme '{scheme}' in project.yaml",
+            )
+        )
+
+    for key in ("drawn_date", "checked_date", "approved_date"):
+        value = str(project.get(key, "")).strip()
+        if value and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            issues.append(
+                ValidationIssue(
+                    "warning",
+                    f"project.{key} should use YYYY-MM-DD format",
+                )
+            )
 
     variants = config.project.get("variants", {})
     for key in ("dev_default", "preview_default", "main_default", "release_default"):
@@ -148,11 +174,14 @@ def _validate_readme_template(root: Path, issues: list[ValidationIssue]) -> None
         return
 
     text = template.read_text(encoding="utf-8", errors="replace")
-    if "LICENSE" not in text or "NOTICE" not in text:
+    required = ("LICENSE", "NOTICE.md", "THIRD_PARTY_NOTICES.md")
+    missing = [name for name in required if name not in text]
+    if missing:
         issues.append(
             ValidationIssue(
                 "warning",
-                "README template should mention LICENSE and NOTICE legal files",
+                "README template should mention legal files: "
+                + ", ".join(missing),
             )
         )
 
@@ -203,6 +232,65 @@ def _validate_assets(config: BoardwrightConfig, issues: list[ValidationIssue]) -
         issues.append(
             ValidationIssue("warning", f"Product image path does not exist: {product_image}")
         )
+
+
+def _validate_repository_metadata(config: BoardwrightConfig, issues: list[ValidationIssue]) -> None:
+    if config.github_repo or str(config.project.get("project", {}).get("git_url", "")).strip():
+        return
+    if remote_url(config.root):
+        return
+    issues.append(
+        ValidationIssue(
+            "warning",
+            "Repository URL metadata is blank; generated README release links will be limited until git_url or github_repo is configured.",
+        )
+    )
+
+
+def _validate_known_local_branding(root: Path, issues: list[ValidationIssue]) -> None:
+    hits = _find_known_local_branding(root)
+    for path, marker in hits:
+        issues.append(
+            ValidationIssue(
+                "warning",
+                f"Known local branding marker '{marker}' found in {path}",
+            )
+        )
+
+
+def _find_known_local_branding(root: Path) -> list[tuple[str, str]]:
+    markers = (
+        "Ryan Dynamics",
+        "assets/logos/rd-logo.png",
+        "KDT_Hierarchical_KiBot",
+    )
+    patterns = (
+        ".boardwright/*.yaml",
+        "Templates/*.kicad_wks",
+        "*.kicad_pro",
+        "*.kicad_sch",
+        "*.kicad_pcb",
+        "*.kicad_dru",
+        "meta/*",
+        "boardwright_resources/kibot/yaml/*.yaml",
+    )
+    hits: list[tuple[str, str]] = []
+    for pattern in patterns:
+        for path in root.glob(pattern):
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for marker in markers:
+                if marker in text:
+                    try:
+                        label = str(path.relative_to(root))
+                    except ValueError:
+                        label = str(path)
+                    hits.append((label, marker))
+    return hits
 
 
 def _validate_workflow_exists(

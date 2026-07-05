@@ -194,26 +194,17 @@
 	)
 	(property "ASSEMBLY_NOTES" "ASSEMBLY NOTES")
 	(property "BOARD_NAME" "BOARD NAME")
+	(property "BOARD_REVISION" "A")
 	(property "COMPANY" "COMPANY")
 	(property "DESIGNER" "AUTHOR")
 	(property "FABRICATION_NOTES" "FABRICATION NOTES")
 	(property "GIT_HASH_PCB" "")
 	(property "GIT_HASH_SCH" "")
-	(property "GIT_URL" "")
 	(property "PROJECT_NAME" "PROJECT NAME")
-	(property "RELEASE_BODY_1.0.0" "")
-	(property "RELEASE_BODY_1.0.1" "")
-	(property "RELEASE_BODY_1.0.2" "")
-	(property "RELEASE_BODY_1.1.0" "")
-	(property "RELEASE_BODY_UNRELEASED" "")
-	(property "RELEASE_DATE" "DD-MMM-YYYY")
 	(property "RELEASE_DATE_NUM" "YYYY-MM-DD")
-	(property "RELEASE_TITLE_1.0.0" "")
-	(property "RELEASE_TITLE_1.0.1" "")
-	(property "RELEASE_TITLE_1.0.2" "")
-	(property "RELEASE_TITLE_1.1.0" "")
-	(property "RELEASE_TITLE_UNRELEASED" "")
+	(property "RELEASE_VERSION" "")
 	(property "REVISION" "")
+	(property "SHEET_LEGAL_NOTICE" "THIS DESIGN AND/OR DRAWING IS THE PROPERTY OF COMPANY\nAND SHALL NOT BE REPRODUCED WITHOUT AUTHORISATION.")
 	(property "SHEET_NAME_1" "COVER PAGE")
 	(property "SHEET_NAME_10" "................................")
 	(property "SHEET_NAME_11" "................................")
@@ -513,7 +504,7 @@
 		(uuid "13d1ff95-d2ce-4178-a9da-8261fa5e26cb")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1 1)
 			)
 			(justify left)
@@ -526,7 +517,7 @@
 		(uuid "5099f2c1-57a0-4833-901d-e970c7913fa0")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1 1)
 			)
 			(justify left)
@@ -555,7 +546,7 @@
 		(uuid "5386ee98-ff3f-45d2-b0d7-1c79064fb2c5")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1 1)
 			)
 			(justify left)
@@ -568,7 +559,7 @@
 		(uuid "66710a05-f45e-4f4d-aed3-14ee2dcea2ee")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1 1)
 			)
 			(justify left)
@@ -581,7 +572,7 @@
 		(uuid "bab67b0a-23d0-44a0-80e5-5332a6be9159")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1 1)
 			)
 			(justify left)
@@ -610,7 +601,7 @@
 		(uuid "dcfaf5ec-1d9f-464e-b61c-f839a55b3c8b")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1 1)
 			)
 			(justify left)
@@ -623,7 +614,7 @@
 		(uuid "ee030879-4a54-42d8-b220-4d340e227151")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1 1)
 			)
 			(justify left)
@@ -648,7 +639,7 @@
 		(uuid "744196ea-4e5b-4a03-aa48-d5c3e91bab38")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1.5 1.5)
 				(thickness 0.15)
 			)
@@ -860,7 +851,7 @@
 		(uuid "3ff4c16f-90d7-457d-a85f-e0d3f9a4dd66")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1.27 1.27)
 				(thickness 0.15)
 			)
@@ -1140,7 +1131,7 @@
 		(uuid "e03ca4ae-4b46-4421-b513-521a6b97a5b0")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 0.997646 0.997646)
 			)
 			(justify left)
@@ -1165,7 +1156,7 @@
 		(uuid "09712597-f777-48fe-8aa1-055985ccaaf9")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1.27 1.27)
 				(thickness 0.15)
 			)
@@ -1188,7 +1179,7 @@
 		(uuid "5bf303ba-1c0a-4448-99e9-746136d23e51")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1.27 1.27)
 				(thickness 0.15)
 			)
@@ -1231,7 +1222,7 @@
 		(uuid "7fe04b60-ae6f-41d9-98d2-a67e5f6e2da2")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1.27 1.27)
 				(thickness 0.15)
 			)
@@ -1252,7 +1243,7 @@
 		(uuid "eaf21430-75b8-403a-928e-e7931da26fcc")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1.27 1.27)
 				(thickness 0.15)
 			)
@@ -1277,7 +1268,7 @@
 		(uuid "fcfdd4b6-2e2e-40b2-9109-38bce5c2cd98")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1 1)
 				(thickness 0.15)
 			)
@@ -1298,7 +1289,7 @@
 		(uuid "511273fd-c939-4feb-bf05-ae1b43c3644e")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1 1)
 				(thickness 0.15)
 			)
@@ -1319,7 +1310,7 @@
 		(uuid "9af73f77-a717-4896-ac91-e0684a71d0ea")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1.27 1.27)
 				(thickness 0.15)
 			)
@@ -1340,7 +1331,7 @@
 		(uuid "ae24ec74-2a84-4c8f-b73c-fd0591174ddb")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1 1)
 				(thickness 0.15)
 			)
@@ -1361,7 +1352,7 @@
 		(uuid "0372a74c-7fe1-42b6-81ed-7b5d6831c70f")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1 1)
 				(thickness 0.15)
 			)
@@ -1382,7 +1373,7 @@
 		(uuid "9c567a6c-886e-4c77-a06a-a6710de49a38")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1 1)
 				(thickness 0.15)
 			)
@@ -1403,7 +1394,7 @@
 		(uuid "9b49a5f1-a044-4574-bae7-d4aac7dd0028")
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1 1)
 				(thickness 0.15)
 			)

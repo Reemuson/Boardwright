@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 import unittest
 from pathlib import Path
 

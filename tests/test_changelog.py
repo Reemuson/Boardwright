@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 import unittest
 
 from boardwright.changelog import (
@@ -38,6 +41,20 @@ class ChangelogTests(unittest.TestCase):
         updated = _insert_unreleased_entry(text, "Added", "New item")
 
         self.assertIn("- Existing\n- New item\n\n### Changed", updated)
+
+    def test_add_unreleased_entry_formats_multiline_as_bullets(self) -> None:
+        text = "# Changelog\n\n## [Unreleased]\n\n### Changed\n\n- Existing\n"
+
+        updated = _insert_unreleased_entry(text, "Changed", "First\nSecond")
+
+        self.assertIn("- Existing\n- First\n- Second", updated)
+
+    def test_add_unreleased_entry_preserves_wrapped_explicit_bullets(self) -> None:
+        text = "# Changelog\n\n## [Unreleased]\n\n### Changed\n\n"
+
+        updated = _insert_unreleased_entry(text, "Changed", "- First\n  wrapped\n* Second")
+
+        self.assertIn("- First\n  wrapped\n- Second", updated)
 
     def test_promote_unreleased(self) -> None:
         text = "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- Thing\n"

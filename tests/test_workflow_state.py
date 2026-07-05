@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 import unittest
 from pathlib import Path
 
@@ -20,7 +23,7 @@ class WorkflowStateTests(unittest.TestCase):
 
         self.assertEqual("validation_blocked", workflow.stage)
         self.assertEqual("Fix validation", workflow.next_action)
-        self.assertFalse(action_state(workflow, "Commit + Push").enabled)
+        self.assertFalse(action_state(workflow, "Commit").enabled)
 
     def test_needs_changelog(self) -> None:
         workflow = build_workflow_state(
@@ -31,7 +34,7 @@ class WorkflowStateTests(unittest.TestCase):
         )
 
         self.assertEqual("needs_changelog", workflow.stage)
-        self.assertEqual("Record Changes", workflow.next_action)
+        self.assertEqual("Add changelog", workflow.next_action)
 
     def test_ready_to_commit(self) -> None:
         workflow = build_workflow_state(
@@ -42,7 +45,7 @@ class WorkflowStateTests(unittest.TestCase):
         )
 
         self.assertEqual("ready_to_commit", workflow.stage)
-        self.assertTrue(action_state(workflow, "Commit + Push").enabled)
+        self.assertTrue(action_state(workflow, "Commit").enabled)
 
     def test_needs_push(self) -> None:
         workflow = build_workflow_state(
@@ -53,7 +56,7 @@ class WorkflowStateTests(unittest.TestCase):
         )
 
         self.assertEqual("needs_push", workflow.stage)
-        self.assertTrue(action_state(workflow, "Commit + Push").enabled)
+        self.assertTrue(action_state(workflow, "Commit").enabled)
 
     def test_stale_preview(self) -> None:
         run = PreviewRun(
@@ -75,7 +78,63 @@ class WorkflowStateTests(unittest.TestCase):
         )
 
         self.assertEqual("preview_stale", workflow.stage)
-        self.assertFalse(action_state(workflow, "Accept to Main").enabled)
+        self.assertFalse(action_state(workflow, "Accept").enabled)
+
+    def test_preview_missing_prompts_generation(self) -> None:
+        workflow = build_workflow_state(
+            _config(),
+            _status(unreleased_changes=True),
+            (),
+            "ready for dry-run",
+            type(
+                "Preview",
+                (),
+                {
+                    "state": "missing",
+                    "message": "No fresh preview run found.",
+                    "ready": False,
+                },
+            )(),
+        )
+
+        self.assertEqual("preview_missing", workflow.stage)
+        self.assertEqual("Preview", workflow.next_action)
+        self.assertEqual("No fresh preview run found.", workflow.reason)
+
+    def test_unreleased_changes_prompt_preview(self) -> None:
+        workflow = build_workflow_state(
+            _config(),
+            _status(unreleased_changes=True),
+            (),
+            "ready for dry-run",
+        )
+
+        self.assertEqual("preview_missing", workflow.stage)
+        self.assertEqual("Preview", workflow.next_action)
+        self.assertEqual("Run preview.", workflow.reason)
+
+    def test_preview_ready_prompts_fetch(self) -> None:
+        run = PreviewRun(
+            database_id="1",
+            status="completed",
+            conclusion="success",
+            branch="dev",
+            head_sha="same",
+            created_at="2026-05-23T00:00:00Z",
+            title="preview",
+        )
+        preview = evaluate_preview_state((run,), "same", "CHECKED")
+        workflow = build_workflow_state(
+            _config(),
+            _status(unreleased_changes=True),
+            (),
+            "ready for dry-run",
+            preview,
+        )
+
+        self.assertEqual("preview_ready", workflow.stage)
+        self.assertEqual("Fetch", workflow.next_action)
+        self.assertEqual("Preview is ready.", workflow.reason)
 
     def test_reviewed_preview_enables_accept(self) -> None:
         run = PreviewRun(
@@ -98,7 +157,7 @@ class WorkflowStateTests(unittest.TestCase):
         )
 
         self.assertEqual("preview_reviewed", workflow.stage)
-        self.assertTrue(action_state(workflow, "Accept to Main").enabled)
+        self.assertTrue(action_state(workflow, "Accept").enabled)
 
     def test_release_ready(self) -> None:
         run = PreviewRun(
@@ -132,7 +191,7 @@ class WorkflowStateTests(unittest.TestCase):
         )
 
         self.assertEqual("release_ready", workflow.stage)
-        self.assertTrue(action_state(workflow, "Create Release").enabled)
+        self.assertTrue(action_state(workflow, "Release").enabled)
 
     def test_clean_pushed_state_allows_opening_release_checklist(self) -> None:
         run = PreviewRun(
@@ -155,7 +214,7 @@ class WorkflowStateTests(unittest.TestCase):
         )
 
         self.assertEqual("preview_reviewed", workflow.stage)
-        release_action = action_state(workflow, "Create Release")
+        release_action = action_state(workflow, "Release")
         self.assertTrue(release_action.enabled)
         self.assertIn("checklist", release_action.reason)
 
@@ -167,7 +226,8 @@ class WorkflowStateTests(unittest.TestCase):
             "ready for dry-run",
         )
 
-        self.assertTrue(action_state(workflow, "Generate Preview").enabled)
+        self.assertTrue(action_state(workflow, "Preview").enabled)
+        self.assertEqual("Run a preview.", action_state(workflow, "Preview").reason)
 
         dirty = build_workflow_state(
             _config(),
@@ -176,7 +236,7 @@ class WorkflowStateTests(unittest.TestCase):
             "ready for dry-run",
         )
 
-        self.assertFalse(action_state(dirty, "Generate Preview").enabled)
+        self.assertFalse(action_state(dirty, "Preview").enabled)
 
 
 def _config() -> BoardwrightConfig:

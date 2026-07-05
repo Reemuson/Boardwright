@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -19,6 +22,7 @@ from boardwright.preview import (
     preview_variant_from_title,
     preview_manual_fallback,
     preview_reviewed,
+    dispatch_preview,
 )
 from boardwright.variants import normalize_variant
 
@@ -33,7 +37,7 @@ class PreviewTests(unittest.TestCase):
         config = BoardwrightConfig(
             root=Path("."),
             project={
-                "project": {"id": "TEST", "name": "Test"},
+                "project": {"id": "TEST", "name": "Test", "github_repo": "owner/private"},
                 "variants": {"dev_default": "DRAFT", "preview_default": "PRELIMINARY"},
                 "outputs": {
                     "preview_engine": "github-actions",
@@ -55,13 +59,29 @@ class PreviewTests(unittest.TestCase):
         self.assertIn(Path("assets/renders"), plan.output_paths)
         self.assertIn("Manual fallback", preview_manual_fallback(plan))
         self.assertIn("variant=PRELIMINARY", preview_manual_fallback(plan))
+        self.assertEqual("owner/private", plan.repo)
         self.assertIn("source_label=", preview_manual_fallback(plan))
+        self.assertIn("--repo owner/private", preview_manual_fallback(plan))
+
+    def test_dispatch_preview_passes_configured_repo(self) -> None:
+        plan = build_preview_plan(_config())
+        completed = subprocess_result(0, "", "")
+
+        with mock.patch("boardwright.preview._gh_command", return_value="gh"), mock.patch(
+            "pathlib.Path.exists",
+            return_value=True,
+        ), mock.patch("subprocess.run", return_value=completed) as mocked_run:
+            dispatch_preview(plan, Path("."))
+
+        command = mocked_run.call_args.args[0]
+        self.assertIn("--repo", command)
+        self.assertIn("owner/private", command)
 
     def test_fetch_preview_requires_gh(self) -> None:
         config = BoardwrightConfig(
             root=Path("."),
             project={
-                "project": {"id": "TEST", "name": "Test"},
+                "project": {"id": "TEST", "name": "Test", "github_repo": "owner/private"},
                 "variants": {"preview_default": "PRELIMINARY"},
                 "outputs": {"preview_workflow": "ci.yaml"},
             },
@@ -339,7 +359,7 @@ def _config() -> BoardwrightConfig:
     return BoardwrightConfig(
         root=Path("."),
         project={
-            "project": {"id": "TEST", "name": "Test"},
+            "project": {"id": "TEST", "name": "Test", "github_repo": "owner/private"},
             "variants": {"preview_default": "CHECKED"},
             "outputs": {"preview_workflow": "ci.yaml"},
         },

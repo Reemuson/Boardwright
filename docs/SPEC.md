@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available -->
+<!-- Copyright (c) Ryan Hicks -->
+
 # Boardwright Product Specification
 
 Boardwright is a KiCad/KiBot hardware project template plus a small workflow
@@ -69,7 +72,7 @@ Normal work happens on `dev`. Preview CI is explicitly dispatched when the user
 is ready to review generated outputs. Preview CI generates reviewable artifacts
 and can publish the disposable `preview` branch, but must not commit to `dev`.
 
-`main` represents a reviewed state. The `Accept to Main` action dispatches the
+`main` represents a reviewed state. The `Accept` action dispatches the
 main-output workflow from the exact reviewed `dev` source SHA, with a selected
 variant. CI verifies that source SHA before generation. When requested, that
 workflow pushes the reviewed source plus an accepted `README.md` and render
@@ -119,7 +122,7 @@ Variant defaults are not the same thing as a CI run's selected output variant:
   output selections and are recorded in run names, artifacts, job summaries,
   accepted-main evidence, and `.boardwright/release.env` for releases.
 - If the project has genuinely moved from `DRAFT` to `PRELIMINARY` or
-  `CHECKED`, the user should change `dev_default` deliberately in Project Info
+  `CHECKED`, the user should change `dev_default` deliberately in Info
   and commit that source-state change.
 
 ## Project Config
@@ -136,8 +139,9 @@ Boardwright config lives in `.boardwright/`:
   release.env
 ```
 
-`project.yaml` holds project identity, GitHub repository settings, variant
-defaults, workflow filenames, output policy, and visible asset paths.
+`project.yaml` holds project identity, part/document numbering, GitHub
+repository settings, variant defaults, workflow filenames, output policy, and
+visible asset paths.
 
 `branches.yaml` maps the development, preview, and release branches. The
 current default is:
@@ -159,12 +163,59 @@ RELEASE_KIND=prerelease
 
 KiCad text-variable naming:
 
-- `${REVISION}` is the semantic release/version value, normally sourced from
-  `.boardwright/release.env` during release preparation or from git tags as a
-  fallback.
-- `${RELEASE_VERSION}` is an explicit alias for the same semantic version.
-- `${BOARD_REVISION}` is the hardware board spin such as `A`, `B`, or `C`,
-  sourced from `project.board_revision`.
+- `${REVISION}` is currently the semantic release/version value, normally
+  sourced from `.boardwright/release.env` during release preparation or from
+  git tags as a fallback. This came from the Git-driven Nguyen template lineage,
+  but controlled drawing packages often need lettered document revisions; the
+  longer-term model should split this into explicit document revision fields.
+- `${RELEASE_VERSION}` is an explicit alias for the semantic package/release
+  version. It should remain useful for GitHub tags and release artifacts even
+  when the drawing document revision is lettered.
+- `${BOARD_REVISION}` is the hardware board spin such as `A`, `B`, `C`, `1`,
+  `2`, or `3`, sourced from `project.board_revision`.
+- Future title blocks should support separate identifiers for the PCBA/assembly
+  number and the bare PCB number. These are controlled-document identifiers,
+  not interchangeable with the Git release version or the board spin.
+- Future title blocks should support a separate `${DOCUMENT_REVISION}` or
+  equivalent field whose scheme can be semantic, lettered, or numeric per
+  project/customer requirements.
+
+Numbering and revision model:
+
+Boardwright should distinguish four related but separate concepts:
+
+| Concept | Examples | Intended use |
+| --- | --- | --- |
+| PCBA / assembly number | `7-087598-700` | Assembly drawing, BOM, release package identity |
+| Bare PCB number | `7-087598-701` | Fabrication drawing and board marking identity |
+| Board revision / spin | `A`, `B`, `C`, `1`, `2`, `3` | Hardware design spin for the PCB/PCBA |
+| Document revision | `A`, `B`, `C`, `0.1.0`, `1.2.0` | Controlled drawing/document revision shown in title blocks and revision history |
+
+Projects may use the same value for some of these fields, especially small or
+early-stage designs, but Boardwright should not force that coupling. The data
+model should make the distinction explicit so a CME-style project can show a
+PCBA number, a different bare PCB number, a board revision, and a separately
+controlled drawing revision without abusing `${TITLE}` or `${REVISION}`.
+
+Document revision schemes should be configurable. Supported schemes should
+include at least semantic, lettered, and numeric. Git tags can remain semantic
+for automation and package publishing while the drawing revision shown on
+controlled sheets is lettered or numeric.
+
+Approval and signoff metadata:
+
+Controlled drawings should support signoff fields independent of Git commit
+metadata:
+
+- drawn by, checked by, and approved by
+- drawn date, checked date, and approved date
+- revision-history rows with revision, description, drawn by/date, checked
+  by/date, and optionally approved by/date
+
+These values should be editable project metadata and render into KiCad/KiBot
+text variables for title blocks and revision-history sheets. Git commit hashes
+and release tags remain useful traceability evidence, but they should not be
+the only representation of controlled-document approval.
 
 Dashboard tag display:
 
@@ -180,9 +231,10 @@ Dashboard tag display:
 
 Boardwright should treat project-specific manufacturing text as structured
 project data, not as hardcoded KiBot YAML. The TUI should expose this as a
-`Project Info` screen with compact tabs or sections:
+`Info` screen with compact tabs or sections:
 
-- Identity: project name, board name, board revision, company,
+- Identity: project name, board name, PCBA/assembly number, bare PCB number,
+  board revision, document revision, document revision scheme, company,
   designer/author, logo path, repository URL, development branch, preview
   branch, release branch.
 - Variants: dev, preview, accepted-main, and release default variants.
@@ -199,10 +251,11 @@ project data, not as hardcoded KiBot YAML. The TUI should expose this as a
 The first implementation should avoid a raw YAML editor. It should show fields
 as normal form controls:
 
-- text inputs for names, repository URL, colors, material notes, and freeform
-  note bodies
-- selects for variant defaults, IPC class, surface finish, soldermask color,
-  silkscreen color, and release kind defaults
+- text inputs for names, part numbers, document revisions, signoff names,
+  signoff dates, repository URL, colors, material notes, and freeform note
+  bodies
+- selects for variant defaults, document revision scheme, IPC class, surface
+  finish, soldermask color, silkscreen color, and release kind defaults
 - checkboxes for RoHS/Pb-free, conformal coating, tented vias, controlled
   impedance, and side-specific testpoint pages
 - a small editable impedance table with columns:
@@ -221,10 +274,156 @@ no impedance controlled traces. When entries exist, Boardwright should generate
 the CSV/table from the structured project data and leave the KiCad placeholder
 movable.
 
+## KiCad Sheets And Title Blocks
+
+The default KiCad worksheets and sheet title blocks must be Boardwright-neutral
+and project-configurable. They should not be hardcoded to any one business,
+consultancy, customer, logo, or legal notice.
+
+Target behavior:
+
+- Project identity fields such as company, designer, board name, board
+  revision, release version, repository URL, and legal notice should come from
+  `.boardwright/project.yaml` and KiCad/KiBot text variables.
+- Template worksheets may carry Boardwright visual identity as a neutral
+  default, but project branding should be easy to override from Info.
+- Users should not need to edit every schematic sheet or PCB worksheet by hand
+  to change title-block ownership, branding, logo, or legal copy.
+- Legal notice copy on sheets should be generated from Boardwright legal
+  metadata, with conservative defaults while the project-level legal review is
+  ongoing.
+- Business-specific defaults from local/internal use belong in project config
+  or downstream project repos, not in the public template defaults.
+
+Implementation direction:
+
+- keep worksheet assets under `Templates/` but make visible identity text
+  variable-driven wherever KiCad supports it
+- converge toward one active worksheet template per project/brand rather than
+  separate schematic and `_PCB` worksheet families. The normal Boardwright
+  template should use the standard `Boardwright_Template_GIT.kicad_wks` path;
+  downstream branded examples such as CME should likewise have one active CME
+  worksheet when their title-block fields can carry the context that formerly
+  required PCB-specific worksheets.
+- treat the existing `_PCB` worksheet templates as transitional compatibility
+  assets while standalone assembly/fabrication outputs still depend on native
+  KiCad sheet numbering behavior. Combined review output may generate
+  temporary numbered worksheets or bake page text for its own shards, so it
+  should not require permanent duplicate PCB templates.
+- develop Boardwright-native worksheet families for common drawing standards
+  after the single-template model is proven. Initial targets are AS 1100, ISO,
+  and ANSI-style layouts, with project branding, legal notice, logo artwork,
+  release metadata, and title fields still driven by config/text variables.
+- expose title-block/legal fields in Info, grouped into project,
+  template, sheet, variant, and asset sections
+- read worksheet selection from the KiCad project file
+  (`*.kicad_pro` `pcbnew.page_layout_descr_file`) so KiCad remains the source
+  of truth for the active page layout
+- store embedded sheet-image intent in the `template` section of
+  `.boardwright/project.yaml`
+- store the embedded worksheet bitmap source as `template.sheet_image`; by
+  default it can match the main brand logo, but it is the only image field for
+  worksheet/title-block bitmap artwork
+- store sheet legal copy in the `sheet` section of `.boardwright/project.yaml`;
+  the default may use project placeholders such as `${COMPANY}` and should be
+  expanded into the `SHEET_LEGAL_NOTICE` KiCad/KiBot text variable
+- group downstream legal defaults into named profiles in `legal.yaml`, so
+  projects can start from a public-hardware, compatibility-friendly, or
+  internal-prototype stance without rewriting every legal field by hand
+- document which fields are source project metadata and which are generated
+  release metadata
+- add validation warnings for hardcoded known-local branding in default
+  template sheets once the neutral replacements exist
+
+Current implementation note:
+
+- Legal title-block text is variable-driven through `${SHEET_LEGAL_NOTICE}` in
+  the worksheet files.
+- Combined-review sheet totals use `${COMBINED_SHEET_TOTAL}` for schematic
+  worksheets so the schematic ToC/title block can refer to the whole combined
+  document. Native `${##}` remains valid for standalone KiCad/PCB print outputs
+  until those paths also use generated per-output worksheets.
+- The worksheet path is read from the KiCad project and feeds KiBot's
+  `SHEET_WKS` definition. The TUI shows this as project context rather than an
+  editable Boardwright field.
+- Schematic sheet titles should use the KiCad hierarchical sheet `Sheetname`
+  property as the source of truth. The `SHEET_NAME_1..40` text variables exist
+  only as local placeholder values for the cover/navigation sheet; KiBot
+  overwrites them during CI from the actual schematic sheet names. Locally,
+  `boardwright sheet-title --sync` writes `.boardwright/sheet_titles.env` so
+  the helper can keep editable placeholder names aligned with the schematic
+  hierarchy when working offline.
+- The README/main brand image lives under `assets.logo`. Project/render images
+  live under asset/project-image fields. Worksheet/title-block artwork lives
+  under `template.sheet_image`.
+- The sheet-image path is captured in config and the TUI. The
+  `boardwright worksheet-logo` command embeds `template.sheet_image` by default
+  into worksheet bitmap data while preserving each worksheet's existing
+  position and scale.
+- Saving Info in the TUI should re-embed `template.sheet_image` into
+  all worksheet templates so changes are visible without running a separate
+  command.
+
+## Legal, Licensing, And Provenance
+
+Boardwright must make provenance clear before a public/template release. The
+repository includes original Boardwright work, Nguyen-derived KiCad/KiBot
+template work, bundled third-party assets/fonts, and generated-output
+templates. These should be documented in a way that is useful to downstream
+hardware projects.
+
+Required source-of-truth files:
+
+```text
+LICENSE
+LICENSES/README.md
+LICENSES/Apache-2.0.txt
+LICENSES/Commons-Clause.txt
+LICENSES/Nguyen-MIT.txt
+NOTICE.md
+THIRD_PARTY_NOTICES.md
+CONTRIBUTING.md
+docs/PROVENANCE.md
+```
+
+Legal/provenance goals:
+
+- Preserve the inherited Nguyen template license and attribution for files or
+  patterns that remain derivative.
+- Keep a git-evidence-based Nguyen provenance audit so future file moves do
+  not erase attribution history.
+- Clearly state which parts are Boardwright-original and covered by the
+  Boardwright source-available license stack.
+- List bundled third-party assets, fonts, helper scripts, and their license
+  obligations.
+- Explain that generated hardware project outputs may include Boardwright
+  template text/assets and therefore may carry notices into downstream repos or
+  release packages.
+- Avoid putting one business's legal language into the public default title
+  blocks or generated README.
+- Keep the legal metadata editable at the project level so downstream projects
+  can set company-specific notices without patching templates.
+- Keep the Boardwright tooling/template license separate from downstream
+  hardware-design licensing. Using Boardwright must not force a user's hardware
+  design or generated manufacturing artifacts under the Boardwright tool
+  license, except for copied Boardwright template material.
+- Preserve the root `LICENSE` policy of Apache-2.0 with Commons Clause, plus
+  the Boardwright Hardware Output Exception, unless external legal review
+  changes that policy.
+- Keep `.boardwright/legal.yaml` scoped to downstream project defaults. It must
+  not be treated as the Boardwright repository/tooling license.
+
+The legal tooling should remain practical rather than pretending to be legal
+advice. It should generate/check notice files, highlight missing provenance,
+and make review work visible in the TUI/CLI.
+
 ## Changelog And Revision History
 
-`CHANGELOG.md` is the source of release notes and schematic revision-history
-content.
+`CHANGELOG.md` is currently the source of release notes and schematic
+revision-history content. This should evolve into a two-layer model: changelog
+entries remain the human/Git release narrative, while controlled drawing
+revision rows can carry document revision, drawn, checked, approved, and date
+metadata.
 
 Supported changelog sections are:
 
@@ -270,6 +469,17 @@ Boardwright writes every configured slot to
 fills slot 1, and unused slots are written as blank values. The KiBot preflight
 defines a larger ceiling than the default visible slot count so projects can
 expand their revision-history sheets later.
+
+Future revision-history generation should support richer controlled-document
+rows, for example:
+
+```text
+Revision | Description | Drawn | Drawn date | Checked | Checked date | Approved | Approved date
+```
+
+Projects should be able to keep simple changelog-derived rows when that is
+enough, but controlled projects should be able to fill the formal drawing
+approval columns without hand-editing schematic text.
 
 ## CI/CD Workflows
 
@@ -376,6 +586,8 @@ boardwright review
 boardwright release
 boardwright doctor
 boardwright testbench
+boardwright generate
+boardwright source-package
 boardwright outputs clean
 boardwright legal
 boardwright git-status
@@ -392,7 +604,36 @@ interface for designers.
 Planned CLI additions:
 
 - `boardwright config show`: read-only project configuration summary.
-- `boardwright adopt`: later helper for converting existing KiCad projects.
+
+Implemented onboarding helper:
+
+- `boardwright adopt`: adopts an existing KiCad project by initializing the
+  Boardwright config files and filling repository URL metadata when possible.
+
+Implemented schematic generation support:
+
+- `boardwright generate revision-history`: copies the revision-history schematic
+  template to a new file.
+- `boardwright generate one-sheet`: writes a minimal one-sheet schematic
+  skeleton from the configured project metadata.
+- `boardwright generate hierarchy`: writes a small hierarchical project
+  skeleton with a child schematic.
+- `boardwright generate sheet`: adds a new hierarchical child schematic to an
+  existing schematic, and the TUI exposes the same helper through a one-step
+  "Generate Sheet" action.
+
+Implemented curated source-package support:
+
+- `boardwright source-package`: creates a curated archive of the repository
+  checkout, omitting generated manufacturing/output folders and other obvious
+  release noise. The release workflow can include that archive in the release
+  package when `release_include_source_archive` is enabled in project config.
+
+Implemented local KiBot runner support:
+
+- `boardwright docker-kibot`: launches the bundled Docker helper script for a
+  local KiBot session, using the repo-managed KiBot image selection helpers
+  already present in `boardwright_resources/kibot/resources/scripts/`.
 
 Implemented accepted-output CLI support:
 
@@ -436,13 +677,16 @@ It should answer:
 Primary actions:
 
 ```text
-Record Changes
-Commit + Push
-Generate Preview
-Review Artifacts
-Accept to Main
-Create Release
-Project Info
+Record
+Commit
+Preview
+Review
+Folder
+README
+New Sheet
+Accept
+Release
+Info
 Refresh
 ```
 
@@ -454,30 +698,40 @@ Target main-screen layout:
   `Accept`, `Release`) rather than single-letter abbreviations. Detailed run
   ids, titles, and evidence belong in the inspector or action modals, not in
   the top strip. The strip should scroll horizontally if the terminal is
-  narrow instead of truncating important fields.
+  narrow instead of truncating important fields. The header/subtitle should
+  carry the current project identity plus stage and next action, and a
+  lightweight help shortcut should be discoverable from the top chrome.
 - Left action rail: grouped by intent rather than shown as one flat button
-  pack.
-  - Work: Record Changes, Commit + Push.
-  - Preview: Generate Preview, Review Artifacts, Accept to Main.
-  - Release: Create Release.
-  - Setup: Project Info, Refresh.
+  pack. On short terminals, the rail should keep readable labels and preserve
+  the action column instead of collapsing the whole cockpit into a narrow
+  stack. The rail should favor a single readable column of buttons over a
+  cramped multi-column layout.
+  - Work: Record, Commit.
+  - Artifacts: Preview, Review, Folder, README.
+  - Schematics: New Sheet.
+  - Release: Release.
+  - Setup: Info, Refresh.
 - Center workflow map: a compact seven-step progress map with one line per
   step. It should show state with simple markers and color, but not repeat long
   explanatory paragraphs.
 - Right inspector: a structured readout with `Now`, `Evidence`, and `Release`
-  sections. `Now` states the next action and blocker. `Evidence` has separate
-  preview, review, accept, and release rows so mixed CI states do not collapse
-  into one noisy sentence. `Release` summarizes readiness. Raw workflow
-  evidence belongs in the action modal or review screen, not permanently in the
-  main readout.
+  sections. `Now` states the next action and blocker in plain language.
+  `Evidence` has separate preview, review, accept, and release rows so mixed
+  CI states do not collapse into one noisy sentence. `Release` summarizes
+  readiness. Raw workflow evidence belongs in the action modal or review
+  screen, not permanently in the main readout.
 - Bottom panels: validation and changed files, both scrollable when needed.
+  Validation stays compact on the dashboard and expands into a separate drill
+  down when the operator wants the full checklist. On very short terminals,
+  the TUI keeps the workflow and inspector visible first and lets the lower
+  detail panels fall away instead of overflowing the screen.
 
 Button and keybind behavior must be identical. Every visible action and every
 keyboard shortcut must pass through the same shared `action_state` gate before
 opening a modal or dispatching work. Disabled actions should explain the lock
 reason in a notification.
 
-`Create Release` opens the release checklist once the local dev state is clean
+`Release` opens the release checklist once the local dev state is clean
 and pushed. The checklist, not the main button, gates the actual
 `prepare-release.yaml` dispatch against accepted-main evidence, release inputs,
 changelog readiness, and tag availability. This keeps the release path
@@ -501,37 +755,59 @@ Current implemented TUI behavior:
   and release steps as a compact progress map
 - inspector is sectioned into Now, Evidence, and Release instead of showing a
   raw status dump
-- Record Changes updates `CHANGELOG.md`, writes revision-history variables,
-  validates, and suggests a commit message
-- Commit + Push requires the configured `dev` branch, requires a changelog entry
-  for dirty work, validates, writes revision-history variables, commits, and
-  pushes `origin/dev`
-- Generate Preview dispatches `dev-preview.yaml` for a selected variant after
-  the configured `dev` branch is clean and pushed. It does not run implicitly on
+- the top chrome is a branded title and tagline, while the detailed project
+  identity and current stage live in the status strip
+- the responsive layout uses a very short terminal mode to protect readable
+  actions and the main narrative panels, while keeping the lower detail panels
+  as the screen allows
+- in very short terminals, validation and changed-file summaries are shortened
+  further so the inspector and workflow remain readable before the supporting
+  panels
+- in very short terminals, the project summary trims secondary metadata such
+  as preview defaults and remote counts so the status strip and workflow stay
+  readable first
+- the changed-files panel includes a small badge legend in normal width so the
+  file status colors remain self-explanatory
+- in very short terminals, the top status line drops secondary metadata like
+  branch and remote counts so the most important state words stay visible
+- top chrome shows the project identity, current stage, next action, and a
+  lightweight help affordance
+- the footer is contextual and mirrors the current screen plus the most useful
+  shortcuts, rather than dumping every binding all the time
+- action buttons use readable single-line labels so the rail remains readable
+  at a glance on narrow terminals
+- Record updates `CHANGELOG.md`, writes revision-history variables, validates,
+  and suggests a commit message
+- Commit requires the configured `dev` branch, requires a changelog entry for
+  dirty work, validates, writes revision-history variables, commits, and pushes
+  `origin/dev`
+- Preview dispatches `dev-preview.yaml` for a selected variant after the
+  configured `dev` branch is clean and pushed. It does not run implicitly on
   every push.
-- Review Artifacts polls recent workflow runs and downloads the latest preview
-  artifact evidence when `gh` is available. It opens a dedicated review screen
-  showing run id, branch, source SHA, expected SHA, artifact name, created time,
+- Review polls recent workflow runs and downloads the latest preview artifact
+  evidence when `gh` is available. It opens a dedicated review screen showing
+  run id, branch, source SHA, expected SHA, artifact name, created time,
   status, freshness, selected variant, and reviewed marker. The default variant
-  comes from `variants.preview_default`; the operator can override it for manual
-  workflow runs. During fetch, the TUI shows artifact download progress. A
-  successful fetch writes a local review marker under `boardwright-preview/` for
-  the exact artifact, run id, and SHA.
-- Accept to Main dispatches `main-outputs.yaml` only when the selected variant
-  has a fresh preview artifact for the latest pushed `origin/dev` SHA and that
-  exact artifact has been reviewed locally. The dispatch pins that reviewed
-  source SHA and tells CI to push the accepted state to `main`.
-- Create Release opens a release readiness checklist before dispatching
+  comes from `variants.preview_default`; the operator can override it for
+  manual workflow runs. During fetch, the TUI shows artifact download progress.
+  A successful fetch writes a local review marker under `boardwright-preview/`
+  for the exact artifact, run id, and SHA.
+- Accept dispatches `main-outputs.yaml` only when the selected variant has a
+  fresh preview artifact for the latest pushed `origin/dev` SHA and that exact
+  artifact has been reviewed locally. The dispatch pins that reviewed source
+  SHA and tells CI to push the accepted state to `main`.
+- Release opens a release readiness checklist before dispatching
   `prepare-release.yaml`. The checklist shows accepted-main evidence, release
   inputs, unreleased changelog readiness, local tag availability, and dispatch
-  target. Dispatch is disabled while any checklist item is blocking.
+  target. Preview is disabled while any checklist item is blocking.
 - primary action buttons lock/unlock from the shared workflow-state model
 - keybindings use the same action gates as the visible buttons
-- Project Info edits project id, name, company, designer, Git URL, GitHub repo,
-  logo path, product image path, and the dev/preview/main/release variant
-  defaults stored in `.boardwright/project.yaml`.
-- Refresh checks accepted-main evidence when GitHub CLI is available. Create
-  Release is blocked unless accepted main outputs are fresh for the latest
+- Info edits project id, name, company, designer, Git URL, GitHub repo, logo
+  path, product image path, and the dev/preview/main/release variant defaults
+  stored in `.boardwright/project.yaml`. Those defaults live in the Workflow
+  section, not a separate variants tab.
+- Refresh checks accepted-main evidence when GitHub CLI is available. Release
+  is blocked unless accepted main outputs are fresh for the latest
   pushed `origin/dev` source SHA.
 - CI polling summarizes all three active CI phases in the top status and
   inspector: preview, accepted-main outputs, and release preparation/publish
@@ -541,6 +817,10 @@ Current implemented TUI behavior:
   `Preview:CHECKED ready | Accept:ready | Release:prepare running`. Color
   priority is failure/error first, then running/queued/stale/review-needed
   states, then ready/success states.
+- Validation on the dashboard is intentionally compact. The inline summary
+  surfaces blockers first, then a short warning list, while `v` opens the full
+  validation detail screen and `boardwright doctor` remains the broad
+  readiness check.
 
 The TUI renders from a shared workflow-state model rather than keeping its own
 private timeline rules. That model provides:
@@ -578,6 +858,19 @@ Important missing TUI behavior:
   notes, and controlled-impedance requirements is not implemented
 
 ## README And Assets
+
+Boardwright has two README surfaces:
+
+- The root repository `README.md` describes Boardwright itself: what the
+  template/tool is, how to install/use it, the workflow model, legal/provenance
+  status, and how to create or adopt projects.
+- The generated project README is produced for downstream board projects from
+  the KiBot report template below.
+
+The root README must not be overwritten by generated board-project content
+during normal template development. CI may generate project README snapshots
+for downstream/template-test repos, but the source repository needs a stable
+human-authored product README.
 
 The generated project README is produced from:
 
@@ -626,6 +919,7 @@ Validation currently checks:
 - presence of the KiBot main config
 - configured asset paths
 - README template mentions legal files
+- known local branding markers in active template/config files
 
 Validation should remain fast and local. CI/runtime output freshness and GitHub
 authentication checks belong in status/review actions rather than base project
@@ -635,18 +929,27 @@ validation.
 
 These are the important gaps between the current code and the intended product:
 
-1. Project Info depth: identity and variant defaults are editable, but
-   fabrication metadata, assembly notes, controlled-impedance entries, and
-   output-policy fields still need proper TUI sections.
-2. TUI full-path polish: the main screen is now structured, but the full
-   record -> commit/push -> preview -> review -> accept -> release loop still
-   needs repeated live use to tune labels, lock reasons, and modal density.
-3. CI retest: workflows need live retesting after moving visible generated media
-   under `assets/renders/` and `assets/3d/`.
-4. README richness: the generated README template is partly refreshed but still
+1. Legal/provenance: the first-pass source map, license stack, font
+   replacement, and mixed-file SPDX policy are in place. Remaining risk is
+   external legal review plus confirming or replacing bundled KiCad color theme
+   files.
+2. KiCad sheet branding: worksheet path, sheet logo, and legal text are now
+   project-configurable. Remaining work is polish around project generation and
+   deeper metadata editing.
+3. Info depth: the TUI now exposes the project metadata in sectioned
+   tabs with lighter helper text; remaining work is only live-use ergonomic
+   tuning.
+4. TUI full-path polish: the main screen now stays usable on shorter terminals
+   without collapsing the action rail, and the Info modal is grouped
+   more logically, but the full record -> commit -> preview -> review ->
+   accept -> release loop still benefits from repeated live use to tune labels,
+   lock reasons, and modal density.
+5. README richness: the generated README template is partly refreshed but still
    lacks stackup/component/latest-release sections.
-5. Onboarding: new/adopted project setup still relies on hand-editing config.
-6. GitHub fallback UX can still be refined with direct URLs after repository
+6. Onboarding and generation: new/adopted project setup is better, and the
+   basic schematic-generation helpers now exist. Remaining work is deeper
+   metadata editing and any future generator polish.
+7. GitHub fallback UX can still be refined with direct URLs after repository
    metadata is configured.
 
 ## Out Of Scope For The Current Build

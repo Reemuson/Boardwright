@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
+# Original template material copyright Nguyen Vincent.
+
 
 # Default image version
 IMAGE="ghcr.io/inti-cmnb/kicad8_auto_full:dev"

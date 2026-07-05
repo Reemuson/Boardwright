@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 import unittest
 
 from boardwright_resources.kibot.resources.scripts.get_revision_history_var import unquote

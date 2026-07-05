@@ -1,8 +1,17 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 from __future__ import annotations
 
+import csv
+import io
 from threading import Thread
 from dataclasses import dataclass
+import os
+import subprocess
+import shutil
 from importlib.util import find_spec
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.text import Text
@@ -27,8 +36,11 @@ from .preview import build_preview_plan, build_preview_state, dispatch_preview, 
 from .preview import latest_preview_variant, list_preview_runs
 from .release import build_release_plan, validate_release_plan
 from .revision_history import write_revision_variables
+from .schematic_generation import add_hierarchical_sheet, slugify
+from .sheet_titles import find_primary_schematic
 from .status import ProjectStatus, collect_status
 from .validation import ValidationIssue, validate_project
+from .worksheet_logo import embed_logo_in_worksheets
 from .workflow_state import WorkflowState, action_state, build_workflow_state
 
 if TYPE_CHECKING:
@@ -38,6 +50,18 @@ if TYPE_CHECKING:
 
 
 INSTALL_HINT = 'Textual is not installed. Install the TUI with: pip install -e ".[tui]"'
+
+BRAND_TEAL = "#0d7c88"
+SURFACE_DARK = "#14252a"
+SURFACE_RAISED = "#1b2f34"
+SURFACE_TOP = "#102227"
+BORDER_SUBTLE = "#29515a"
+STATUS_SUCCESS = "#4db889"
+STATUS_LOADING = "#4f9dc4"
+STATUS_WARNING = "#d7a642"
+STATUS_ERROR = "#d46a66"
+STATUS_UNSET = "#80919a"
+STATUS_INFO = "#6fa5c8"
 
 
 @dataclass(frozen=True)
@@ -86,6 +110,16 @@ def run() -> int:
     app = _build_textual_app()
     app().run()
     return 0
+
+
+def _responsive_layout_mode(width: int, height: int) -> str:
+    if height < 34:
+        return "tiny"
+    if width < 150:
+        return "compact"
+    if height < 44:
+        return "short"
+    return "wide"
 
 
 def collect_dashboard_state(
@@ -138,7 +172,7 @@ def collect_dashboard_state(
     accepted_summary = (
         format_accepted_state(accepted_state)
         if accepted_state is not None
-        else (accepted_error or "Accepted main evidence not checked.")
+        else (accepted_error or "Main evidence not checked.")
     )
     return DashboardState(
         status,
@@ -164,7 +198,7 @@ def _run_console_fallback() -> None:
     print(f"Working tree: {'dirty' if status.dirty_count else 'clean'}")
     print(f"Unreleased changes: {'yes' if status.unreleased_changes else 'no'}")
     print(f"Preview: {state.preview_summary}")
-    print(f"Accept to main: {state.promote_summary}")
+    print(f"Accept: {state.promote_summary}")
     print(f"CI release: {state.ci_release_summary}")
     print(f"Release dry-run: {state.release_summary}")
     print(f"Changed files: {len(state.changed_files)}")
@@ -177,14 +211,95 @@ def _run_console_fallback() -> None:
     print(INSTALL_HINT)
 
 
+def _embed_template_sheet_image(config: "BoardwrightConfig") -> None:
+    image = Path(config.template_sheet_image)
+    image = image if image.is_absolute() else config.root / image
+    worksheets = sorted((config.root / "Templates").glob("*.kicad_wks"))
+    if not worksheets:
+        return
+    embed_logo_in_worksheets(worksheets, image)
+
+
+def _semantic_style(kind: str, *, bold: bool = True) -> str:
+    palette = {
+        "success": STATUS_SUCCESS,
+        "loaded": STATUS_SUCCESS,
+        "loading": STATUS_LOADING,
+        "warning": STATUS_WARNING,
+        "error": STATUS_ERROR,
+        "unset": STATUS_UNSET,
+        "info": STATUS_INFO,
+    }
+    color = palette.get(kind, STATUS_UNSET)
+    return f"{'bold ' if bold else ''}{color}"
+
+
+def _action_button_labels(mode: str) -> dict[str, str]:
+    if mode in {"short", "tiny"}:
+        return {
+            "record_change": "Record",
+            "commit_push": "Commit",
+            "generate_preview": "Preview",
+            "review_artifacts": "Review",
+            "open_preview_folder": "Folder",
+            "open_preview_readme": "README",
+            "generate_sheet": "New Sheet",
+            "accept_main": "Accept",
+            "release_ci": "Release",
+            "project_info": "Info",
+            "refresh": "Refresh",
+        }
+    return {
+        "record_change": "Record",
+        "commit_push": "Commit",
+        "generate_preview": "Preview",
+        "review_artifacts": "Review",
+        "open_preview_folder": "Folder",
+        "open_preview_readme": "README",
+        "generate_sheet": "New Sheet",
+        "accept_main": "Accept",
+        "release_ci": "Release",
+        "project_info": "Info",
+        "refresh": "Refresh",
+    }
+
+
+def _action_display_name(name: str) -> str:
+    return {
+        "Record": "Record",
+        "Commit": "Commit",
+        "Preview": "Preview",
+        "Review": "Review",
+        "Folder": "Folder",
+        "README": "README",
+        "Sheet": "Sheet",
+        "Accept": "Accept",
+        "Release": "Release",
+        "Info": "Info",
+        "Refresh": "Refresh",
+    }.get(name, name)
+
+
 def _build_textual_app():
     from textual.app import App, ComposeResult
     from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
     from textual.screen import ModalScreen
-    from textual.widgets import Button, Footer, Header, Input, Label, ProgressBar, Select, Static
+    from textual.widgets import (
+        Button,
+        Header,
+        Input,
+        Label,
+        ProgressBar,
+        Select,
+        Static,
+        TabbedContent,
+        TabPane,
+        TextArea,
+    )
 
     class ChangelogEntryScreen(ModalScreen[tuple[str, str] | None]):
-        CSS = """
+        CSS = (
+            """
         ChangelogEntryScreen,
         ReviewVariantScreen,
         PreviewDispatchScreen,
@@ -204,19 +319,64 @@ def _build_textual_app():
             max-height: 80%;
             padding: 1 2;
             margin: 0;
-            border: solid $accent;
-            background: $surface;
+            border: solid {BRAND_TEAL};
+            background: {SURFACE_DARK};
+        }
+
+        #project_info_dialog {
+            width: 116;
+            max-width: 96%;
+            height: auto;
+            max-height: 90%;
+            padding: 1 2;
+            margin: 0;
+            border: solid {BRAND_TEAL};
+            background: {SURFACE_DARK};
+        }
+
+        #project_info_tabs {
+            height: 1fr;
+            max-height: 72vh;
         }
 
         #review_status {
             padding: 1;
-            border: solid $secondary;
-            background: $boost;
+            border: solid {BORDER_SUBTLE};
+            background: {SURFACE_RAISED};
         }
 
         #project_info_scroll {
-            height: 28;
-            max-height: 65vh;
+            height: 1fr;
+            overflow-y: auto;
+        }
+
+        .project-info-pane {
+            height: 1fr;
+            padding: 1;
+        }
+
+        #change_message {
+            height: 9;
+            margin-bottom: 1;
+        }
+
+        #sheet_legal_notice {
+            height: 8;
+            margin-bottom: 1;
+        }
+
+        #legal_safety_notice,
+        #manufacturing_fabrication_notes,
+        #manufacturing_assembly_notes,
+        #manufacturing_testpoint_policy,
+        #manufacturing_impedance_notes {
+            height: 6;
+            margin-bottom: 1;
+        }
+
+        #manufacturing_impedance_table {
+            height: 10;
+            margin-bottom: 1;
         }
 
         #review_message {
@@ -242,16 +402,26 @@ def _build_textual_app():
             text-align: center;
         }
         """
+            .replace("{BRAND_TEAL}", BRAND_TEAL)
+            .replace("{SURFACE_DARK}", SURFACE_DARK)
+            .replace("{SURFACE_RAISED}", SURFACE_RAISED)
+            .replace("{BORDER_SUBTLE}", BORDER_SUBTLE)
+            .replace("{STATUS_INFO}", STATUS_INFO)
+            .replace("{STATUS_ERROR}", STATUS_ERROR)
+        )
 
         def compose(self) -> ComposeResult:
             with Vertical(id="dialog"):
-                yield Label("Record Changelog Entry", classes="section-title")
+                yield Label("Changelog", classes="section-title")
                 yield Select(
                     [(section, section) for section in SUPPORTED_SECTIONS],
                     value="Changed",
                     id="change_section",
                 )
-                yield Input(placeholder="What changed?", id="change_message")
+                yield TextArea(
+                    "",
+                    id="change_message",
+                )
                 yield Button("Save", id="save_change")
                 yield Button("Cancel", id="cancel_change")
 
@@ -260,7 +430,7 @@ def _build_textual_app():
                 self.dismiss(None)
                 return
             section = self.query_one("#change_section", Select).value
-            message = self.query_one("#change_message", Input).value
+            message = self.query_one("#change_message", TextArea).text
             self.dismiss((str(section), message))
 
     class ReviewArtifactsScreen(ModalScreen[str | None]):
@@ -283,14 +453,14 @@ def _build_textual_app():
 
         def compose(self) -> ComposeResult:
             with Vertical(id="dialog"):
-                yield Label("Review Artifacts", classes="section-title")
+                yield Label("Artifacts", classes="section-title")
                 with Vertical(id="review_status"):
                     yield Static(self.preview_status, id="review_state")
                     yield Static(self.preview_message, id="review_message", classes="muted")
                     yield Static(self.run_summary, id="review_run")
                 yield ProgressBar(total=100, show_eta=False, id="fetch_progress")
                 yield Static(_ci_runs_brief(self.runs_text), id="recent_runs", classes="muted")
-                yield Button("Fetch Artifact", id="fetch_artifact")
+                yield Button("Fetch", id="fetch_artifact")
                 yield Button("Close", id="close_review")
 
         def on_mount(self) -> None:
@@ -313,7 +483,7 @@ def _build_textual_app():
         def compose(self) -> ComposeResult:
             config = load_config()
             with Vertical(id="dialog"):
-                yield Label("Review Variant", classes="section-title")
+                yield Label("Variant", classes="section-title")
                 yield Select(
                     [(variant, variant) for variant in ("DRAFT", "PRELIMINARY", "CHECKED", "RELEASED")],
                     value=config.preview_variant,
@@ -335,9 +505,9 @@ def _build_textual_app():
         def compose(self) -> ComposeResult:
             config = load_config()
             with Vertical(id="dialog"):
-                yield Label("Generate Preview", classes="section-title")
+                yield Label("Preview", classes="section-title")
                 yield Static(
-                    f"Dispatches {config.preview_workflow} from {config.dev_branch}.",
+                    f"Runs {config.preview_workflow} from {config.dev_branch}.",
                     classes="muted",
                 )
                 yield Select(
@@ -345,7 +515,7 @@ def _build_textual_app():
                     value=config.preview_variant,
                     id="preview_variant",
                 )
-                yield Button("Generate Preview", id="dispatch_preview")
+                yield Button("Run", id="dispatch_preview")
                 yield Button("Cancel", id="cancel_preview")
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -355,45 +525,524 @@ def _build_textual_app():
             variant = self.query_one("#preview_variant", Select).value
             self.dismiss(str(variant))
 
-    class ProjectInfoScreen(ModalScreen[dict[str, dict[str, str]] | None]):
+    class ProjectInfoScreen(ModalScreen[dict[str, object] | None]):
         CSS = ChangelogEntryScreen.CSS
 
         def compose(self) -> ComposeResult:
             config = load_config()
             project = config.project.get("project", {})
+            branches = config.branch_settings
             assets = config.assets
-            with Vertical(id="dialog"):
-                yield Label("Project Info", classes="section-title")
-                with VerticalScroll(id="project_info_scroll"):
-                    yield Input(value=str(project.get("id", "")), placeholder="Project ID", id="project_id")
-                    yield Input(value=str(project.get("name", "")), placeholder="Project name", id="project_name")
-                    yield Input(value=config.board_name, placeholder="Board name", id="project_board_name")
-                    yield Input(value=config.board_revision, placeholder="Board revision", id="project_board_revision")
-                    yield Input(value=str(project.get("company", "")), placeholder="Company", id="project_company")
-                    yield Input(value=str(project.get("designer", "")), placeholder="Designer", id="project_designer")
-                    yield Input(value=str(project.get("git_url", "")), placeholder="Git URL", id="project_git_url")
-                    yield Input(value=str(project.get("github_repo", "")), placeholder="owner/repo", id="project_github_repo")
-                    yield Label("Variant Defaults", classes="section-title")
-                    for key, label, value in (
-                        ("variant_dev", "Dev", config.default_variant),
-                        ("variant_preview", "Preview", config.preview_variant),
-                        ("variant_main", "Accepted main", config.main_variant),
-                        ("variant_release", "Release", config.release_variant),
-                    ):
-                        yield Static(label, classes="muted")
-                        yield Select(
-                            [(variant, variant) for variant in ("DRAFT", "PRELIMINARY", "CHECKED", "RELEASED")],
-                            value=value,
-                            id=key,
-                        )
-                    yield Label("Assets", classes="section-title")
-                    yield Input(value=str(assets.get("logo", "")), placeholder="Logo path", id="asset_logo")
-                    yield Input(
-                        value=str(assets.get("product_image", "")),
-                        placeholder="Product image path",
-                        id="asset_product_image",
-                    )
-                yield Button("Save Project Info", id="save_project_info")
+            template = config.template
+            sheet = config.sheet
+            legal_project = config.legal_project_defaults
+            legal_profiles = config.legal_profiles
+            manufacturing = config.manufacturing
+            impedance_table_text = _format_impedance_table_input(config.impedance_entries)
+            outputs = config.output_settings
+
+            bool_options = [("true", "true"), ("false", "false")]
+            revision_scheme_options = [(scheme, scheme) for scheme in ("lettered", "numeric", "semantic")]
+            variant_options = [(variant, variant) for variant in ("DRAFT", "PRELIMINARY", "CHECKED", "RELEASED")]
+
+            def field_input(
+                label: str,
+                value: str,
+                *,
+                placeholder: str,
+                widget_id: str,
+                hint: str = "",
+            ):
+                yield Label(label, classes="field-label")
+                if hint:
+                    yield Static(hint, classes="field-hint")
+                yield Input(value=value, placeholder=placeholder, id=widget_id)
+
+            def field_select(
+                label: str,
+                value: str,
+                *,
+                widget_id: str,
+                hint: str = "",
+                options: list[tuple[str, str]],
+            ):
+                yield Label(label, classes="field-label")
+                if hint:
+                    yield Static(hint, classes="field-hint")
+                yield Select(options, value=value, id=widget_id)
+
+            def field_textarea(
+                label: str,
+                value: str,
+                *,
+                widget_id: str,
+                hint: str = "",
+            ):
+                yield Label(label, classes="field-label")
+                if hint:
+                    yield Static(hint, classes="field-hint")
+                yield TextArea(value, id=widget_id)
+
+            def section_intro(title: str, hint: str):
+                yield Label(title, classes="section-title")
+                yield Static(hint, classes="field-hint")
+
+            with Vertical(id="project_info_dialog"):
+                with TabbedContent(id="project_info_tabs"):
+                    with TabPane("Identity", id="project_tab"):
+                        with VerticalScroll(id="project_info_scroll", classes="project-info-pane"):
+                            yield from field_input(
+                                "Project ID",
+                                str(project.get("id", "")),
+                                placeholder="BOARDWRIGHT",
+                                widget_id="project_id",
+                                hint="Short identifier used in status, artifacts, and release names.",
+                            )
+                            yield from field_input(
+                                "Project name",
+                                str(project.get("name", "")),
+                                placeholder="Boardwright Controller",
+                                widget_id="project_name",
+                                hint="Human-readable project name shown in docs and outputs.",
+                            )
+                            yield from section_intro(
+                                "Board identity",
+                                "These values flow into worksheet titles and generated documentation.",
+                            )
+                            yield from field_input(
+                                "Board name",
+                                config.board_name,
+                                placeholder="Main Controller",
+                                widget_id="project_board_name",
+                                hint="Board or assembly name printed on sheets and reports.",
+                            )
+                            yield from field_input(
+                                "Board revision",
+                                config.board_revision,
+                                placeholder="A",
+                                widget_id="project_board_revision",
+                                hint="Current hardware revision string.",
+                            )
+                            yield from field_input(
+                                "PCBA number",
+                                config.pcba_number,
+                                placeholder="Assembly part number",
+                                widget_id="project_pcba_number",
+                                hint="Controlled number for the populated assembly.",
+                            )
+                            yield from field_input(
+                                "PCB number",
+                                config.pcb_number,
+                                placeholder="Bare board part number",
+                                widget_id="project_pcb_number",
+                                hint="Controlled number for the bare fabricated PCB.",
+                            )
+                            yield from section_intro(
+                                "Document control",
+                                "These fields are formal drawing metadata; release version remains Git/package oriented.",
+                            )
+                            yield from field_input(
+                                "Document revision",
+                                config.document_revision,
+                                placeholder="A",
+                                widget_id="project_document_revision",
+                                hint="Controlled document revision printed on formal sheets.",
+                            )
+                            yield from field_select(
+                                "Revision scheme",
+                                config.document_revision_scheme,
+                                widget_id="project_document_revision_scheme",
+                                hint="Controls validation and future revision helpers.",
+                                options=revision_scheme_options,
+                            )
+                            yield from field_input(
+                                "Drawn by",
+                                config.drawn_by,
+                                placeholder="Initials or name",
+                                widget_id="project_drawn_by",
+                                hint="Person or role that drew the document.",
+                            )
+                            yield from field_input(
+                                "Drawn date",
+                                config.drawn_date,
+                                placeholder="YYYY-MM-DD",
+                                widget_id="project_drawn_date",
+                                hint="Use YYYY-MM-DD.",
+                            )
+                            yield from field_input(
+                                "Checked by",
+                                config.checked_by,
+                                placeholder="Initials or name",
+                                widget_id="project_checked_by",
+                                hint="Person or role that checked the document.",
+                            )
+                            yield from field_input(
+                                "Checked date",
+                                config.checked_date,
+                                placeholder="YYYY-MM-DD",
+                                widget_id="project_checked_date",
+                                hint="Use YYYY-MM-DD.",
+                            )
+                            yield from field_input(
+                                "Approved by",
+                                config.approved_by,
+                                placeholder="Initials or name",
+                                widget_id="project_approved_by",
+                                hint="Person or role that approved the document.",
+                            )
+                            yield from field_input(
+                                "Approved date",
+                                config.approved_date,
+                                placeholder="YYYY-MM-DD",
+                                widget_id="project_approved_date",
+                                hint="Use YYYY-MM-DD.",
+                            )
+                            yield from section_intro(
+                                "Ownership",
+                                "Use the owning organisation and primary design contact for notices and generated docs.",
+                            )
+                            yield from field_input(
+                                "Company",
+                                str(project.get("company", "")),
+                                placeholder="Acme Labs",
+                                widget_id="project_company",
+                                hint="Organisation or studio name.",
+                            )
+                            yield from field_input(
+                                "Designer",
+                                str(project.get("designer", "")),
+                                placeholder="Jane Doe",
+                                widget_id="project_designer",
+                                hint="Primary engineer or maintainer.",
+                            )
+                            yield from section_intro(
+                                "Repository links",
+                                "These links are used for generated README and release references.",
+                            )
+                            yield from field_input(
+                                "Git URL",
+                                str(project.get("git_url", "")),
+                                placeholder="https://github.com/owner/repo.git",
+                                widget_id="project_git_url",
+                                hint="Clone URL for the canonical repository.",
+                            )
+                            yield from field_input(
+                                "GitHub repo",
+                                str(project.get("github_repo", "")),
+                                placeholder="owner/repo",
+                                widget_id="project_github_repo",
+                                hint="Repository slug used for release and workflow links.",
+                            )
+                    with TabPane("Workflow", id="workflow_tab"):
+                        with VerticalScroll(classes="project-info-pane"):
+                            yield from section_intro(
+                                "Variant defaults",
+                                "Choose which lifecycle state each workflow stage should target by default.",
+                            )
+                            yield from field_select(
+                                "Dev default",
+                                str(config.default_variant),
+                                widget_id="variant_dev",
+                                hint="Used for local work and normal commits.",
+                                options=variant_options,
+                            )
+                            yield from field_select(
+                                "Preview default",
+                                str(config.preview_variant),
+                                widget_id="variant_preview",
+                                hint="Used when dispatching preview artifacts.",
+                                options=variant_options,
+                            )
+                            yield from field_select(
+                                "Main default",
+                                str(config.main_variant),
+                                widget_id="variant_main",
+                                hint="Used when promoting accepted output to main.",
+                                options=variant_options,
+                            )
+                            yield from field_select(
+                                "Release default",
+                                str(config.release_variant),
+                                widget_id="variant_release",
+                                hint="Used when preparing formal releases.",
+                                options=variant_options,
+                            )
+                            yield from section_intro(
+                                "Branch names",
+                                "These names control where Boardwright expects to record, preview, and release work.",
+                            )
+                            yield from field_input(
+                                "Development branch",
+                                str(branches.get("development", config.dev_branch)),
+                                placeholder="dev",
+                                widget_id="branch_development",
+                                hint="Branch required for local recording and commit actions.",
+                            )
+                            yield from field_input(
+                                "Preview branch",
+                                str(branches.get("preview", config.preview_branch)),
+                                placeholder="preview",
+                                widget_id="branch_preview",
+                                hint="Branch used for preview artifact review when enabled.",
+                            )
+                            yield from field_input(
+                                "Release branch",
+                                str(branches.get("release", config.release_branch)),
+                                placeholder="release",
+                                widget_id="branch_release",
+                                hint="Branch used for release preparation and tags.",
+                            )
+                            yield from section_intro(
+                                "Generated outputs",
+                                "Control where generated files are written and what ships in a release bundle.",
+                            )
+                            yield from field_select(
+                                "Commit generated outputs to main",
+                                str(outputs.get("commit_generated_outputs_to_main", "false")).lower(),
+                                widget_id="outputs_commit_generated_outputs_to_main",
+                                hint="If true, release outputs are committed on `main`.",
+                                options=bool_options,
+                            )
+                            yield from field_select(
+                                "Use preview branch",
+                                str(outputs.get("use_preview_branch", "true")).lower(),
+                                widget_id="outputs_use_preview_branch",
+                                hint="If true, preview review artifacts are tracked on the preview branch.",
+                                options=bool_options,
+                            )
+                            yield from field_select(
+                                "Source archive",
+                                str(outputs.get("release_include_source_archive", "false")).lower(),
+                                widget_id="outputs_release_include_source_archive",
+                                hint="Include a source archive alongside release outputs.",
+                                options=bool_options,
+                            )
+                            yield from field_select(
+                                "Combined review PDF",
+                                str(outputs.get("combined_review_pdf", "false")).lower(),
+                                widget_id="outputs_combined_review_pdf",
+                                hint="Merge schematic, assembly, and fabrication PDFs into one bookmarked review PDF after generation.",
+                                options=bool_options,
+                            )
+                            yield from field_input(
+                                "Combined PDF name",
+                                str(outputs.get("combined_pdf_name", "Manufacturing/boardwright-combined.pdf")),
+                                placeholder="Manufacturing/boardwright-combined.pdf",
+                                widget_id="outputs_combined_pdf_name",
+                                hint="Output filename for the merged review PDF.",
+                            )
+                            yield from field_select(
+                                "Combined PDF contents",
+                                str(outputs.get("combined_pdf_toc", "true")).lower(),
+                                widget_id="outputs_combined_pdf_toc",
+                                hint="Add a contents page with links to generated schematic, assembly, and fabrication sheets.",
+                                options=bool_options,
+                            )
+                            yield from field_select(
+                                "Combined sheet numbers",
+                                str(outputs.get("combined_pdf_page_numbers", "true")).lower(),
+                                widget_id="outputs_combined_pdf_page_numbers",
+                                hint="Use native document metadata for combined review sheet numbering where supported.",
+                                options=bool_options,
+                            )
+                    with TabPane("Branding", id="branding_tab"):
+                        with VerticalScroll(classes="project-info-pane"):
+                            yield from section_intro(
+                                "Worksheet assets",
+                                "These files control the title block worksheet and embedded sheet image.",
+                            )
+                            yield Static(
+                                f"Worksheet: {config.worksheet}",
+                                id="template_worksheet_display",
+                                classes="project-summary",
+                            )
+                            yield from field_input(
+                                "Sheet image",
+                                str(template.get("sheet_image") or config.template_sheet_image),
+                                placeholder="Sheet image path",
+                                widget_id="template_sheet_image",
+                                hint="Image embedded into generated worksheet templates.",
+                            )
+                            yield from section_intro(
+                                "Project imagery",
+                                "These paths feed the README and product-facing generated assets.",
+                            )
+                            yield from field_input(
+                                "Logo",
+                                str(assets.get("logo", "")),
+                                placeholder="Logo path",
+                                widget_id="asset_logo",
+                                hint="Primary logo or wordmark asset.",
+                            )
+                            yield from field_input(
+                                "Render image",
+                                str(assets.get("product_image", "")),
+                                placeholder="Render image path",
+                                widget_id="asset_product_image",
+                                hint="Hero render or product image used in docs.",
+                            )
+                    with TabPane("Legal", id="legal_tab"):
+                        with VerticalScroll(classes="project-info-pane"):
+                            yield from section_intro(
+                                "Legal profile",
+                                "These defaults populate notices, worksheets, and release packaging.",
+                            )
+                            yield from field_select(
+                                "Profile",
+                                config.legal_profile,
+                                widget_id="legal_profile",
+                                hint="Select the baseline legal profile for this project.",
+                                options=[(name, name) for name in sorted(legal_profiles) or [config.legal_profile]],
+                            )
+                            yield from field_input(
+                                "Hardware design license",
+                                str(legal_project.get("hardware_design_license", "")),
+                                placeholder="CERN-OHL-S-2.0",
+                                widget_id="legal_hardware_design_license",
+                                hint="Primary hardware design license identifier.",
+                            )
+                            yield from field_input(
+                                "Copyright holder",
+                                str(legal_project.get("copyright_holder", "")),
+                                placeholder="Acme Labs",
+                                widget_id="legal_copyright_holder",
+                                hint="Entity or person named in copyright notices.",
+                            )
+                            yield from field_input(
+                                "Notice file",
+                                str(legal_project.get("notice_file", "NOTICE.md")),
+                                placeholder="NOTICE.md",
+                                widget_id="legal_notice_file",
+                                hint="Repository file that contains attribution and legal notice text.",
+                            )
+                            yield from field_textarea(
+                                "Safety notice",
+                                str(legal_project.get("safety_notice", "")),
+                                widget_id="legal_safety_notice",
+                                hint="Important warning text included in generated legal outputs.",
+                            )
+                            yield from field_textarea(
+                                "Sheet notice",
+                                str(sheet.get("legal_notice") or config.sheet_legal_notice),
+                                widget_id="sheet_legal_notice",
+                                hint="Expanded into `${SHEET_LEGAL_NOTICE}` in the worksheet.",
+                            )
+                    with TabPane("Manufacturing", id="manufacturing_tab"):
+                        with VerticalScroll(classes="project-info-pane"):
+                            yield from section_intro(
+                                "Fabrication defaults",
+                                "These switches define manufacturing assumptions used by reports and fab notes.",
+                            )
+                            for label, key, default, hint in (
+                                (
+                                    "RoHS / Pb-free",
+                                    "rohs_pb_free",
+                                    "true",
+                                    "Marks the design as RoHS / Pb-free by default.",
+                                ),
+                                (
+                                    "Conformal coating",
+                                    "conformal_coating",
+                                    "false",
+                                    "Set true if coating is a normal build requirement.",
+                                ),
+                                (
+                                    "Silkscreen legend",
+                                    "silkscreen_enabled",
+                                    "true",
+                                    "Set false when no silkscreen legend should be manufactured.",
+                                ),
+                                (
+                                    "Tented vias",
+                                    "tented_vias",
+                                    "true",
+                                    "Controls the default via tenting expectation.",
+                                ),
+                                (
+                                    "Controlled impedance",
+                                    "impedance_enabled",
+                                    "false",
+                                    "Enable when the board requires impedance notes and a table.",
+                                ),
+                                (
+                                    "Halogen-free material",
+                                    "halogen_free",
+                                    "true",
+                                    "Marks equivalent laminate requirements as halogen-free.",
+                                ),
+                            ):
+                                yield from field_select(
+                                    label,
+                                    str(manufacturing.get(key, default)).lower(),
+                                    widget_id=f"manufacturing_{key}",
+                                    hint=hint,
+                                    options=bool_options,
+                                )
+                            yield from field_input(
+                                "Manufacturing standard",
+                                str(manufacturing.get("manufacturing_standard", "IPC-6012 Class 2")),
+                                placeholder="IPC-6012 Class 2",
+                                widget_id="manufacturing_manufacturing_standard",
+                                hint="Fabrication workmanship standard named in fab notes.",
+                            )
+                            yield from field_input(
+                                "Core material",
+                                str(manufacturing.get("core_material", "FR-4")),
+                                placeholder="FR-4",
+                                widget_id="manufacturing_core_material",
+                                hint="Laminate or core material requirement.",
+                            )
+                            yield from field_input(
+                                "Flammability",
+                                str(manufacturing.get("flammability_rating", "UL94V-0")),
+                                placeholder="UL94V-0",
+                                widget_id="manufacturing_flammability_rating",
+                                hint="Minimum flammability rating for laminate material.",
+                            )
+                            yield from field_input(
+                                "Tg rating",
+                                str(manufacturing.get("tg_rating", "170 C")),
+                                placeholder="170 C",
+                                widget_id="manufacturing_tg_rating",
+                                hint="Minimum glass-transition temperature or equivalent requirement.",
+                            )
+                            yield from section_intro(
+                                "Manufacturing notes",
+                                "These freeform notes are exported into fabrication and assembly outputs.",
+                            )
+                            yield from field_textarea(
+                                "Fab notes",
+                                str(manufacturing.get("fabrication_notes", "")),
+                                widget_id="manufacturing_fabrication_notes",
+                                hint="Special fabrication instructions for the board house.",
+                            )
+                            yield from field_textarea(
+                                "Assembly notes",
+                                str(manufacturing.get("assembly_notes", "")),
+                                widget_id="manufacturing_assembly_notes",
+                                hint="Special assembly instructions for population and handling.",
+                            )
+                            yield from field_textarea(
+                                "Testpoint policy",
+                                str(manufacturing.get("testpoint_policy", "")),
+                                widget_id="manufacturing_testpoint_policy",
+                                hint="Define expectations for test access and coverage.",
+                            )
+                            yield from field_textarea(
+                                "Impedance notes",
+                                str(manufacturing.get("impedance_notes", "")),
+                                widget_id="manufacturing_impedance_notes",
+                                hint="Impedance assumptions.",
+                            )
+                            yield from field_textarea(
+                                "Impedance table",
+                                impedance_table_text,
+                                widget_id="manufacturing_impedance_table",
+                                hint=(
+                                    "CSV: Transmission Line, Impedance, Tolerance, Layer, Width, Gap, Ref. Layers."
+                                ),
+                            )
+                yield Button("Save", id="save_project_info")
                 yield Button("Cancel", id="cancel_project_info")
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -407,6 +1056,16 @@ def _build_textual_app():
                         "name": self.query_one("#project_name", Input).value.strip(),
                         "board_name": self.query_one("#project_board_name", Input).value.strip(),
                         "board_revision": self.query_one("#project_board_revision", Input).value.strip(),
+                        "pcba_number": self.query_one("#project_pcba_number", Input).value.strip(),
+                        "pcb_number": self.query_one("#project_pcb_number", Input).value.strip(),
+                        "document_revision": self.query_one("#project_document_revision", Input).value.strip(),
+                        "document_revision_scheme": str(self.query_one("#project_document_revision_scheme", Select).value),
+                        "drawn_by": self.query_one("#project_drawn_by", Input).value.strip(),
+                        "drawn_date": self.query_one("#project_drawn_date", Input).value.strip(),
+                        "checked_by": self.query_one("#project_checked_by", Input).value.strip(),
+                        "checked_date": self.query_one("#project_checked_date", Input).value.strip(),
+                        "approved_by": self.query_one("#project_approved_by", Input).value.strip(),
+                        "approved_date": self.query_one("#project_approved_date", Input).value.strip(),
                         "company": self.query_one("#project_company", Input).value.strip(),
                         "designer": self.query_one("#project_designer", Input).value.strip(),
                         "git_url": self.query_one("#project_git_url", Input).value.strip(),
@@ -422,6 +1081,52 @@ def _build_textual_app():
                         "logo": self.query_one("#asset_logo", Input).value.strip(),
                         "product_image": self.query_one("#asset_product_image", Input).value.strip(),
                     },
+                    "template": {
+                        "sheet_image": self.query_one("#template_sheet_image", Input).value.strip(),
+                    },
+                    "sheet": {
+                        "legal_notice": self.query_one("#sheet_legal_notice", TextArea).text.strip(),
+                    },
+                    "branches": {
+                        "development": self.query_one("#branch_development", Input).value.strip(),
+                        "preview": self.query_one("#branch_preview", Input).value.strip(),
+                        "release": self.query_one("#branch_release", Input).value.strip(),
+                    },
+                    "legal": {
+                        "profile": str(self.query_one("#legal_profile", Select).value),
+                        "hardware_design_license": self.query_one("#legal_hardware_design_license", Input).value.strip(),
+                        "copyright_holder": self.query_one("#legal_copyright_holder", Input).value.strip(),
+                        "notice_file": self.query_one("#legal_notice_file", Input).value.strip(),
+                        "safety_notice": self.query_one("#legal_safety_notice", TextArea).text.strip(),
+                    },
+                    "manufacturing": {
+                        "rohs_pb_free": str(self.query_one("#manufacturing_rohs_pb_free", Select).value),
+                        "conformal_coating": str(self.query_one("#manufacturing_conformal_coating", Select).value),
+                        "silkscreen_enabled": str(self.query_one("#manufacturing_silkscreen_enabled", Select).value),
+                        "tented_vias": str(self.query_one("#manufacturing_tented_vias", Select).value),
+                        "impedance_enabled": str(self.query_one("#manufacturing_impedance_enabled", Select).value),
+                        "halogen_free": str(self.query_one("#manufacturing_halogen_free", Select).value),
+                        "manufacturing_standard": self.query_one("#manufacturing_manufacturing_standard", Input).value.strip(),
+                        "core_material": self.query_one("#manufacturing_core_material", Input).value.strip(),
+                        "flammability_rating": self.query_one("#manufacturing_flammability_rating", Input).value.strip(),
+                        "tg_rating": self.query_one("#manufacturing_tg_rating", Input).value.strip(),
+                        "fabrication_notes": self.query_one("#manufacturing_fabrication_notes", TextArea).text.strip(),
+                        "assembly_notes": self.query_one("#manufacturing_assembly_notes", TextArea).text.strip(),
+                        "testpoint_policy": self.query_one("#manufacturing_testpoint_policy", TextArea).text.strip(),
+                        "impedance_notes": self.query_one("#manufacturing_impedance_notes", TextArea).text.strip(),
+                        "impedance_table": _parse_impedance_table_input(
+                            self.query_one("#manufacturing_impedance_table", TextArea).text
+                        ),
+                    },
+                    "outputs": {
+                        "commit_generated_outputs_to_main": str(self.query_one("#outputs_commit_generated_outputs_to_main", Select).value),
+                        "use_preview_branch": str(self.query_one("#outputs_use_preview_branch", Select).value),
+                        "release_include_source_archive": str(self.query_one("#outputs_release_include_source_archive", Select).value),
+                        "combined_review_pdf": str(self.query_one("#outputs_combined_review_pdf", Select).value),
+                        "combined_pdf_name": self.query_one("#outputs_combined_pdf_name", Input).value.strip(),
+                        "combined_pdf_toc": str(self.query_one("#outputs_combined_pdf_toc", Select).value),
+                        "combined_pdf_page_numbers": str(self.query_one("#outputs_combined_pdf_page_numbers", Select).value),
+                    },
                 }
             )
 
@@ -430,14 +1135,15 @@ def _build_textual_app():
 
         def compose(self) -> ComposeResult:
             with Vertical(id="dialog"):
-                yield Label("Accept To Main", classes="section-title")
+                yield Label("Accept", classes="section-title")
+                yield Static("Pick how outputs land on main.", classes="muted")
                 yield Select(
                     [(variant, variant) for variant in ("DRAFT", "PRELIMINARY", "CHECKED", "RELEASED")],
                     value="CHECKED",
                     id="accept_variant",
                 )
                 yield Select(
-                    [("Update main README/snapshot", "yes"), ("Upload only", "no")],
+                    [("README", "yes"), ("Upload", "no")],
                     value="yes",
                     id="accept_commit",
                 )
@@ -461,13 +1167,13 @@ def _build_textual_app():
 
         def compose(self) -> ComposeResult:
             with Vertical(id="dialog"):
-                yield Label("Commit + Push", classes="section-title")
+                yield Label("Commit", classes="section-title")
                 yield Input(
                     value=self.suggested_message,
                     placeholder="feat: describe the board change",
                     id="commit_message",
                 )
-                yield Button("Commit + Push", id="confirm_commit_push")
+                yield Button("Commit", id="confirm_commit_push")
                 yield Button("Cancel", id="cancel_commit")
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -483,7 +1189,8 @@ def _build_textual_app():
 
         def compose(self) -> ComposeResult:
             with Vertical(id="dialog"):
-                yield Label("Create Release", classes="section-title")
+                yield Label("Release", classes="section-title")
+                yield Static("Review version, variant, and kind.", classes="muted")
                 yield Input(placeholder="0.1.2", id="release_version")
                 yield Select(
                     [(variant, variant) for variant in ("DRAFT", "PRELIMINARY", "CHECKED", "RELEASED")],
@@ -495,7 +1202,7 @@ def _build_textual_app():
                     value="release",
                     id="release_kind",
                 )
-                yield Button("Dispatch", id="dispatch_release")
+                yield Button("Run", id="dispatch_release")
                 yield Button("Cancel", id="cancel_release")
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -516,9 +1223,10 @@ def _build_textual_app():
 
         def compose(self) -> ComposeResult:
             with Vertical(id="dialog"):
-                yield Label("Release Readiness", classes="section-title")
+                yield Label("Release", classes="section-title")
+                yield Static("Confirm the checklist before dispatch.", classes="muted")
                 yield Static(_format_release_checklist(self.checklist), id="release_checklist")
-                yield Button("Dispatch", id="confirm_release")
+                yield Button("Run", id="confirm_release")
                 yield Button("Cancel", id="cancel_release")
 
         def on_mount(self) -> None:
@@ -530,11 +1238,85 @@ def _build_textual_app():
                 return
             self.dismiss(None)
 
+    class GenerateSheetScreen(ModalScreen[dict[str, str] | None]):
+        CSS = ChangelogEntryScreen.CSS
+
+        def compose(self) -> ComposeResult:
+            config = load_config()
+            parent = find_primary_schematic(config.root)
+            default_parent = str(parent) if parent is not None else "boardwright.kicad_sch"
+            with Vertical(id="dialog"):
+                yield Label("New Sheet", classes="section-title")
+                yield Static(
+                    "Add a hierarchical sheet and create the child schematic.",
+                    classes="muted",
+                )
+                yield Input(value=default_parent, placeholder="Parent schematic", id="sheet_parent")
+                yield Input(value="Section A", placeholder="Sheet name", id="sheet_name")
+                yield Input(
+                    value="section-a.kicad_sch",
+                    placeholder="Child schematic filename",
+                    id="sheet_child_file",
+                )
+                yield Input(
+                    value="Section A",
+                    placeholder="Child schematic title",
+                    id="sheet_child_title",
+                )
+                yield Button("Create", id="generate_sheet_confirm")
+                yield Button("Cancel", id="cancel_generate_sheet")
+
+        def on_button_pressed(self, event: Button.Pressed) -> None:
+            if event.button.id == "cancel_generate_sheet":
+                self.dismiss(None)
+                return
+            self.dismiss(
+                {
+                    "parent": self.query_one("#sheet_parent", Input).value.strip(),
+                    "sheet_name": self.query_one("#sheet_name", Input).value.strip(),
+                    "child_file": self.query_one("#sheet_child_file", Input).value.strip(),
+                    "child_title": self.query_one("#sheet_child_title", Input).value.strip(),
+                }
+            )
+
+    class ShortcutHelpScreen(ModalScreen[None]):
+        CSS = ChangelogEntryScreen.CSS
+
+        def compose(self) -> ComposeResult:
+            with Vertical(id="dialog"):
+                yield Label("Shortcuts", classes="section-title")
+                yield Static(_format_shortcut_help(), id="shortcut_help")
+                yield Button("Close", id="close_shortcuts")
+
+        def on_button_pressed(self, event: Button.Pressed) -> None:
+            self.dismiss(None)
+
+    class ValidationReportScreen(ModalScreen[None]):
+        CSS = ChangelogEntryScreen.CSS
+
+        def __init__(self, issues: tuple[ValidationIssue, ...]) -> None:
+            super().__init__()
+            self.issues = issues
+
+        def compose(self) -> ComposeResult:
+            with Vertical(id="dialog"):
+                yield Label("Validation", classes="section-title")
+                yield Static(
+                    "Use `boardwright doctor` for the full check set.",
+                    classes="muted",
+                )
+                yield Static(_format_validation_details(self.issues), id="validation_help")
+                yield Button("Close", id="close_validation")
+
+        def on_button_pressed(self, event: Button.Pressed) -> None:
+            self.dismiss(None)
+
     class BoardwrightTui(App):
         TITLE = "Boardwright"
-        SUB_TITLE = "KiCad/KiBot workflow cockpit"
+        SUB_TITLE = "Design. Ship."
 
-        CSS = """
+        CSS = (
+            """
         Screen {
             layout: vertical;
         }
@@ -544,63 +1326,240 @@ def _build_textual_app():
             height: 3;
             padding: 1 2 0 2;
             content-align: left middle;
-            border-bottom: solid $accent;
-            background: $surface;
+            border-bottom: solid {BRAND_TEAL};
+            background: {SURFACE_TOP};
             overflow-x: auto;
         }
 
         #body {
+            layout: horizontal;
             height: 1fr;
             padding: 0 1 1 1;
         }
 
+        #body.compact {
+            padding: 0 0 1 0;
+        }
+
+        #body.short {
+            padding: 0 0 1 0;
+        }
+
+        #body.tiny {
+            padding: 0 0 1 0;
+        }
+
         #summary {
-            width: 34;
+            width: 26;
+            min-width: 18;
+            height: 1fr;
+            overflow-y: auto;
             padding: 1 1;
-            border: solid $primary;
+            border: solid {BRAND_TEAL};
+            background: {SURFACE_DARK};
+        }
+
+        #body.compact #summary,
+        #body.short #summary,
+        #body.tiny #summary {
+            width: 20;
+            min-width: 16;
+            padding: 0 1;
+        }
+
+        #body.tiny .panel-title,
+        #body.tiny .section-title {
+            margin-top: 0;
+            margin-bottom: 0;
+        }
+
+        #body.tiny .section-title {
+            height: 1;
+        }
+
+        #body.compact #project_heading,
+        #body.short #project_heading,
+        #body.tiny #project_heading,
+        #body.compact #project_status,
+        #body.short #project_status,
+        #body.tiny #project_status {
+            display: none;
+        }
+
+        #body.compact #actions {
+            padding-right: 0;
         }
 
         #actions {
             height: 1fr;
+            min-width: 0;
             padding-right: 1;
+            overflow-y: auto;
         }
 
         .action-grid {
-            grid-size: 2;
-            grid-columns: 1fr 1fr;
-            grid-gutter: 1 1;
+            grid-size: 1;
+            grid-columns: 1fr;
+            grid-gutter: 0;
             height: auto;
+        }
+
+        #body.compact Button.action-button {
+            height: 3;
+            min-height: 3;
+        }
+
+        #body.short Button.action-button,
+        #body.tiny Button.action-button {
+            height: 3;
+            min-height: 3;
+            padding: 0;
         }
 
         #details {
             width: 1fr;
+            height: 1fr;
+            overflow-y: auto;
             padding: 1;
-            border: solid $secondary;
+            border: solid {BORDER_SUBTLE};
+            background: {SURFACE_DARK};
+        }
+
+        #body.compact #details {
+            width: 1fr;
+            min-width: 0;
+            height: 1fr;
+            padding: 0 0 0 1;
+        }
+
+        #body.short #details {
+            width: 1fr;
+            min-width: 0;
+            height: 1fr;
+            padding: 0 0 0 1;
+        }
+
+        #body.tiny #details {
+            width: 1fr;
+            min-width: 0;
+            height: 1fr;
+            padding: 0 0 0 1;
         }
 
         #main_details {
-            height: 13;
-            min-height: 11;
+            height: 12;
+            min-height: 10;
+            min-width: 0;
+        }
+
+        #body.compact #main_details {
+            layout: vertical;
+            height: 1fr;
+            min-height: 0;
+        }
+
+        #body.compact #lower_details {
+            height: auto;
+        }
+
+        #body.short #main_details,
+        #body.short #lower_details {
+            height: auto;
+        }
+
+        #body.tiny #main_details {
+            layout: vertical;
+            height: 9;
+            min-height: 9;
+            margin-top: 0;
+        }
+
+        #body.tiny #lower_details {
+            display: none;
         }
 
         #timeline_panel {
             width: 38;
-            min-width: 32;
+            min-width: 0;
             padding-right: 1;
+        }
+
+        #body.compact #timeline_panel,
+        #body.compact #inspector_panel,
+        #body.compact #validation_panel,
+        #body.compact #git_panel {
+            width: 1fr;
+            min-width: 0;
+            padding-left: 0;
+            padding-right: 0;
+            border-left: none;
+        }
+
+        #body.compact #timeline_panel,
+        #body.compact #inspector_panel {
+            padding-right: 0;
+        }
+
+        #body.compact #inspector_panel,
+        #body.compact #git_panel {
+            border-top: solid {BORDER_SUBTLE};
+            margin-top: 1;
+            padding-top: 1;
+        }
+
+        #body.compact #inspector_panel {
+            margin-top: 0;
+        }
+
+        #body.short #timeline_panel,
+        #body.short #inspector_panel,
+        #body.short #validation_panel,
+        #body.short #git_panel {
+            width: 1fr;
+            min-width: 0;
+            padding-left: 0;
+            padding-right: 0;
+            border-left: none;
+        }
+
+        #body.short #inspector_panel,
+        #body.short #git_panel {
+            border-top: solid {BORDER_SUBTLE};
+            margin-top: 1;
+            padding-top: 1;
+        }
+
+        #body.tiny #timeline_panel,
+        #body.tiny #inspector_panel {
+            width: 1fr;
+            min-width: 0;
+            padding-left: 0;
+            padding-right: 0;
+            border-left: none;
+        }
+
+        #body.tiny #inspector_panel {
+            border-top: solid {BORDER_SUBTLE};
+            margin-top: 1;
+            padding-top: 1;
         }
 
         #inspector_panel {
             width: 1fr;
+            min-width: 0;
             padding-left: 1;
-            border-left: solid $secondary;
+            border-left: solid {BORDER_SUBTLE};
         }
 
         #workflow_status,
         #inspector_status {
             height: 1fr;
+            min-width: 0;
             padding: 0 1 1 1;
-            background: $boost;
+            background: {SURFACE_RAISED};
             overflow-y: auto;
+            content-align: left top;
+            text-align: left;
         }
 
         #lower_details {
@@ -608,15 +1567,58 @@ def _build_textual_app():
             margin-top: 1;
         }
 
+        #body.compact #lower_details {
+            layout: vertical;
+        }
+
+        #body.short #lower_details {
+            layout: vertical;
+            margin-top: 0;
+        }
+
+        #body.short #main_details {
+            height: 8;
+            min-height: 8;
+        }
+
+        #body.short #workflow_status,
+        #body.short #inspector_status {
+            height: 4;
+        }
+
+        #body.tiny #workflow_status,
+        #body.tiny #inspector_status {
+            height: 3;
+        }
+
+        #body.tiny #top_status {
+            height: 2;
+        }
+
+        #body.tiny .section-title,
+        #body.tiny .panel-title {
+            display: none;
+        }
+
+        #body.short #validation_status,
+        #body.short #git_scroll {
+            height: 3;
+        }
+
+        #body.tiny #validation_status,
+        #body.tiny #git_scroll {
+            height: 2;
+        }
+
         #validation_panel {
-            width: 1fr;
-            padding-right: 1;
+            width: 0.75fr;
+            padding-right: 0;
         }
 
         #git_panel {
-            width: 1fr;
-            padding-left: 1;
-            border-left: solid $secondary;
+            width: 1.25fr;
+            padding-left: 0;
+            border-left: solid {BORDER_SUBTLE};
         }
 
         #validation_status,
@@ -625,17 +1627,52 @@ def _build_textual_app():
             overflow-y: auto;
         }
 
+        #git_scroll {
+            padding-left: 0;
+            padding-right: 0;
+            content-align: left top;
+        }
+
         #git_status {
+            width: 100%;
             height: auto;
+            content-align: left top;
+            text-align: left;
+        }
+
+        #validation_status {
+            padding: 0 1 0 1;
+        }
+
+        #shortcut_hint {
+            width: 100%;
+            height: 1;
+            padding: 0 2;
+            content-align: left middle;
+            color: $text-muted;
+            border-top: solid {BORDER_SUBTLE};
+            background: {SURFACE_TOP};
+            overflow-x: auto;
+        }
+
+        #shortcut_help {
+            height: auto;
+            margin-bottom: 1;
+        }
+
+        #validation_help {
+            height: 1fr;
+            overflow-y: auto;
+            margin-bottom: 1;
         }
 
         .panel-title {
             width: 100%;
             text-style: bold;
-            color: $accent;
+            color: {BRAND_TEAL};
             margin-bottom: 1;
-            content-align: center middle;
-            text-align: center;
+            content-align: left middle;
+            text-align: left;
         }
 
         .section-title {
@@ -643,43 +1680,71 @@ def _build_textual_app():
             text-style: bold;
             margin-bottom: 0;
             margin-top: 1;
+            color: {STATUS_INFO};
+            content-align: left middle;
+            text-align: left;
+        }
+
+        .field-label {
+            width: 100%;
+            text-style: bold;
+            margin-top: 1;
+            margin-bottom: 0;
+            color: {STATUS_INFO};
+        }
+
+        .field-hint {
+            width: 100%;
             color: $text-muted;
-            content-align: center middle;
-            text-align: center;
+            margin-bottom: 0;
         }
 
         Button.action-button {
             width: 100%;
-            height: 4;
-            min-height: 4;
+            height: 3;
+            min-height: 3;
             margin-top: 0;
-            content-align: center middle;
-            text-align: center;
+            padding: 0 1;
+            content-align: left middle;
+            text-align: left;
         }
 
         Button.primary-action {
-            border: tall $success;
+            border: tall {BRAND_TEAL};
         }
 
         Button.secondary-action {
-            border: tall $primary;
+            border: tall {STATUS_INFO};
         }
 
         Button.danger-action {
-            border: tall $error;
+            border: tall {STATUS_ERROR};
         }
         """
+            .replace("{BRAND_TEAL}", BRAND_TEAL)
+            .replace("{SURFACE_DARK}", SURFACE_DARK)
+            .replace("{SURFACE_TOP}", SURFACE_TOP)
+            .replace("{SURFACE_RAISED}", SURFACE_RAISED)
+            .replace("{BORDER_SUBTLE}", BORDER_SUBTLE)
+            .replace("{STATUS_INFO}", STATUS_INFO)
+            .replace("{STATUS_ERROR}", STATUS_ERROR)
+        )
 
         BINDINGS = [
             ("q", "quit", "Quit"),
             ("r", "refresh", "Refresh"),
-            ("c", "record_change", "Record Change"),
-            ("m", "commit_push", "Commit + Push"),
-            ("g", "generate_preview", "Generate Preview"),
-            ("a", "review_artifacts", "Review Artifacts"),
-            ("p", "accept_main", "Accept Main"),
+            ("c", "record_change", "Record"),
+            ("m", "commit_push", "Commit"),
+            ("g", "generate_preview", "Preview"),
+            ("a", "review_artifacts", "Review"),
+            ("v", "view_validation", "Validation"),
+            ("o", "open_preview_folder", "Folder"),
+            ("O", "open_preview_readme", "README"),
+            ("n", "generate_sheet", "Sheet"),
+            ("p", "accept_main", "Accept"),
             ("l", "release_ci", "Release"),
-            ("i", "project_info", "Project Info"),
+            ("i", "project_info", "Info"),
+            ("f1", "show_shortcuts", "Help"),
         ]
 
         def __init__(self) -> None:
@@ -687,31 +1752,66 @@ def _build_textual_app():
             self.state = collect_dashboard_state()
             self.ci_status = "CI not polled"
             self.review_variant = ""
+            self.review_destination: Path | None = None
             self._ci_polling = False
+            self._layout_mode = "wide"
+
+        def _apply_layout_mode(self, width: int, height: int) -> None:
+            layout_mode = _responsive_layout_mode(width, height)
+            if layout_mode == self._layout_mode:
+                return
+            self._layout_mode = layout_mode
+            body = self.query_one("#body")
+            body.set_class(layout_mode == "tiny", "tiny")
+            body.set_class(layout_mode == "compact", "compact")
+            body.set_class(layout_mode == "short", "short")
+            self._sync_action_labels()
+
+        def _screen_title(self) -> str:
+            return "Boardwright"
+
+        def _screen_subtitle(self) -> str:
+            return "Design. Ship."
+
+        def _sync_action_labels(self) -> None:
+            labels = _action_button_labels(self._layout_mode)
+            for button_id, label in labels.items():
+                button = self.query_one(f"#{button_id}", Button)
+                if str(button.label) != label:
+                    button.label = label
+
+        def watch_size(self, old_size, new_size) -> None:  # type: ignore[override]
+            self._apply_layout_mode(new_size.width, new_size.height)
+
+        def on_resize(self, event) -> None:  # pragma: no cover - Textual event hook
+            self._apply_layout_mode(self.size.width, self.size.height)
 
         def compose(self) -> ComposeResult:
-            yield Header(show_clock=True)
+            yield Header(show_clock=False)
             yield Static(id="top_status")
             with Horizontal(id="body"):
                 with Vertical(id="summary"):
-                    yield Label("Actions", classes="panel-title")
-                    yield Label("Project", classes="section-title")
+                    yield Label("Project", classes="section-title", id="project_heading")
                     yield Static(id="project_status")
                     with Vertical(id="actions"):
                         yield Label("Work", classes="section-title")
                         with Grid(classes="action-grid"):
-                            yield Button("Record\nChanges", id="record_change", classes="action-button primary-action")
-                            yield Button("Commit\n+ Push", id="commit_push", classes="action-button primary-action")
-                        yield Label("Preview", classes="section-title")
+                            yield Button("Record", id="record_change", classes="action-button primary-action")
+                            yield Button("Commit", id="commit_push", classes="action-button primary-action")
+                        yield Label("Artifacts", classes="section-title")
                         with Grid(classes="action-grid"):
-                            yield Button("Generate\nPreview", id="generate_preview", classes="action-button secondary-action")
-                            yield Button("Review\nArtifacts", id="review_artifacts", classes="action-button secondary-action")
-                        yield Button("Accept\nto Main", id="accept_main", classes="action-button secondary-action")
+                            yield Button("Preview", id="generate_preview", classes="action-button secondary-action")
+                            yield Button("Review", id="review_artifacts", classes="action-button secondary-action")
+                            yield Button("Folder", id="open_preview_folder", classes="action-button secondary-action")
+                            yield Button("README", id="open_preview_readme", classes="action-button secondary-action")
+                        yield Label("Schematics", classes="section-title")
+                        yield Button("New Sheet", id="generate_sheet", classes="action-button secondary-action")
+                        yield Button("Accept", id="accept_main", classes="action-button secondary-action")
                         yield Label("Release", classes="section-title")
-                        yield Button("Create\nRelease", id="release_ci", classes="action-button danger-action")
+                        yield Button("Release", id="release_ci", classes="action-button danger-action")
                         yield Label("Setup", classes="section-title")
                         with Grid(classes="action-grid"):
-                            yield Button("Project\nInfo", id="project_info", classes="action-button secondary-action")
+                            yield Button("Info", id="project_info", classes="action-button secondary-action")
                             yield Button("Refresh", id="refresh", classes="action-button secondary-action")
                 with Vertical(id="details"):
                     with Horizontal(id="main_details"):
@@ -729,9 +1829,10 @@ def _build_textual_app():
                             yield Label("Changed Files", classes="panel-title")
                             with VerticalScroll(id="git_scroll"):
                                 yield Static(id="git_status")
-            yield Footer()
+            yield Static(id="shortcut_hint")
 
         def on_mount(self) -> None:
+            self._apply_layout_mode(self.size.width, self.size.height)
             self._render_state()
             self._poll_ci_status()
             self.set_interval(60, self._poll_ci_status)
@@ -747,18 +1848,26 @@ def _build_textual_app():
                 self.action_generate_preview()
             elif event.button.id == "review_artifacts":
                 self.action_review_artifacts()
+            elif event.button.id == "open_preview_folder":
+                self.action_open_preview_folder()
+            elif event.button.id == "open_preview_readme":
+                self.action_open_preview_readme()
+            elif event.button.id == "generate_sheet":
+                self.action_generate_sheet()
             elif event.button.id == "accept_main":
                 self.action_accept_main()
             elif event.button.id == "release_ci":
                 self.action_release_ci()
             elif event.button.id == "project_info":
                 self.action_project_info()
+            elif event.button.id == "view_validation":
+                self.action_view_validation()
 
         def action_refresh(self) -> None:
             self.state = collect_dashboard_state()
             self.ci_status = "Polling CI..."
             self._render_state()
-            self.notify("Refreshed project state.")
+            self.notify("Refreshed.")
             self._poll_ci_status(notify=True)
 
         def _poll_ci_status(self, notify: bool = False) -> None:
@@ -827,15 +1936,15 @@ def _build_textual_app():
             self.ci_status = ci_status
             self._render_state()
             if notify:
-                self.notify("Polled CI status.")
+                self.notify("CI refreshed.")
 
         def action_review_artifacts(self) -> None:
-            if not self._require_action("Review Artifacts"):
+            if not self._require_action("Review"):
                 return
             self.push_screen(ReviewVariantScreen(), self._review_artifact_variant)
 
         def action_generate_preview(self) -> None:
-            if not self._require_action("Generate Preview"):
+            if not self._require_action("Preview"):
                 return
             self.push_screen(PreviewDispatchScreen(), self._generate_preview)
 
@@ -846,21 +1955,21 @@ def _build_textual_app():
                 config = load_config()
                 if self.state.status.branch != config.dev_branch:
                     self.notify(
-                        f"Cannot generate preview from {self.state.status.branch}; switch to {config.dev_branch}.",
+                        f"Switch to {config.dev_branch} to preview.",
                         severity="error",
                     )
                     return
                 if self.state.status.dirty_count:
-                    self.notify("Commit and push local changes before generating preview.", severity="error")
+                    self.notify("Commit local changes before preview.", severity="error")
                     return
                 if self.state.status.ahead:
-                    self.notify("Push local commits before generating preview.", severity="error")
+                    self.notify("Push commits before preview.", severity="error")
                     return
                 plan = build_preview_plan(config, variant)
             except BoardwrightError as exc:
                 self.notify(str(exc), severity="error")
                 return
-            self.ci_status = f"Dispatching preview {plan.variant} via {plan.workflow}..."
+            self.ci_status = f"Preview {plan.variant} dispatching..."
             self._render_state()
             Thread(target=self._dispatch_preview, args=(plan.variant,), daemon=True).start()
 
@@ -881,16 +1990,22 @@ def _build_textual_app():
                 self.notify(error, severity="error")
                 return
             self.state = collect_dashboard_state()
-            self.ci_status = f"Preview workflow dispatched for {variant}."
+            self.ci_status = f"Preview {variant} dispatched."
             self._render_state()
-            self.notify(f"Preview workflow dispatched for {variant}.")
+            self.notify(f"Preview {variant} dispatched.")
 
         def action_project_info(self) -> None:
-            if not self._require_action("Project Info"):
+            if not self._require_action("Info"):
                 return
             self.push_screen(ProjectInfoScreen(), self._save_project_info)
 
-        def _save_project_info(self, result: dict[str, dict[str, str]] | None) -> None:
+        def action_view_validation(self) -> None:
+            self.push_screen(ValidationReportScreen(self.state.issues))
+
+        def action_generate_sheet(self) -> None:
+            self.push_screen(GenerateSheetScreen(), self._generate_sheet)
+
+        def _save_project_info(self, result: dict[str, object] | None) -> None:
             if result is None:
                 return
             try:
@@ -900,13 +2015,52 @@ def _build_textual_app():
                     project_fields=result["project"],
                     variant_fields=result["variants"],
                     asset_fields=result["assets"],
+                    template_fields=result["template"],
+                    sheet_fields=result["sheet"],
+                    branch_fields=result["branches"],
+                    legal_fields=result["legal"],
+                    manufacturing_fields=result["manufacturing"],
+                    output_fields=result["outputs"],
+                )
+                updated_config = load_config()
+                _embed_template_sheet_image(updated_config)
+                self.state = collect_dashboard_state()
+            except BoardwrightError as exc:
+                self.notify(str(exc), severity="error")
+                return
+            self._render_state()
+            self.notify("Updated config and worksheet image.")
+
+        def _generate_sheet(self, result: dict[str, str] | None) -> None:
+            if result is None:
+                return
+            try:
+                config = load_config()
+                parent = Path(result["parent"]).expanduser()
+                if not parent.is_absolute():
+                    parent = config.root / parent
+                if not parent.exists():
+                    fallback_parent = find_primary_schematic(config.root)
+                    if fallback_parent is None:
+                        raise BoardwrightError("Could not find a parent schematic to update.")
+                    parent = fallback_parent
+                child_file = Path(result["child_file"]).expanduser()
+                if not child_file.is_absolute():
+                    child_file = parent.parent / child_file
+                if not child_file.name:
+                    child_file = parent.with_name(f"{slugify(result['sheet_name'])}.kicad_sch")
+                add_hierarchical_sheet(
+                    parent,
+                    child_file,
+                    sheet_name=result["sheet_name"],
+                    child_title=result["child_title"] or result["sheet_name"],
                 )
                 self.state = collect_dashboard_state()
             except BoardwrightError as exc:
                 self.notify(str(exc), severity="error")
                 return
             self._render_state()
-            self.notify(f"Updated {path.relative_to(load_config().root)}.")
+            self.notify(f"Generated {child_file.name}; updated {parent.name}.")
 
         def _review_artifact_variant(self, variant: str | None) -> None:
             if variant is None:
@@ -984,10 +2138,11 @@ def _build_textual_app():
             accepted_error: str,
         ) -> None:
             if preview_state is None:
-                self.ci_status = result or "Preview artifact fetch failed."
+                self.ci_status = result or "Preview fetch failed."
                 self._render_state()
                 self.notify(self.ci_status, severity="error")
                 return
+            self.review_destination = load_config().root / "boardwright-preview"
             self.state = collect_dashboard_state(
                 preview_state=preview_state,
                 accepted_state=accepted_state,
@@ -996,29 +2151,56 @@ def _build_textual_app():
             self.ci_status = format_preview_state(preview_state)
             self._render_state()
             if preview_state.reviewed:
-                self.notify(f"Reviewed boardwright-preview-{variant}; Accept to Main is unlocked.")
+                self.notify("Preview reviewed; Accept unlocked.")
             else:
-                self.notify(result or "Preview artifact fetched.")
+                self.notify(result or "Preview fetched.")
+
+        def action_open_preview_folder(self) -> None:
+            if self.review_destination is None or not self.review_destination.exists():
+                self.notify("Fetch a preview artifact first.", severity="warning")
+                return
+            try:
+                message = _open_path(self.review_destination)
+            except BoardwrightError as exc:
+                self.notify(str(exc), severity="error")
+                return
+            self.notify(message)
+
+        def action_open_preview_readme(self) -> None:
+            if self.review_destination is None or not self.review_destination.exists():
+                self.notify("Fetch a preview artifact first.", severity="warning")
+                return
+            readme = self.review_destination / "README.md"
+            target = readme if readme.exists() else self.review_destination
+            try:
+                message = _open_path(target)
+            except BoardwrightError as exc:
+                self.notify(str(exc), severity="error")
+                return
+            self.notify(message)
 
         def action_record_change(self) -> None:
-            if not self._require_action("Record Changes"):
+            if not self._require_action("Record"):
                 return
             self.push_screen(ChangelogEntryScreen(), self._record_change)
 
         def action_commit_push(self) -> None:
-            if not self._require_action("Commit + Push"):
+            if not self._require_action("Commit"):
                 return
             self.push_screen(CommitScreen(_suggested_commit_message()), self._commit_push)
 
         def action_accept_main(self) -> None:
-            if not self._require_action("Accept to Main"):
+            if not self._require_action("Accept"):
                 return
             self.push_screen(AcceptMainScreen(), self._accept_main)
 
         def action_release_ci(self) -> None:
-            if not self._require_action("Create Release"):
+            if not self._require_action("Release"):
                 return
             self.push_screen(ReleaseScreen(), self._release_ci)
+
+        def action_show_shortcuts(self) -> None:
+            self.push_screen(ShortcutHelpScreen())
 
         def _require_action(self, name: str) -> bool:
             action = action_state(self.state.workflow, name)
@@ -1044,12 +2226,12 @@ def _build_textual_app():
             self._render_state()
             if any(issue.level == "error" for issue in issues):
                 self.notify(
-                    "Recorded change; validation has blocking issues.",
+                    "Recorded change; validation blocks commit.",
                     severity="error",
                 )
             elif issues:
                 self.notify(
-                    f"Recorded change; validation has warnings. Suggested commit: {suggestion}",
+                    f"Recorded change; warnings. Suggested commit: {suggestion}",
                     severity="warning",
                 )
             else:
@@ -1060,11 +2242,11 @@ def _build_textual_app():
                 return
             message = result.strip()
             if not message:
-                self.notify("Commit message cannot be empty.", severity="error")
+                self.notify("Commit message is empty.", severity="error")
                 return
-            self.ci_status = "Commit + push running..."
+            self.ci_status = f"{_action_display_name('Commit')} running..."
             self._render_state()
-            self.notify("Committing and pushing dev...")
+            self.notify("Committing...")
             Thread(target=self._commit_push_worker, args=(message,), daemon=True).start()
 
         def _commit_push_worker(self, message: str) -> None:
@@ -1075,14 +2257,14 @@ def _build_textual_app():
                     self.call_from_thread(
                         self._finish_commit_push,
                         "",
-                        f"Cannot commit + push from {status.branch}; switch to {config.dev_branch}.",
+                        f"Switch to {config.dev_branch} to commit.",
                     )
                     return
                 if status.dirty_count and not status.unreleased_changes:
                     self.call_from_thread(
                         self._finish_commit_push,
                         "",
-                        "Cannot commit: record a changelog entry first.",
+                        "Record a changelog entry first.",
                     )
                     return
                 issues = tuple(validate_project(config))
@@ -1090,7 +2272,7 @@ def _build_textual_app():
                     self.call_from_thread(
                         self._finish_commit_push,
                         "",
-                        "Cannot commit: validation failed.",
+                        "Validation failed.",
                     )
                     return
                 write_revision_variables(config)
@@ -1102,7 +2284,7 @@ def _build_textual_app():
             except BoardwrightError as exc:
                 self.call_from_thread(self._finish_commit_push, "", str(exc))
                 return
-            result_message = f"{output or 'Committed changes.'}\n{push_output or 'Pushed dev.'}"
+            result_message = f"{output or 'Committed changes.'}\n{push_output or 'Pushed.'}"
             self.call_from_thread(
                 self._finish_commit_push,
                 result_message,
@@ -1111,12 +2293,12 @@ def _build_textual_app():
 
         def _finish_commit_push(self, result: str, error: str | None) -> None:
             self.state = collect_dashboard_state()
-            self.ci_status = error or result or "Commit + push complete."
+            self.ci_status = error or result or "Commit complete."
             self._render_state()
             if error:
                 self.notify(error, severity="error")
             else:
-                self.notify(result or "Commit + push complete.")
+                self.notify(result or "Commit complete.")
 
         def _accept_main(self, result: tuple[str, bool] | None) -> None:
             if result is None:
@@ -1129,7 +2311,7 @@ def _build_textual_app():
                     self.ci_status = format_preview_state(preview_state)
                     self._render_state()
                     self.notify(
-                        f"Cannot accept to main: preview is {preview_state.state}.",
+                        f"Cannot accept: preview is {preview_state.state}.",
                         severity="error",
                     )
                     return
@@ -1137,7 +2319,7 @@ def _build_textual_app():
                     self.ci_status = format_preview_state(preview_state)
                     self._render_state()
                     self.notify(
-                        "Cannot accept to main: review the fresh preview artifact first.",
+                        "Review the fresh preview first.",
                         severity="error",
                     )
                     return
@@ -1153,9 +2335,9 @@ def _build_textual_app():
                 self.notify(str(exc), severity="error")
                 return
             self.state = collect_dashboard_state()
-            self.ci_status = f"Accept {variant} dispatched via {action.workflow}."
+            self.ci_status = f"Accept {variant} dispatched."
             self._render_state()
-            self.notify(f"Dispatched {action.workflow} to accept {variant} on main.")
+            self.notify(f"Accept {variant} dispatched.")
             self._poll_ci_status()
 
         def _release_ci(self, result: tuple[str, str, str] | None) -> None:
@@ -1181,7 +2363,7 @@ def _build_textual_app():
             if checklist is None:
                 return
             if not checklist.can_dispatch or checklist.action is None:
-                self.notify("Cannot create release: checklist has blocking items.", severity="error")
+                self.notify("Release checklist has blocking items.", severity="error")
                 return
             try:
                 config = load_config()
@@ -1190,49 +2372,45 @@ def _build_textual_app():
                 self.notify(str(exc), severity="error")
                 return
             self.state = collect_dashboard_state(checklist.version or "0.1.0")
-            self.ci_status = f"Release {checklist.version} dispatched via {checklist.action.workflow}."
+            self.ci_status = f"Release {checklist.version} dispatched."
             self._render_state()
-            self.notify(f"Dispatched {checklist.action.workflow}.")
+            self.notify(f"Release {checklist.version} dispatched.")
             self._poll_ci_status()
 
         def _render_state(self) -> None:
             status = self.state.status
             dirty_summary = f"{status.dirty_count} changed" if status.dirty_count else "clean"
+            brief = self._layout_mode == "tiny"
+            self.title = self._screen_title()
+            self.sub_title = self._screen_subtitle()
+            self._sync_action_labels()
             self.query_one("#top_status", Static).update(
-                _format_top_status(status, self.state.issues, self.ci_status)
+                _format_top_status(status, self.state.issues, self.ci_status, brief=brief)
             )
             self.query_one("#project_status", Static).update(
-                "\n".join(
-                    [
-                        f"Name: {status.project_name}",
-                        f"Dev default: {status.variant}",
-                        f"Preview default: {load_config().preview_variant}",
-                        f"Unreleased: {'yes' if status.unreleased_changes else 'no'}",
-                        f"Git: {dirty_summary}",
-                        f"Remote: ahead {status.ahead}, behind {status.behind}",
-                    ]
-                )
+                _format_project_summary(status, brief=brief)
             )
             self.query_one("#workflow_status", Static).update(
                 _format_timeline(self.state.workflow.steps)
             )
             self.query_one("#inspector_status", Static).update(
-                _format_inspector(self.state, self.ci_status)
+                _format_inspector(self.state, self.ci_status, brief=brief)
             )
             self.query_one("#validation_status", Static).update(
-                _format_issues(self.state.issues)
+                _format_issues(self.state.issues, brief=brief)
             )
             self.query_one("#git_status", Static).update(
-                _format_changed_files(self.state.changed_files)
+                _format_changed_files(self.state.changed_files, brief=brief)
             )
+            self.query_one("#shortcut_hint", Static).update(_format_footer_hint(self.state))
             for button_id, action_name in (
-                ("record_change", "Record Changes"),
-                ("commit_push", "Commit + Push"),
-                ("generate_preview", "Generate Preview"),
-                ("review_artifacts", "Review Artifacts"),
-                ("accept_main", "Accept to Main"),
-                ("release_ci", "Create Release"),
-                ("project_info", "Project Info"),
+                ("record_change", "Record"),
+                ("commit_push", "Commit"),
+                ("generate_preview", "Preview"),
+                ("review_artifacts", "Review"),
+                ("accept_main", "Accept"),
+                ("release_ci", "Release"),
+                ("project_info", "Info"),
                 ("refresh", "Refresh"),
             ):
                 self.query_one(f"#{button_id}", Button).disabled = not action_state(
@@ -1243,33 +2421,114 @@ def _build_textual_app():
     return BoardwrightTui
 
 
-def _format_issues(issues: tuple[ValidationIssue, ...]) -> str:
+def _format_issues(issues: tuple[ValidationIssue, ...], *, brief: bool = False) -> Text:
+    text = Text()
     if not issues:
-        return "Validation passed."
-    return "\n".join(f"{issue.level}: {issue.message}" for issue in issues)
+        text.append("Validation ok.", style=_semantic_style("loaded"))
+        return text
+
+    errors = [issue for issue in issues if issue.level == "error"]
+    warnings = [issue for issue in issues if issue.level == "warning"]
+    text.append(
+        f"Validation: {len(errors)} error(s), {len(warnings)} warning(s)\n",
+        style=_semantic_style("error" if errors else "warning"),
+    )
+
+    shown = 0
+    limit = 1 if brief else 3
+    for issue in [*errors, *warnings]:
+        if shown >= limit:
+            break
+        style = _semantic_style("error" if issue.level == "error" else "warning")
+        prefix = "!" if issue.level == "error" else "~"
+        text.append(f"{prefix} {issue.message}\n", style=style)
+        shown += 1
+
+    remaining = len(issues) - shown
+    if remaining > 0:
+        text.append(
+            f"...and {remaining} more. Press `v` for details.",
+            style=_semantic_style("info", bold=False),
+        )
+    return text
+
+
+def _format_validation_details(issues: tuple[ValidationIssue, ...]) -> Text:
+    text = Text()
+    if not issues:
+        text.append("Validation ok.\n", style=_semantic_style("loaded"))
+        text.append("No blocking issues.", style=_semantic_style("loaded", bold=False))
+        return text
+
+    errors = [issue for issue in issues if issue.level == "error"]
+    warnings = [issue for issue in issues if issue.level == "warning"]
+    text.append(
+        f"{len(errors)} error(s), {len(warnings)} warning(s)\n\n",
+        style=_semantic_style("warning" if warnings and not errors else "error" if errors else "loaded"),
+    )
+    if errors:
+        text.append("Errors\n", style=f"bold {STATUS_ERROR}")
+        for issue in errors:
+            text.append(f"! {issue.message}\n", style=_semantic_style("error"))
+        text.append("\n")
+    if warnings:
+        text.append("Warnings\n", style=f"bold {STATUS_WARNING}")
+        for issue in warnings:
+            text.append(f"~ {issue.message}\n", style=_semantic_style("warning"))
+        text.append("\n")
+    text.append(
+        "Use `boardwright doctor` for the full check set.",
+        style=_semantic_style("info", bold=False),
+    )
+    return text
 
 
 def _format_top_status(
     status: ProjectStatus,
     issues: tuple[ValidationIssue, ...],
     ci_status: str,
+    *,
+    brief: bool = False,
 ) -> Text:
+    if brief:
+        return _format_top_status_brief(status, issues, ci_status)
+
     text = Text()
-    text.append(status.project_id, style="bold")
+    text.append(status.project_id, style=f"bold {BRAND_TEAL}")
     text.append(" | branch ")
-    text.append(status.branch, style="cyan")
+    text.append(status.branch, style=_semantic_style("info"))
     text.append(" | git ")
     if status.dirty_count:
-        text.append(f"{status.dirty_count} changed", style="bold yellow")
+        text.append(f"{status.dirty_count} changed", style=_semantic_style("warning"))
     else:
-        text.append("clean", style="bold green")
+        text.append("clean", style=_semantic_style("loaded"))
     if status.ahead or status.behind:
         text.append(" | remote ")
-        text.append(f"+{status.ahead}/-{status.behind}", style="bold yellow")
+        text.append(f"+{status.ahead}/-{status.behind}", style=_semantic_style("warning"))
     text.append(" | dev ")
-    text.append(status.variant, style="magenta")
+    text.append(status.variant, style=_semantic_style("info"))
     text.append(" | tag ")
-    text.append(status.latest_tag or "none", style="cyan" if status.latest_tag else "dim")
+    text.append(status.latest_tag or "none", style=_semantic_style("loaded" if status.latest_tag else "unset"))
+    text.append(" | ")
+    text.append(_ci_status_short(ci_status), style=_ci_status_style(ci_status))
+    text.append(" | ")
+    text.append(_issue_summary(issues), style=_issue_summary_style(issues))
+    return text
+
+
+def _format_top_status_brief(
+    status: ProjectStatus,
+    issues: tuple[ValidationIssue, ...],
+    ci_status: str,
+) -> Text:
+    text = Text()
+    text.append(status.project_id, style=f"bold {BRAND_TEAL}")
+    text.append(" | ")
+    text.append(f"git {'changed' if status.dirty_count else 'clean'}", style=_semantic_style("warning" if status.dirty_count else "loaded"))
+    text.append(" | ")
+    text.append(f"dev {status.variant}", style=_semantic_style("info"))
+    text.append(" | tag ")
+    text.append(status.latest_tag or "none", style=_semantic_style("loaded" if status.latest_tag else "unset"))
     text.append(" | ")
     text.append(_ci_status_short(ci_status), style=_ci_status_style(ci_status))
     text.append(" | ")
@@ -1289,10 +2548,23 @@ def _issue_summary(issues: tuple[ValidationIssue, ...]) -> str:
 
 def _issue_summary_style(issues: tuple[ValidationIssue, ...]) -> str:
     if any(issue.level == "error" for issue in issues):
-        return "bold red"
+        return _semantic_style("error")
     if any(issue.level == "warning" for issue in issues):
-        return "bold yellow"
-    return "bold green"
+        return _semantic_style("warning")
+    return _semantic_style("loaded")
+
+
+def _format_project_summary(status: ProjectStatus, *, brief: bool = False) -> str:
+    lines = [
+        f"Name: {status.project_name}",
+        f"Dev default: {status.variant}",
+        f"Unreleased: {'yes' if status.unreleased_changes else 'no'}",
+        f"Git: {status.dirty_count} changed" if status.dirty_count else "Git: clean",
+    ]
+    if not brief:
+        lines.insert(2, f"Preview default: {load_config().preview_variant}")
+        lines.append(f"Remote: ahead {status.ahead}, behind {status.behind}")
+    return "\n".join(lines)
 
 
 def _workflow_steps(state: DashboardState) -> tuple[WorkflowStep, ...]:
@@ -1303,11 +2575,18 @@ def _format_timeline(steps: tuple[WorkflowStep, ...]) -> Text:
     text = Text()
     for step in steps:
         text.append(f"{_workflow_marker(step.state)} ", style=_workflow_state_style(step.state))
-        text.append(f"{step.label:<18}", style="bold")
-        text.append(" ")
+        text.append(_timeline_step_label(step.label), style="bold")
+        text.append(" | ", style="dim")
         text.append(step.state, style=_workflow_state_style(step.state))
         text.append("\n")
     return text
+
+
+def _timeline_step_label(label: str) -> str:
+    stripped = label.split(" ", 1)[1] if label[:1].isdigit() and " " in label else label
+    return {
+        "Edit in KiCad": "Edit",
+    }.get(stripped, stripped)
 
 
 def _workflow_marker(state: str) -> str:
@@ -1324,13 +2603,17 @@ def _workflow_marker(state: str) -> str:
 
 def _workflow_state_style(state: str) -> str:
     if state in {"done", "ready", "passed"}:
-        return "bold green"
-    if state in {"needed", "needs action", "waiting", "running", "missing", "stale", "locked"}:
-        return "bold yellow"
+        return _semantic_style("loaded")
+    if state in {"running", "queued", "polling", "dispatching", "downloading"}:
+        return _semantic_style("loading")
+    if state in {"needed", "needs action", "waiting", "stale", "locked"}:
+        return _semantic_style("warning")
+    if state in {"missing", "not checked"}:
+        return _semantic_style("unset")
     if state in {"blocked", "failed"}:
-        return "bold red"
+        return _semantic_style("error")
     if state == "external":
-        return "bold cyan"
+        return _semantic_style("info")
     return "bold"
 
 
@@ -1341,69 +2624,91 @@ def _suggested_commit_message(seed: str = "") -> str:
         return ""
 
 
-def _format_inspector(state: DashboardState, ci_status: str = "CI not polled") -> Text:
+def _format_inspector(state: DashboardState, ci_status: str = "CI not polled", *, brief: bool = False) -> Text:
     text = Text()
     _append_inspector_heading(text, "NOW")
-    text.append(state.workflow.next_action, style="bold")
-    text.append("\n")
-    text.append(state.workflow.reason, style="dim")
-    text.append("\n")
-    text.append(f"Stage: {state.workflow.stage}", style="dim")
+    if brief:
+        text.append(
+            f"Next: {_action_display_name(state.workflow.next_action)} | {state.workflow.stage}\n",
+            style="bold",
+        )
+    else:
+        text.append(f"Next: {_action_display_name(state.workflow.next_action)}\n", style="bold")
+        text.append(f"Reason: {state.workflow.reason}\n", style="dim")
+        text.append(f"Stage: {state.workflow.stage}", style="dim")
     text.append("\n\n")
 
     _append_inspector_heading(text, "EVIDENCE")
-    text.append("Preview: ", style="bold")
     preview_evidence = _preview_evidence_from_ci(ci_status)
-    text.append(preview_evidence, style=_evidence_style(preview_evidence))
-    text.append("\n")
-    review_hint = _review_hint(state)
-    if review_hint:
-        text.append("Review: ", style="bold")
-        text.append(review_hint, style="bold yellow")
-        text.append("\n")
-    text.append("Accept: ", style="bold")
     accept_evidence = _accept_evidence_from_ci(ci_status) or _accepted_summary_compact(state.accepted_summary)
-    text.append(accept_evidence, style=_evidence_style(accept_evidence))
-    text.append("\n")
-    text.append("Release: ", style="bold")
     release_evidence = _release_evidence_from_ci(ci_status)
-    text.append(release_evidence, style=_evidence_style(release_evidence))
-    text.append("\n")
-    text.append("Preview CI is dispatched manually from clean dev.", style="dim")
+    text.append(f"Preview: {preview_evidence}\n", style=_evidence_style(preview_evidence))
+    text.append(f"Accept: {accept_evidence}\n", style=_evidence_style(accept_evidence))
+    text.append(f"Release: {release_evidence}\n", style=_evidence_style(release_evidence))
+    review_hint = _review_hint(state)
+    if review_hint and not brief:
+        text.append(f"Review: {review_hint}", style=_semantic_style("warning"))
+        text.append("\n")
     lock_lines = _locked_action_lines(state.workflow)
-    if lock_lines:
+    if lock_lines and not brief:
         text.append("\n\n")
         _append_inspector_heading(text, "LOCKED")
-        for name, reason in lock_lines:
-            text.append(f"{name}: ", style="bold")
-            text.append(reason, style="dim")
-            text.append("\n")
-    else:
+        locked = "; ".join(f"{_action_display_name(name)} - {reason}" for name, reason in lock_lines)
+        text.append(locked, style="dim")
         text.append("\n")
     text.append("\n")
 
     _append_inspector_heading(text, "RELEASE")
     text.append(_release_summary_short(state), style=_release_summary_style(state.release_summary))
     text.append("\n")
-    text.append(state.ci_release_summary, style="dim")
+    if state.release_summary == "ready for dry-run":
+        text.append("Ready for dry run.", style="dim")
+    else:
+        text.append(state.ci_release_summary, style="dim")
     return text
 
 
 def _append_inspector_heading(text: Text, label: str) -> None:
-    text.append(label, style="bold cyan")
+    text.append(label, style=f"bold {BRAND_TEAL}")
     text.append("\n")
 
 
+def _format_footer_hint(state: DashboardState) -> Text:
+    text = Text()
+    text.append("Next: ", style=f"bold {BRAND_TEAL}")
+    text.append(_action_display_name(state.workflow.next_action), style="bold")
+    text.append(
+        " | Main: F1 help, v details, q quit, r refresh, c record, m commit, g preview, a review, o folder, O README, n sheet, p accept, l release, i info"
+    )
+    return text
+
+
+def _format_shortcut_help() -> Text:
+    text = Text()
+    text.append("Main screen\n", style=f"bold {BRAND_TEAL}")
+    text.append("F1", style=_semantic_style("info"))
+    text.append(
+        " help\nv details\nq quit\nr refresh\nc record\nm commit\ng preview\na review\nn new sheet\np accept\nl release\ni info\no folder\nO README\n"
+    )
+    text.append("\nCues\n", style=f"bold {BRAND_TEAL}")
+    text.append(
+        "Footer tracks the current screen; the subtitle shows stage and next action."
+    )
+    return text
+
+
 def _review_hint(state: DashboardState) -> str:
-    if state.workflow.next_action == "Review Artifacts":
-        return "fetch/review the preview artifact to unlock Accept to Main."
-    if state.workflow.next_action == "Accept to Main":
-        return "preview artifact is reviewed; Accept to Main is ready."
+    if state.workflow.next_action == "Preview":
+        return "run preview after push."
+    if state.workflow.next_action == "Fetch":
+        return f"download preview to unlock {_action_display_name('Accept')}."
+    if state.workflow.next_action == "Accept":
+        return f"preview reviewed; {_action_display_name('Accept')} is ready."
     return ""
 
 
 def _locked_action_lines(workflow: WorkflowState) -> list[tuple[str, str]]:
-    names = {"Generate Preview", "Review Artifacts", "Accept to Main", "Create Release"}
+    names = {"Preview", "Review", "Accept", "Release"}
     return [
         (action.name, action.reason)
         for action in workflow.actions
@@ -1441,11 +2746,15 @@ def _accepted_summary_compact(summary: str) -> str:
 def _accepted_summary_style(summary: str) -> str:
     state = _line_value([line.strip() for line in summary.splitlines()], "State")
     if state == "ready":
-        return "bold green"
+        return _semantic_style("loaded")
     if state == "failed":
-        return "bold red"
-    if state in {"missing", "running", "stale"}:
-        return "bold yellow"
+        return _semantic_style("error")
+    if state == "running":
+        return _semantic_style("loading")
+    if state in {"missing", "stale", "not checked"}:
+        return _semantic_style("unset")
+    if state:
+        return _semantic_style("warning")
     return "dim"
 
 
@@ -1468,12 +2777,20 @@ def _last_non_metadata_line(lines: list[str]) -> str:
 
 def _release_summary_short(state: DashboardState) -> str:
     if state.release_summary == "ready for dry-run":
-        return "Release inputs look valid."
+        return "Release inputs look good."
     return state.release_summary
 
 
 def _release_summary_style(summary: str) -> str:
-    return "bold green" if summary == "ready for dry-run" else "bold yellow"
+    if summary == "ready for dry-run":
+        return _semantic_style("loaded")
+    if "running" in summary or "dispatching" in summary:
+        return _semantic_style("loading")
+    if "error" in summary.lower() or "failed" in summary.lower():
+        return _semantic_style("error")
+    if "not checked" in summary.lower() or "no release runs" in summary.lower():
+        return _semantic_style("unset")
+    return _semantic_style("warning")
 
 
 def _format_review_artifacts(preview_state: "PreviewState", runs_text: str) -> str:
@@ -1502,7 +2819,10 @@ def _format_polled_ci_status(
         accept_summary = "Accept:error"
 
     release_summary = _release_status_compact(release_status, include_publish=False)
-    lines.append(f"CI: {preview_summary} | {accept_summary} | Release:{release_summary}")
+    preview_summary = preview_summary.replace("Preview:", "Preview: ")
+    accept_summary = accept_summary.replace("Accept:", "Accept: ")
+    release_summary = release_summary.removeprefix("Release:").strip()
+    lines.append(f"CI: {preview_summary} | {accept_summary} | Release: {release_summary}")
     lines.append("")
     lines.append("Preview:")
     if preview_state is not None:
@@ -1513,13 +2833,13 @@ def _format_polled_ci_status(
         lines.append("Preview: not checked")
 
     lines.append("")
-    lines.append("Accepted main:")
+    lines.append("Main:")
     if accepted_state is not None:
         lines.append(format_accepted_state(accepted_state))
     elif accepted_error:
         lines.append(accepted_error)
     else:
-        lines.append("Accepted main evidence not checked.")
+        lines.append("Main evidence not checked.")
     lines.append("")
     lines.append(release_status)
     return "\n".join(lines)
@@ -1684,15 +3004,14 @@ def build_release_checklist(
         release_plan = build_release_plan(config, selected_version, check_remote=False)
     except BoardwrightError as exc:
         release_error = str(exc)
-
     items = [
         ReleaseChecklistItem(
-            "Accepted main outputs",
+            "Main",
             accepted_state.ready,
             accepted_state.message or f"State: {accepted_state.state}",
         ),
         ReleaseChecklistItem(
-            "Release inputs",
+            "Inputs",
             action is not None,
             (
                 f"{selected_version} | {selected_variant} | {selected_kind}"
@@ -1701,16 +3020,16 @@ def build_release_checklist(
             ),
         ),
         ReleaseChecklistItem(
-            "Unreleased changelog",
+            "Changelog",
             release_plan is not None,
             (
-                "CHANGELOG.md has content ready to promote."
+                "Changelog has entries."
                 if release_plan and release_plan.has_unreleased_changes
-                else "No unreleased entries; release notes will include a generated no-change note."
+                else "No entries; notes will be generated."
             ),
         ),
         ReleaseChecklistItem(
-            "Release tag available",
+            "Tag",
             bool(release_plan and not release_plan.local_tag_exists),
             (
                 f"No local tag named {selected_version}."
@@ -1719,12 +3038,12 @@ def build_release_checklist(
             ),
         ),
         ReleaseChecklistItem(
-            "Dispatch target",
+            "Dispatch",
             action is not None,
             (
                 f"{action.workflow} on {action.ref}"
                 if action is not None
-                else "Dispatch action could not be built."
+                else "Release action could not be built."
             ),
         ),
     ]
@@ -1753,7 +3072,7 @@ def _format_release_checklist(checklist: ReleaseChecklist) -> str:
     lines.extend(
         [
             "",
-            "Accepted main:",
+            "Main:",
             _accepted_summary_short(checklist.accepted_summary),
         ]
     )
@@ -1763,9 +3082,9 @@ def _format_release_checklist(checklist: ReleaseChecklist) -> str:
         [
             "",
             (
-                "Ready to dispatch prepare-release."
+                "Ready to dispatch."
                 if checklist.can_dispatch
-                else "Resolve blocking items before dispatch."
+                else "Resolve blockers first."
             ),
         ]
     )
@@ -1773,7 +3092,7 @@ def _format_release_checklist(checklist: ReleaseChecklist) -> str:
 
 
 def _next_action(state: DashboardState) -> str:
-    return f"{state.workflow.next_action}: {state.workflow.reason}"
+    return f"{_action_display_name(state.workflow.next_action)}: {state.workflow.reason}"
 
 
 def _format_ci_runs(runs: tuple[object, ...]) -> str:
@@ -1821,14 +3140,13 @@ def _ci_status_short(ci_status: str) -> str:
         variant = first_line.removeprefix("Downloading boardwright-preview-").split("...", 1)[0]
         return f"preview {variant} downloading"
 
-    if first_line.startswith("Preview workflow dispatched for "):
-        variant = first_line.removeprefix("Preview workflow dispatched for ").rstrip(".")
-        return f"preview {variant} dispatched"
+    if first_line.startswith("Preview ") and first_line.endswith(" dispatching..."):
+        variant = first_line.removeprefix("Preview ").removesuffix(" dispatching...")
+        return f"preview {variant} dispatching"
 
-    if first_line.startswith("Dispatching preview "):
-        words = first_line.split()
-        variant = words[2] if len(words) > 2 else ""
-        return f"preview {variant} dispatching".strip()
+    if first_line.startswith("Preview ") and first_line.endswith(" dispatched."):
+        variant = first_line.removeprefix("Preview ").removesuffix(" dispatched.")
+        return f"preview {variant} dispatched"
 
     if len(first_line) > 36:
         return first_line[:33] + "..."
@@ -1879,7 +3197,7 @@ def _line_value(lines: list[str], key: str) -> str:
 def _ci_status_style(ci_status: str) -> str:
     lowered = ci_status.lower()
     if "failure" in lowered or "failed" in lowered or "error" in lowered:
-        return "bold red"
+        return _semantic_style("error")
     if (
         "in_progress" in lowered
         or "queued" in lowered
@@ -1891,13 +3209,15 @@ def _ci_status_style(ci_status: str) -> str:
         or "review needed" in lowered
         or " review" in lowered
         or "reviewed no" in lowered
-        or "stale" in lowered
-        or "missing" in lowered
     ):
-        return "bold yellow"
+        return _semantic_style("loading")
+    if "stale" in lowered or "needed" in lowered:
+        return _semantic_style("warning")
+    if "missing" in lowered or "not checked" in lowered or "none" in lowered:
+        return _semantic_style("unset")
     if "success" in lowered or "completed" in lowered or "ready" in lowered or "fetched" in lowered:
-        return "bold green"
-    return "dim"
+        return _semantic_style("loaded")
+    return _semantic_style("info", bold=False)
 
 
 def _evidence_style(value: str) -> str:
@@ -1919,7 +3239,145 @@ def _command_failed(output: str) -> bool:
     return any(marker in lowered for marker in ("fatal:", "error:", "rejected", "failed"))
 
 
-def _format_changed_files(changed_files: tuple[str, ...]) -> str:
+def _format_changed_files(changed_files: tuple[str, ...], *, brief: bool = False) -> Text:
+    text = Text()
     if not changed_files:
-        return "Working tree clean."
-    return "\n".join(changed_files[:12])
+        text.append("Working tree clean.", style=_semantic_style("loaded"))
+        return text
+    if not brief:
+        text.append("Legend: ", style=f"bold {BRAND_TEAL}")
+        legend_items = (
+            ("MOD", "modified", "warning"),
+            ("NEW", "new", "loaded"),
+            ("DEL", "deleted", "error"),
+            ("REN", "renamed", "info"),
+            ("IGN", "ignored", "unset"),
+            ("CON", "conflict", "error"),
+        )
+        for index, (badge, label, kind) in enumerate(legend_items):
+            if index:
+                text.append(" | ", style=_semantic_style("info", bold=False))
+            text.append(f"[{badge}] ", style=_semantic_style(kind))
+            text.append(label, style="bold")
+        text.append("\n\n")
+    limit = 6 if brief else 12
+    for line in changed_files[:limit]:
+        badge, style = _git_status_badge(line[:2] if len(line) >= 2 else line)
+        path = line[3:].strip() if len(line) > 3 else line.strip()
+        text.append(f"[{badge}] ", style=style)
+        text.append(path or line.strip(), style="bold")
+        text.append("\n")
+    remaining = len(changed_files) - limit
+    if remaining > 0:
+        text.append(f"...and {remaining} more file(s)", style=_semantic_style("info", bold=False))
+    return text
+
+
+def _git_status_badge(code: str) -> tuple[str, str]:
+    normalized = code.strip()
+    if normalized == "??":
+        return "NEW", _semantic_style("info")
+    if normalized == "!!":
+        return "IGN", _semantic_style("unset")
+    primary = next((char for char in code if char != " "), "")
+    if primary == "A":
+        return "NEW", _semantic_style("loaded")
+    if primary == "D":
+        return "DEL", _semantic_style("error")
+    if primary == "R":
+        return "REN", _semantic_style("info")
+    if primary == "C":
+        return "CPY", _semantic_style("info")
+    if primary == "U":
+        return "CON", _semantic_style("error")
+    if primary == "M":
+        return "MOD", _semantic_style("warning")
+    if primary:
+        return primary, _semantic_style("info")
+    return "UNK", _semantic_style("unset")
+
+
+def _format_impedance_table_input(entries: list[dict[str, object]]) -> str:
+    if not entries:
+        return "Transmission Line,Impedance [ohms],Tolerance [ohms],Layer,Trace Width [mm],Gap [mm],Ref. Layers\n"
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            "Transmission Line",
+            "Impedance [ohms]",
+            "Tolerance [ohms]",
+            "Layer",
+            "Trace Width [mm]",
+            "Gap [mm]",
+            "Ref. Layers",
+        ]
+    )
+    for entry in entries:
+        writer.writerow(
+            [
+                str(entry.get("transmission_line", "")),
+                str(entry.get("impedance_ohms", "")),
+                str(entry.get("tolerance_ohms", "")),
+                str(entry.get("layer", "")),
+                str(entry.get("trace_width_mm", "")),
+                str(entry.get("gap_mm", "")),
+                str(entry.get("ref_layers", "")),
+            ]
+        )
+    return buffer.getvalue()
+
+
+def _parse_impedance_table_input(text: str) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    reader = csv.reader(text.splitlines())
+    for raw_row in reader:
+        row = [cell.strip() for cell in raw_row]
+        if not any(row):
+            continue
+        if row[0].lower().startswith("transmission line"):
+            continue
+        while len(row) < 7:
+            row.append("")
+        rows.append(
+            {
+                "transmission_line": row[0],
+                "impedance_ohms": row[1],
+                "tolerance_ohms": row[2],
+                "layer": row[3],
+                "trace_width_mm": row[4],
+                "gap_mm": row[5],
+                "ref_layers": row[6],
+            }
+        )
+    return rows
+
+
+def _open_path(path: Path) -> str:
+    resolved = path.resolve()
+    if not resolved.exists():
+        raise BoardwrightError(f"Path does not exist: {resolved}")
+
+    try:
+        if hasattr(os, "startfile"):
+            os.startfile(str(resolved))  # type: ignore[attr-defined]
+        elif os.name == "posix":
+            opener = "open" if shutil.which("open") else "xdg-open"
+            if shutil.which(opener) is None:
+                raise BoardwrightError("No system file opener is available.")
+            completed = subprocess.run(
+                [opener, str(resolved)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if completed.returncode != 0:
+                message = completed.stderr.strip() or completed.stdout.strip()
+                raise BoardwrightError(message or f"Could not open {resolved}.")
+        else:
+            raise BoardwrightError("No supported file opener is available on this platform.")
+    except OSError as exc:
+        raise BoardwrightError(f"Could not open {resolved}: {exc}") from exc
+
+    return f"Opened {resolved}."

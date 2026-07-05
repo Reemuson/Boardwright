@@ -2,19 +2,28 @@ project:
   id: BOARDWRIGHT-TEMPLATE
   name: Boardwright KiCad/KiBot Template
   board_revision: A
-  company: RYAN DYNAMICS
+  company: RYAN HICKS
   designer: R. HICKS
-  git_url: ""
-  github_repo: ""
+  git_url: ''
+  github_repo: ''
   product_family: BOARDWRIGHT
   product_generation: TEMPLATE
-
+  board_name: Boardwright KiCad/KiBot Template
+  pcba_number: ''
+  pcb_number: ''
+  document_revision: A
+  document_revision_scheme: lettered
+  drawn_by: ''
+  drawn_date: ''
+  checked_by: ''
+  checked_date: ''
+  approved_by: ''
+  approved_date: ''
 variants:
   dev_default: DRAFT
   preview_default: PRELIMINARY
   main_default: CHECKED
   release_default: RELEASED
-
 outputs:
   commit_generated_outputs_to_main: false
   use_preview_branch: true
@@ -24,7 +33,55 @@ outputs:
   prepare_release_workflow: prepare-release.yaml
   release_workflow: release.yaml
   release_include_source_archive: false
-
+  combined_review_pdf: false
+  combined_pdf_name: Manufacturing/boardwright-combined.pdf
+  combined_pdf_toc: true
+  combined_pdf_page_numbers: true
 assets:
-  logo: assets/logos/rd-logo.png
-  product_image: ""
+  logo: assets/logos/logo-wordmark-colour.png
+  product_image: ''
+template:
+  sheet_image: assets/logos/logo-block-black.png
+sheet:
+  legal_notice: THIS DESIGN AND/OR DRAWING IS THE PROPERTY OF ${COMPANY}\nAND SHALL
+    NOT BE REPRODUCED WITHOUT AUTHORISATION.
+manufacturing:
+  rohs_pb_free: true
+  tented_vias: true
+  impedance_enabled: false
+  conformal_coating: false
+  silkscreen_enabled: false
+  manufacturing_standard: IPC-6012 Class 2
+  core_material: FR-4
+  flammability_rating: UL94V-0
+  tg_rating: 170 C
+  halogen_free: true
+  fabrication_notes: 'FAB NOTES
+
+    1
+
+    2
+
+    3'
+  assembly_notes: 'ASSEMBLY NOTES
+
+    1
+
+    2
+
+    3'
+  testpoint_policy: 'TESTPOINT NOTES
+
+    1
+
+    2
+
+    3'
+  impedance_notes: 'IMPEDANCE NOTES
+
+    1
+
+    2
+
+    3'
+  impedance_table: []

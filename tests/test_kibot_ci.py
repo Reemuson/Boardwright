@@ -1,16 +1,22 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 import unittest
 from pathlib import Path
 
 
 class KiBotCiTests(unittest.TestCase):
     def test_pdf_outputs_use_repo_kicad_color_theme_resources(self) -> None:
-        for path in (
-            Path("boardwright_resources/kibot/yaml/kibot_out_pdf_schematic.yaml"),
-            Path("boardwright_resources/kibot/yaml/kibot_main.yaml"),
-        ):
-            text = path.read_text(encoding="utf-8")
+        schematic = Path(
+            "boardwright_resources/kibot/yaml/kibot_out_pdf_schematic.yaml"
+        ).read_text(encoding="utf-8")
+        main = Path("boardwright_resources/kibot/yaml/kibot_main.yaml").read_text(
+            encoding="utf-8"
+        )
 
-            self.assertNotIn("color_theme:", text, str(path))
+        self.assertIn("color_theme: '@COLOR_THEME@'", schematic)
+        self.assertIn("COLOR_THEME: KiCad_Theme", schematic)
+        self.assertIn("COLOR_THEME: @COLOR_THEME@", main)
 
         fabrication = Path(
             "boardwright_resources/kibot/yaml/kibot_out_pdf_fabrication.yaml"
@@ -26,13 +32,39 @@ class KiBotCiTests(unittest.TestCase):
         self.assertIn("color_theme: '@COLOR_THEME@'", assembly)
         self.assertIn("COLOR_THEME: KiCad_Theme", fabrication)
         self.assertIn("COLOR_THEME: KiCad_Theme", assembly)
-        self.assertIn("COLOR_THEME: KiCad_Theme", Path("boardwright_resources/kibot/yaml/kibot_main.yaml").read_text(encoding="utf-8"))
+        self.assertIn("COLOR_THEME: KiCad_Theme", main)
         self.assertIn("resources_dir: '@RESOURCES_DIR@'", globals_yaml)
+
+    def test_kicad_theme_uses_black_schematic_worksheet(self) -> None:
+        theme = Path("boardwright_resources/kibot/resources/colors/KiCad_Theme.json").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('"schematic": {', theme)
+        self.assertIn('"worksheet": "rgb(0, 0, 0)"', theme)
 
     def test_pcb_template_keeps_intended_arial_faces(self) -> None:
         pcb = Path("boardwright.kicad_pcb").read_text(encoding="utf-8")
 
-        self.assertIn('face "Arial"', pcb)
+        self.assertIn('face "Arimo"', pcb)
+
+    def test_pcb_pdf_pages_use_descriptive_title_values(self) -> None:
+        fabrication = Path(
+            "boardwright_resources/kibot/yaml/kibot_out_pdf_fabrication.yaml"
+        ).read_text(encoding="utf-8")
+        assembly = Path(
+            "boardwright_resources/kibot/yaml/kibot_out_pdf_assembly.yaml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("title: 'TOP FABRICATION'", fabrication)
+        self.assertIn("title: 'BOTTOM FABRICATION'", fabrication)
+        self.assertIn("title: '%lp DRILL MAP'", fabrication)
+        self.assertIn("title: 'TOP TESTPOINTS'", fabrication)
+        self.assertIn("title: 'BOTTOM TESTPOINTS'", fabrication)
+        self.assertIn("title: '%ln COPPER'", fabrication)
+        self.assertIn("title: 'ASSEMBLY OVERVIEW'", assembly)
+        self.assertIn("title: 'TOP ASSEMBLY'", assembly)
+        self.assertIn("title: 'BOTTOM ASSEMBLY'", assembly)
 
     def test_pdf_outputs_use_local_include_tables_without_theme(self) -> None:
         fabrication = Path(
@@ -43,7 +75,7 @@ class KiBotCiTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn("include_table:", fabrication)
-        self.assertNotIn("NAME_IMPEDANCE_TABLE", fabrication)
+        self.assertNotIn("\u00c3", fabrication)
         self.assertNotIn("NAME_COMP_COUNT", fabrication)
         self.assertNotIn("include_table:", assembly)
         self.assertNotIn("NAME_COMP_COUNT", assembly)
@@ -71,7 +103,7 @@ class KiBotCiTests(unittest.TestCase):
         self.assertNotIn("impedance_table", main)
         self.assertIn("Transmission Line,", template)
         self.assertNotIn("Edge-Coupled", template)
-        self.assertNotIn("Â", template)
+        self.assertNotIn("ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡", template)
 
     def test_default_manufacturing_notes_match_template_contract(self) -> None:
         fabrication = Path(
@@ -87,10 +119,12 @@ class KiBotCiTests(unittest.TestCase):
         self.assertIn("ASSEMBLY NOTES (UNLESS OTHERWISE SPECIFIED)", assembly)
         self.assertIn("DO NOT POPULATE PARTS ARE MARKED WITH A RED CROSS.", assembly)
         self.assertIn("FABRICATION NOTES (UNLESS OTHERWISE SPECIFIED)", fabrication)
-        self.assertIn("FABRICATE PER IPC-6012A CLASS 2.", fabrication)
+        self.assertIn("FABRICATE PER ${manufacturing_standard_cap}.", fabrication)
+        self.assertIn("${silkscreen_note}", fabrication)
+        self.assertIn("${conformal_coating_note}", fabrication)
         self.assertIn("BOARD SIZE", fabrication)
-        self.assertIn("×", fabrication)
-        self.assertNotIn("Ã", fabrication)
+        self.assertIn(" x ", fabrication)
+        self.assertNotIn("\u00c3", fabrication)
         self.assertIn("REPORT_TEMPLATE_DIR", preflight)
         self.assertIn("fabrication_notes.txt", preflight)
         self.assertIn("assembly_notes.txt", preflight)
@@ -137,15 +171,22 @@ class KiBotCiTests(unittest.TestCase):
             "boardwright_resources/kibot/resources/templates/readme.txt"
         ).read_text(encoding="utf-8")
 
-        self.assertNotIn("/actions/workflows", template)
         self.assertNotIn("badge.svg", template)
         self.assertNotIn("Hardware photographs are not available", template)
         self.assertNotIn("DIRECTORY STRUCTURE", template)
-        self.assertIn("Revision", template)
+        self.assertIn("Document revision", template)
         self.assertIn("Board revision", template)
         self.assertIn("Release version", template)
         self.assertIn("## OUTPUTS", template)
         self.assertIn("Generated manufacturing, schematic, test, and release packages", template)
+        self.assertIn("Latest release", template)
+        self.assertIn("Release package", template)
+        self.assertIn("Preview workflow", template)
+        self.assertIn("Accepted outputs workflow", template)
+        self.assertIn("Prepare release workflow", template)
+        self.assertIn("Publish release workflow", template)
+        self.assertIn("FABRICATION SNAPSHOT", template)
+        self.assertIn("COMPONENT SNAPSHOT", template)
 
     def test_text_variables_separate_board_revision_release_version_and_source_hashes(self) -> None:
         preflight = Path(
@@ -161,11 +202,58 @@ class KiBotCiTests(unittest.TestCase):
         self.assertIn("git describe --tags --exact-match", preflight)
         self.assertIn("variable: 'BOARD_REVISION'", preflight)
         self.assertIn("text: '@BOARD_REVISION@'", preflight)
+        self.assertIn("variable: 'PCBA_NUMBER'", preflight)
+        self.assertIn("variable: 'PCB_NUMBER'", preflight)
+        self.assertIn("variable: 'DOCUMENT_REVISION'", preflight)
+        self.assertIn("variable: 'DOCUMENT_REVISION_SCHEME'", preflight)
+        self.assertIn("variable: 'DRAWN_BY'", preflight)
+        self.assertIn("variable: 'APPROVED_DATE'", preflight)
+        self.assertIn("variable: 'SHEET_LEGAL_NOTICE'", preflight)
+        self.assertIn("text: '@SHEET_LEGAL_NOTICE@'", preflight)
+        self.assertIn("variable: 'TEMPLATE_LOGO'", preflight)
+        self.assertIn("variable: 'FABRICATION_SUMMARY'", preflight)
+        self.assertIn("variable: 'COMPONENT_COUNT_SUMMARY'", preflight)
+        self.assertIn("variable: 'README_BADGES'", preflight)
         self.assertIn("variable: 'RELEASE_VERSION'", preflight)
         self.assertIn('git log --no-merges -1 --format="%h" -- "$KIBOT_SCH_NAME"', preflight)
         self.assertIn('git log --no-merges -1 --format="%h" -- "$KIBOT_PCB_NAME"', preflight)
         self.assertIn("BOARD_REVISION: @BOARD_REVISION@", main)
+        self.assertIn("PCBA_NUMBER: @PCBA_NUMBER@", main)
+        self.assertIn("DOCUMENT_REVISION: @DOCUMENT_REVISION@", main)
         self.assertIn("BOARD_REVISION: A", main)
+        self.assertIn("DOCUMENT_REVISION: A", main)
+        self.assertIn("SHEET_LEGAL_NOTICE: @SHEET_LEGAL_NOTICE@", main)
+        self.assertIn("TEMPLATE_LOGO: @TEMPLATE_LOGO@", main)
+        readme_template = Path("boardwright_resources/kibot/resources/templates/readme.txt").read_text(encoding="utf-8")
+        self.assertIn("README_BADGES", readme_template)
+        self.assertIn("| Document revision | ${DOCUMENT_REVISION} |", readme_template)
+        self.assertIn("| Board revision | ${BOARD_REVISION} |", readme_template)
+        self.assertIn("| Release version | ${RELEASE_VERSION} |", readme_template)
+        self.assertIn("| PCBA number | ${PCBA_NUMBER} |", readme_template)
+        self.assertIn("| PCB number | ${PCB_NUMBER} |", readme_template)
+
+    def test_first_toc_entry_uses_sheet_title_resolver(self) -> None:
+        preflight = Path(
+            "boardwright_resources/kibot/yaml/kibot_pre_set_text_variables.yaml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("variable: '@SHEET_NAME_VAR@1'\n      command: '@GET_SHEET_CMD@ 1'", preflight)
+        self.assertNotIn("text: 'COVER PAGE'", preflight)
+
+    def test_schematic_worksheets_use_runtime_sheet_total(self) -> None:
+        for path in (
+            Path("Templates/Boardwright_Template.kicad_wks"),
+            Path("Templates/Boardwright_Template_GIT.kicad_wks"),
+        ):
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("${#} OF ${COMBINED_SHEET_TOTAL}", text, str(path))
+
+    def test_worksheets_use_configurable_legal_notice(self) -> None:
+        for path in Path("Templates").glob("*.kicad_wks"):
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("SHALL NOTBE", text, str(path))
+            if "SHEET_LEGAL_NOTICE" in text:
+                self.assertIn("${SHEET_LEGAL_NOTICE}", text, str(path))
 
 
 if __name__ == "__main__":

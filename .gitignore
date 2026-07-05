@@ -29,7 +29,10 @@ dist/
 venv/
 
 # Boardwright local scratch/output
+.archive/
+.old-kibot-yaml/
 .boardwright/revision_history_variables.env
+.boardwright/sheet_titles.env
 .boardwright-sandbox/
 boardwright-preview/
 boardwright-release/
@@ -41,6 +44,10 @@ Schematic/
 Testing/
 assets/3d/*
 !assets/3d/.gitkeep
+assets/logos/*.afdesign
+assets/logos/*.spline
+assets/logos/*.spine
+assets/logos/Spine.json
 
 # KiBot / workflow logs and generated run detritus
 kibot*.log

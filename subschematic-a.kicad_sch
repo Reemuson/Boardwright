@@ -39,10 +39,10 @@
 	)
 	(text "J. Pieper ADC investigation"
 		(exclude_from_sim no)
-		(at 142.24 170.18 0)
+		(at 55.88 143.51 0)
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -53,10 +53,10 @@
 	)
 	(text "STM32G474 Datasheet p.81"
 		(exclude_from_sim no)
-		(at 142.24 166.37 0)
+		(at 55.88 139.7 0)
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -67,10 +67,10 @@
 	)
 	(text "AN5346"
 		(exclude_from_sim no)
-		(at 142.24 162.56 0)
+		(at 55.88 135.89 0)
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
@@ -94,7 +94,7 @@
 		)
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1.27 1.27)
 				(thickness 0.4)
 				(bold yes)
@@ -164,17 +164,13 @@
 		)
 		(effects
 			(font
-				(face "Arial")
+				(face "Arimo")
 				(size 1.27 1.27)
 				(color 0 0 0 1)
 			)
 			(justify left top)
 		)
 		(uuid "e0003229-9448-4893-9fb1-bea9e839bb75")
-	)
-	(no_connect
-		(at 144.78 81.28)
-		(uuid "fe2c82b8-1e19-4b64-b711-e2818b779fa3")
 	)
 	(polyline
 		(pts

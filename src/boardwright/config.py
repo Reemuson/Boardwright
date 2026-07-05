@@ -1,6 +1,10 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +19,17 @@ DEFAULT_CONFIG_FILES = {
   id: BOARDWRIGHT-TEMPLATE
   name: Boardwright KiCad/KiBot Template
   board_revision: A
-  company: RYAN DYNAMICS
+  pcba_number: ""
+  pcb_number: ""
+  document_revision: A
+  document_revision_scheme: lettered
+  drawn_by: ""
+  drawn_date: ""
+  checked_by: ""
+  checked_date: ""
+  approved_by: ""
+  approved_date: ""
+  company: RYAN HICKS
   designer: R. HICKS
   git_url: ""
   github_repo: ""
@@ -37,18 +51,108 @@ outputs:
   prepare_release_workflow: prepare-release.yaml
   release_workflow: release.yaml
   release_include_source_archive: false
+  combined_review_pdf: false
+  combined_pdf_name: Manufacturing/boardwright-combined.pdf
+  combined_pdf_toc: true
+  combined_pdf_page_numbers: true
 
 assets:
-  logo: assets/logos/rd-logo.png
+  logo: assets/logos/logo-wordmark-colour.png
   product_image: ""
+
+template:
+  sheet_image: assets/logos/logo-block-black.png
+
+sheet:
+  legal_notice: "THIS DESIGN AND/OR DRAWING IS THE PROPERTY OF ${COMPANY}\\nAND SHALL NOT BE REPRODUCED WITHOUT AUTHORISATION."
+
+manufacturing:
+  rohs_pb_free: true
+  conformal_coating: false
+  silkscreen_enabled: true
+  tented_vias: true
+  impedance_enabled: false
+  manufacturing_standard: IPC-6012 Class 2
+  core_material: FR-4
+  flammability_rating: UL94V-0
+  tg_rating: 170 C
+  halogen_free: true
+  fabrication_notes: ""
+  assembly_notes: ""
+  testpoint_policy: ""
+  impedance_notes: ""
+  impedance_table: []
 """,
     "branches.yaml": """branches:
   development: dev
   preview: preview
   release: main
 """,
-    "legal.yaml": """legal:
-  hardware_license: CERN-OHL-W-2.0
+    "legal.yaml": """boardwright:
+  tooling_license: LicenseRef-Boardwright-Source-Available
+  inherited_notice_file: LICENSES/Nguyen-MIT.txt
+  third_party_notice_file: THIRD_PARTY_NOTICES.md
+  default_profile: public-hardware
+
+legal_profiles:
+  public-hardware:
+    hardware_design_license: CERN-OHL-W-2.0
+    copyright_holder: ""
+    notice_file: NOTICE.md
+    third_party_notice_file: THIRD_PARTY_NOTICES.md
+    allow_project_owner_override: true
+    branding_reserved: true
+    compatibility:
+      enabled: false
+      wording: ""
+      trademark_owner: ""
+    safety_notice: >
+      This is a hardware/electronics project. Anyone building, modifying,
+      testing, selling, or using the design is responsible for verifying
+      isolation, creepage and clearance, electrical safety, regulatory
+      compliance, manufacturability, and fitness for purpose.
+
+  compatibility-friendly:
+    hardware_design_license: CERN-OHL-S-2.0
+    copyright_holder: ""
+    notice_file: NOTICE.md
+    third_party_notice_file: THIRD_PARTY_NOTICES.md
+    allow_project_owner_override: true
+    branding_reserved: true
+    compatibility:
+      enabled: true
+      wording: compatible with selected instruments
+      trademark_owner: the original manufacturer
+    safety_notice: >
+      This is a hardware/electronics project. Anyone building, modifying,
+      testing, selling, or using the design is responsible for verifying
+      isolation, creepage and clearance, electrical safety, regulatory
+      compliance, manufacturability, and fitness for purpose.
+
+  internal-prototype:
+    hardware_design_license: "See LICENSE"
+    copyright_holder: ""
+    notice_file: NOTICE.md
+    third_party_notice_file: THIRD_PARTY_NOTICES.md
+    allow_project_owner_override: false
+    branding_reserved: false
+    compatibility:
+      enabled: false
+      wording: ""
+      trademark_owner: ""
+    safety_notice: >
+      This is a hardware/electronics project. Anyone building, modifying,
+      testing, selling, or using the design is responsible for verifying
+      isolation, creepage and clearance, electrical safety, regulatory
+      compliance, manufacturability, and fitness for purpose.
+
+downstream_project_defaults:
+  profile: public-hardware
+  hardware_design_license: CERN-OHL-W-2.0
+  copyright_holder: ""
+  notice_file: NOTICE.md
+  third_party_notice_file: THIRD_PARTY_NOTICES.md
+  allow_project_owner_override: true
   branding_reserved: true
   compatibility:
     enabled: false
@@ -58,7 +162,11 @@ assets:
     This is a hardware/electronics project. Anyone building, modifying,
     testing, selling, or using the design is responsible for verifying
     isolation, creepage and clearance, electrical safety, regulatory
-    compliance, and fitness for purpose.
+    compliance, manufacturability, and fitness for purpose.
+
+generated_outputs:
+  output_exception_enabled: true
+  copied_template_material_notice_required: true
 """,
     "revision_history.yaml": """revision_history:
   slots: 4
@@ -66,6 +174,9 @@ assets:
   source: CHANGELOG.md
   blank_unused_slots: true
   include_unreleased_in_preview: true
+""",
+    "document_revisions.yaml": """document_revisions:
+  rows: []
 """,
 }
 
@@ -77,6 +188,7 @@ class BoardwrightConfig:
     branches: dict[str, Any]
     legal: dict[str, Any]
     revision_history: dict[str, Any]
+    document_revisions: dict[str, Any] | None = None
 
     @property
     def project_id(self) -> str:
@@ -96,8 +208,48 @@ class BoardwrightConfig:
         return str(self.project.get("project", {}).get("board_revision", "A"))
 
     @property
+    def pcba_number(self) -> str:
+        return str(self.project.get("project", {}).get("pcba_number", ""))
+
+    @property
+    def pcb_number(self) -> str:
+        return str(self.project.get("project", {}).get("pcb_number", ""))
+
+    @property
+    def document_revision(self) -> str:
+        return str(self.project.get("project", {}).get("document_revision") or "A")
+
+    @property
+    def document_revision_scheme(self) -> str:
+        return str(self.project.get("project", {}).get("document_revision_scheme") or "lettered")
+
+    @property
+    def drawn_by(self) -> str:
+        return str(self.project.get("project", {}).get("drawn_by", ""))
+
+    @property
+    def drawn_date(self) -> str:
+        return str(self.project.get("project", {}).get("drawn_date", ""))
+
+    @property
+    def checked_by(self) -> str:
+        return str(self.project.get("project", {}).get("checked_by", ""))
+
+    @property
+    def checked_date(self) -> str:
+        return str(self.project.get("project", {}).get("checked_date", ""))
+
+    @property
+    def approved_by(self) -> str:
+        return str(self.project.get("project", {}).get("approved_by", ""))
+
+    @property
+    def approved_date(self) -> str:
+        return str(self.project.get("project", {}).get("approved_date", ""))
+
+    @property
     def github_repo(self) -> str:
-        return str(self.project.get("project", {}).get("github_repo", "")).strip()
+        return _normalize_github_repo_slug(str(self.project.get("project", {}).get("github_repo", "")))
 
     @property
     def dev_branch(self) -> str:
@@ -110,6 +262,11 @@ class BoardwrightConfig:
     @property
     def release_branch(self) -> str:
         return str(self.branches.get("branches", {}).get("release", "main"))
+
+    @property
+    def branch_settings(self) -> dict[str, Any]:
+        branches = self.branches.get("branches", {})
+        return branches if isinstance(branches, dict) else {}
 
     @property
     def default_variant(self) -> str:
@@ -157,9 +314,121 @@ class BoardwrightConfig:
         return str(outputs.get("prepare_release_workflow", "prepare-release.yaml"))
 
     @property
+    def commit_generated_outputs_to_main(self) -> bool:
+        outputs = self.project.get("outputs", {})
+        return bool(outputs.get("commit_generated_outputs_to_main", False))
+
+    @property
+    def use_preview_branch(self) -> bool:
+        outputs = self.project.get("outputs", {})
+        return bool(outputs.get("use_preview_branch", True))
+
+    @property
+    def release_include_source_archive(self) -> bool:
+        outputs = self.project.get("outputs", {})
+        return bool(outputs.get("release_include_source_archive", False))
+
+    @property
+    def output_settings(self) -> dict[str, Any]:
+        outputs = self.project.get("outputs", {})
+        return outputs if isinstance(outputs, dict) else {}
+
+    @property
     def assets(self) -> dict[str, Any]:
         assets = self.project.get("assets", {})
         return assets if isinstance(assets, dict) else {}
+
+    @property
+    def template(self) -> dict[str, Any]:
+        template = self.project.get("template", {})
+        return template if isinstance(template, dict) else {}
+
+    @property
+    def sheet(self) -> dict[str, Any]:
+        sheet = self.project.get("sheet", {})
+        return sheet if isinstance(sheet, dict) else {}
+
+    @property
+    def manufacturing(self) -> dict[str, Any]:
+        manufacturing = self.project.get("manufacturing", {})
+        return manufacturing if isinstance(manufacturing, dict) else {}
+
+    @property
+    def impedance_entries(self) -> list[dict[str, Any]]:
+        entries = self.manufacturing.get("impedance_table", [])
+        if not isinstance(entries, list):
+            return []
+        return [entry for entry in entries if isinstance(entry, dict)]
+
+    @property
+    def worksheet(self) -> str:
+        return (
+            str(self.template.get("worksheet") or "").strip()
+            or _worksheet_from_kicad_project(self.root, preferred_sections=("schematic", "pcbnew"))
+            or "Templates/Boardwright_Template_PCB_GIT_A4.kicad_wks"
+        )
+
+    @property
+    def template_logo(self) -> str:
+        return self.template_sheet_image
+
+    @property
+    def template_sheet_image(self) -> str:
+        return str(
+            self.template.get("sheet_image")
+            or self.template.get("logo")
+            or self.assets.get("logo")
+            or ""
+        )
+
+    @property
+    def sheet_legal_notice(self) -> str:
+        notice = str(
+            self.sheet.get("legal_notice")
+            or "THIS DESIGN AND/OR DRAWING IS THE PROPERTY OF ${COMPANY}\n"
+            "AND SHALL NOT BE REPRODUCED WITHOUT AUTHORISATION."
+        )
+        return notice.replace("\\n", "\n")
+
+    @property
+    def legal_boardwright(self) -> dict[str, Any]:
+        boardwright = self.legal.get("boardwright", {})
+        return boardwright if isinstance(boardwright, dict) else {}
+
+    @property
+    def legal_project_defaults(self) -> dict[str, Any]:
+        defaults = self.legal.get("downstream_project_defaults", {})
+        return defaults if isinstance(defaults, dict) else {}
+
+    @property
+    def legal_profiles(self) -> dict[str, Any]:
+        profiles = self.legal.get("legal_profiles", {})
+        return profiles if isinstance(profiles, dict) else {}
+
+    @property
+    def legal_profile(self) -> str:
+        default_profile = self.legal.get("boardwright", {}).get("default_profile", "public-hardware")
+        return str(self.legal_project_defaults.get("profile", default_profile))
+
+    @property
+    def hardware_design_license(self) -> str:
+        return str(self.legal_project_defaults.get("hardware_design_license", ""))
+
+    @property
+    def copyright_holder(self) -> str:
+        return str(self.legal_project_defaults.get("copyright_holder", ""))
+
+    @property
+    def notice_file(self) -> str:
+        return str(self.legal_project_defaults.get("notice_file", "NOTICE.md"))
+
+    @property
+    def third_party_notice_file(self) -> str:
+        return str(self.legal_project_defaults.get("third_party_notice_file", "THIRD_PARTY_NOTICES.md"))
+
+    @property
+    def safety_notice(self) -> str:
+        return str(self.legal_project_defaults.get("safety_notice", ""))
 
 
 def find_project_root(start: Path | None = None) -> Path:
@@ -182,15 +451,21 @@ def load_config(root: Path | None = None) -> BoardwrightConfig:
         branches=_read_yaml(config_root / "branches.yaml"),
         legal=_read_yaml(config_root / "legal.yaml"),
         revision_history=_read_yaml(config_root / "revision_history.yaml"),
+        document_revisions=_read_yaml_optional(config_root / "document_revisions.yaml"),
     )
-
 
 def init_config(
     root: Path | None = None,
     force: bool = False,
     workflows: bool = True,
 ) -> list[Path]:
-    project_root = find_project_root(root)
+    if root is not None:
+        project_root = Path(root).resolve()
+    else:
+        try:
+            project_root = find_project_root()
+        except BoardwrightError:
+            project_root = Path.cwd().resolve()
     config_root = project_root / CONFIG_DIR
     config_root.mkdir(exist_ok=True)
 
@@ -216,9 +491,15 @@ def init_config(
 def update_project_config(
     config: BoardwrightConfig,
     *,
-    project_fields: dict[str, str] | None = None,
-    variant_fields: dict[str, str] | None = None,
-    asset_fields: dict[str, str] | None = None,
+    project_fields: dict[str, Any] | None = None,
+    variant_fields: dict[str, Any] | None = None,
+    asset_fields: dict[str, Any] | None = None,
+    template_fields: dict[str, Any] | None = None,
+    sheet_fields: dict[str, Any] | None = None,
+    branch_fields: dict[str, Any] | None = None,
+    output_fields: dict[str, Any] | None = None,
+    legal_fields: dict[str, Any] | None = None,
+    manufacturing_fields: dict[str, Any] | None = None,
 ) -> Path:
     """Update editable project metadata in `.boardwright/project.yaml`."""
 
@@ -243,9 +524,100 @@ def update_project_config(
     for key, value in (asset_fields or {}).items():
         assets[key] = value
 
+    template = data.setdefault("template", {})
+    if not isinstance(template, dict):
+        raise BoardwrightError("project.yaml field `template` must be a mapping.")
+    for key, value in (template_fields or {}).items():
+        template[key] = value
+
+    sheet = data.setdefault("sheet", {})
+    if not isinstance(sheet, dict):
+        raise BoardwrightError("project.yaml field `sheet` must be a mapping.")
+    for key, value in (sheet_fields or {}).items():
+        sheet[key] = value
+
+    manufacturing = data.setdefault("manufacturing", {})
+    if not isinstance(manufacturing, dict):
+        raise BoardwrightError("project.yaml field `manufacturing` must be a mapping.")
+    for key, value in (manufacturing_fields or {}).items():
+        if key == "impedance_table":
+            manufacturing[key] = _normalize_impedance_table(value)
+        else:
+            manufacturing[key] = _coerce_project_value(value)
+
+    branches_path = config.root / CONFIG_DIR / "branches.yaml"
+    if branch_fields:
+        branches_data = _read_yaml(branches_path)
+        branches = branches_data.setdefault("branches", {})
+        if not isinstance(branches, dict):
+            raise BoardwrightError("branches.yaml field `branches` must be a mapping.")
+        branch_aliases = {
+            "development": "development",
+            "preview": "preview",
+            "release": "release",
+        }
+        for key, value in branch_fields.items():
+            branch_key = branch_aliases.get(key, key)
+            branches[branch_key] = value
+        _write_yaml(branches_path, branches_data)
+
+    if output_fields:
+        outputs = data.setdefault("outputs", {})
+        if not isinstance(outputs, dict):
+            raise BoardwrightError("project.yaml field `outputs` must be a mapping.")
+        for key, value in output_fields.items():
+            outputs[key] = _coerce_project_value(value)
+
+    if legal_fields:
+        legal_path = config.root / CONFIG_DIR / "legal.yaml"
+        legal_data = _read_yaml(legal_path)
+        boardwright = legal_data.setdefault("boardwright", {})
+        if not isinstance(boardwright, dict):
+            raise BoardwrightError("legal.yaml field `boardwright` must be a mapping.")
+        profiles = legal_data.get("legal_profiles", {})
+        if not isinstance(profiles, dict):
+            profiles = {}
+        defaults = legal_data.setdefault("downstream_project_defaults", {})
+        if not isinstance(defaults, dict):
+            raise BoardwrightError("legal.yaml field `downstream_project_defaults` must be a mapping.")
+        profile_name = str(legal_fields.get("profile", defaults.get("profile", boardwright.get("default_profile", "public-hardware")))).strip()
+        if profile_name:
+            defaults["profile"] = profile_name
+            profile_defaults = profiles.get(profile_name, {})
+            if isinstance(profile_defaults, dict):
+                for key, value in profile_defaults.items():
+                    if key not in legal_fields:
+                        defaults[key] = value
+        boardwright_keys = {
+            "tooling_license",
+            "inherited_notice_file",
+            "third_party_notice_file",
+        }
+        for key, value in legal_fields.items():
+            if key in boardwright_keys:
+                boardwright[key] = value
+            else:
+                defaults[key] = _coerce_project_value(value)
+        _write_yaml(legal_path, legal_data)
+
     _write_yaml(path, data)
     return path
 
+
+def _normalize_github_repo_slug(value: str) -> str:
+    text = value.strip()
+    if text.startswith("https://github.com/"):
+        text = text.removeprefix("https://github.com/")
+    elif text.startswith("http://github.com/"):
+        text = text.removeprefix("http://github.com/")
+    elif text.startswith("git@github.com:"):
+        text = text.removeprefix("git@github.com:")
+    elif text.startswith("ssh://git@github.com/"):
+        text = text.removeprefix("ssh://git@github.com/")
+    text = text.strip().strip("/")
+    if text.endswith(".git"):
+        text = text[:-4]
+    return text
 
 def _read_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
@@ -263,6 +635,12 @@ def _read_yaml(path: Path) -> dict[str, Any]:
     if not isinstance(loaded, dict):
         raise BoardwrightError(f"Expected a mapping in {path}")
     return loaded
+
+
+def _read_yaml_optional(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    return _read_yaml(path)
 
 
 def _write_yaml(path: Path, data: dict[str, Any]) -> None:
@@ -296,9 +674,46 @@ def _quote_yaml_scalar(value: Any) -> str:
     text = str(value)
     if text == "":
         return '""'
+    if "\n" in text:
+        return '"' + text.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"') + '"'
     if any(char in text for char in ":#{}[]&,*?|-<>=!%@`\"'") or text.strip() != text:
         return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
     return text
+
+
+def _worksheet_from_kicad_project(
+    root: Path,
+    preferred_sections: tuple[str, ...] = ("schematic", "pcbnew"),
+) -> str:
+    for path in sorted(root.glob("*.kicad_pro")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        for section_name in preferred_sections:
+            section = data.get(section_name)
+            if not isinstance(section, dict):
+                continue
+            value = str(section.get("page_layout_descr_file") or "").strip()
+            if value:
+                return _normalize_kicad_project_worksheet(root, value)
+    return ""
+
+
+def _normalize_kicad_project_worksheet(root: Path, value: str) -> str:
+    normalized = value.replace("\\", "/").strip()
+    embed_prefix = "kicad-embed://"
+    if normalized.startswith(embed_prefix):
+        name = normalized.removeprefix(embed_prefix).lstrip("/")
+        template_path = Path("Templates") / name
+        if (root / template_path).is_file():
+            return template_path.as_posix()
+        return name
+    if normalized.startswith("${KIPRJMOD}/"):
+        return normalized.removeprefix("${KIPRJMOD}/")
+    return normalized
 
 
 def _read_simple_yaml(text: str) -> dict[str, Any]:
@@ -355,11 +770,39 @@ def _coerce_scalar(value: str) -> Any:
         return value == "true"
     if value in {'""', "''"}:
         return ""
-    if (value.startswith('"') and value.endswith('"')) or (
-        value.startswith("'") and value.endswith("'")
-    ):
+    if value.startswith('"') and value.endswith('"'):
+        return value[1:-1].replace('\\"', '"').replace("\\n", "\n").replace("\\\\", "\\")
+    if value.startswith("'") and value.endswith("'"):
         return value[1:-1]
     try:
         return int(value)
     except ValueError:
         return value
+
+
+def _coerce_project_value(value: Any) -> Any:
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "false"}:
+            return lowered == "true"
+    return value
+
+
+def _normalize_impedance_table(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for row in value:
+        if isinstance(row, dict):
+            normalized.append(
+                {
+                    "transmission_line": str(row.get("transmission_line", "")).strip(),
+                    "impedance_ohms": str(row.get("impedance_ohms", "")).strip(),
+                    "tolerance_ohms": str(row.get("tolerance_ohms", "")).strip(),
+                    "layer": str(row.get("layer", "")).strip(),
+                    "trace_width_mm": str(row.get("trace_width_mm", "")).strip(),
+                    "gap_mm": str(row.get("gap_mm", "")).strip(),
+                    "ref_layers": str(row.get("ref_layers", "")).strip(),
+                }
+            )
+    return normalized

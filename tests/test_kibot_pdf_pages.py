@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 from __future__ import annotations
 
 import shutil
@@ -85,5 +88,63 @@ outputs:
         self.assertNotIn("BOTTOM TEST POINTS", text)
 
 
+    def test_expands_repeated_layer_pages_to_literal_titles(self) -> None:
+        root = self.make_root()
+        config = self.write_fabrication_yaml(root)
+        (root / "demo.kicad_pro").write_text("{}\n", encoding="utf-8")
+        (root / "demo.kicad_pcb").write_text(
+            """
+(kicad_pcb
+  (layers
+    (0 "F.Cu" signal "L1")
+    (31 "B.Cu" signal "L2")
+  )
+)
+""",
+            encoding="utf-8",
+        )
+        config.write_text(
+            """
+outputs:
+- name: pdf_fabrication
+  options:
+    pages:
+      - scaling: 1
+        title: '%lp DRILL MAP'
+        sheet: 'DRILL DRAWING (%lp)'
+        layer_var: 'DRILL DRAWING %lp (SCALE 1:1)'
+        repeat_for_layer: '@LAYER_DRILL_MAP@'
+        repeat_layers: 'drill_pairs'
+        layers:
+          - layer: '@LAYER_DRILL_MAP@'
+      - scaling: 1
+        sheet: '%ln (SCALE 1:1)'
+        layer_var: '%ln (SCALE 1:1)'
+        title: '%ln COPPER'
+        repeat_for_layer: 'F.Cu'
+        repeat_layers: 'copper'
+        layers:
+          - layer: 'F.Cu'
+...
+""",
+            encoding="utf-8",
+        )
+
+        result = prune_empty_testpoint_pdf_pages(root)
+        text = config.read_text(encoding="utf-8")
+
+        self.assertEqual(("L1-L2 DRILL MAP", "L1 COPPER", "L2 COPPER"), result.expanded_pages)
+        self.assertIn("title: 'L1-L2 DRILL MAP'", text)
+        self.assertIn("title: 'L1 COPPER'", text)
+        self.assertIn("title: 'L2 COPPER'", text)
+        self.assertIn("layer: 'F.Cu'", text)
+        self.assertIn("layer: 'B.Cu'", text)
+        self.assertNotIn("%lp", text)
+        self.assertNotIn("%ln", text)
+        self.assertIn("repeat_for_layer: '@LAYER_DRILL_MAP@'", text)
+        self.assertIn("repeat_layers: 'drill_pairs'", text)
+        self.assertNotIn("repeat_layers: 'copper'", text)
+
 if __name__ == "__main__":
     unittest.main()
+

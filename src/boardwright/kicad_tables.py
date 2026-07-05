@@ -1,16 +1,21 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 """Prepare KiCad PCB table placeholders before KiBot renders PDFs."""
 
 from __future__ import annotations
 
 import csv
+import io
 import re
 import uuid
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import load_config
+from .config import _worksheet_from_kicad_project, load_config
 from .errors import BoardwrightError
+from .git_ops import remote_url
 
 
 COMPONENT_COUNT_TEXT_BOX_UUID = "511273fd-c939-4feb-bf05-ae1b43c3644e"
@@ -38,37 +43,63 @@ class ComponentCountResult:
 
 def prepare_pcb_tables(root: Path) -> ComponentCountResult:
     root = root.resolve()
-    _sync_kibot_project_metadata(root)
+    config = _load_project_config(root)
+    _sync_kibot_project_metadata(root, config)
     counts = _collect_component_mount_counts(root)
     rows = _component_mount_rows(counts)
     total = rows[-1][-1] if rows else 0
 
     csv_path = _write_component_count_csv(root, rows, total)
     _fill_component_count_placeholder(root, rows, total)
-    _fill_empty_impedance_placeholder(root)
-    _write_manufacturing_notes(root)
+    _write_impedance_table(root, config)
+    _write_manufacturing_notes(root, config)
+    _write_readme_summaries(root, config, rows)
+    _write_readme_badges(root, config)
 
     return ComponentCountResult(csv_path=csv_path, total=total, rows=rows)
 
 
-def _sync_kibot_project_metadata(root: Path) -> None:
+def _load_project_config(root: Path):
     try:
-        config = load_config(root)
+        return load_config(root)
     except BoardwrightError:
+        return None
+
+
+def _sync_kibot_project_metadata(root: Path, config=None) -> None:
+    if config is None:
+        config = _load_project_config(root)
+    if config is None:
         return
 
     project = config.project.get("project", {})
     git_url = str(project.get("git_url") or "").strip()
     if not git_url and config.github_repo:
         git_url = f"https://github.com/{config.github_repo}"
+    if not git_url:
+        origin_url = remote_url(root)
+        git_url = origin_url if origin_url else git_url
 
     replacements = {
         "PROJECT_NAME": config.project_name,
         "BOARD_NAME": config.board_name,
         "BOARD_REVISION": config.board_revision,
+        "PCBA_NUMBER": config.pcba_number,
+        "PCB_NUMBER": config.pcb_number,
+        "DOCUMENT_REVISION": config.document_revision,
+        "DOCUMENT_REVISION_SCHEME": config.document_revision_scheme,
+        "DRAWN_BY": config.drawn_by,
+        "DRAWN_DATE": config.drawn_date,
+        "CHECKED_BY": config.checked_by,
+        "CHECKED_DATE": config.checked_date,
+        "APPROVED_BY": config.approved_by,
+        "APPROVED_DATE": config.approved_date,
         "COMPANY": str(project.get("company") or ""),
         "DESIGNER": str(project.get("designer") or ""),
         "LOGO": str(config.assets.get("logo") or ""),
+        "TEMPLATE_LOGO": config.template_logo,
+        "SHEET_LEGAL_NOTICE": _render_project_text(config.sheet_legal_notice, project),
+        "SHEET_WKS": _worksheet_definition(_pcb_worksheet(config.root, config.worksheet)),
         "GIT_URL": git_url,
     }
     path = root / KIBOT_MAIN_YAML
@@ -77,14 +108,34 @@ def _sync_kibot_project_metadata(root: Path) -> None:
     text = path.read_text(encoding="utf-8")
     updated = text
     for key, value in replacements.items():
-        updated = re.sub(
-            rf"(?m)^  {re.escape(key)}:\s*.*$",
-            f"  {key}: {_yaml_quote(value)}",
-            updated,
-            count=1,
-        )
+        replacement_line = f"  {key}: {_yaml_quote(value)}"
+        pattern = rf"(?m)^  {re.escape(key)}:\s*.*$"
+        if re.search(pattern, updated):
+            updated = re.sub(pattern, replacement_line, updated, count=1)
+        else:
+            updated = _insert_kibot_definition(updated, key, replacement_line)
     if updated != text:
         path.write_text(updated, encoding="utf-8", newline="\n")
+
+
+def _insert_kibot_definition(text: str, key: str, line: str) -> str:
+    anchors = {
+        "PCBA_NUMBER": "BOARD_REVISION",
+        "PCB_NUMBER": "PCBA_NUMBER",
+        "DOCUMENT_REVISION": "PCB_NUMBER",
+        "DOCUMENT_REVISION_SCHEME": "DOCUMENT_REVISION",
+        "DRAWN_BY": "DOCUMENT_REVISION_SCHEME",
+        "DRAWN_DATE": "DRAWN_BY",
+        "CHECKED_BY": "DRAWN_DATE",
+        "CHECKED_DATE": "CHECKED_BY",
+        "APPROVED_BY": "CHECKED_DATE",
+        "APPROVED_DATE": "APPROVED_BY",
+    }
+    anchor = anchors.get(key, "BOARD_REVISION")
+    match = re.search(rf"(?m)^  {re.escape(anchor)}:.*$", text)
+    if not match:
+        return text
+    return text[: match.end()] + "\n" + line + text[match.end():]
 
 
 def _collect_component_mount_counts(root: Path) -> Counter[tuple[str, str]]:
@@ -306,7 +357,7 @@ def _gr_text(
         f"\t\t(uuid \"{_generated_uuid(key)}\")\n"
         "\t\t(effects\n"
         "\t\t\t(font\n"
-        "\t\t\t\t(face \"Arial\")\n"
+        "\t\t\t\t(face \"Arimo\")\n"
         "\t\t\t\t(size 1 1)\n"
         "\t\t\t\t(thickness 0.15)\n"
         f"{bold_line}"
@@ -330,40 +381,71 @@ def _remove_generated_component_table(text: str) -> str:
     return text
 
 
-def _fill_empty_impedance_placeholder(root: Path) -> None:
-    if _impedance_table_has_rows(root):
-        return
+def _write_impedance_table(root: Path, config) -> None:
+    project_stem = _project_stem(root)
+    impedance_entries = _impedance_entries(config)
+    output_dir = root / "Manufacturing" / "Fabrication"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = output_dir / f"{project_stem}-impedance_table.csv"
     pcb_path = _pcb_path(root)
     text = pcb_path.read_text(encoding="utf-8")
-    updated = _replace_text_box_content(
-        text,
-        IMPEDANCE_TABLE_TEXT_BOX_UUID,
-        "NO IMPEDANCE CONTROLLED TRACES",
-    )
-    updated = _set_text_box_font_size(updated, IMPEDANCE_TABLE_TEXT_BOX_UUID, 1.27)
+
+    if not impedance_entries:
+        if csv_path.exists():
+            csv_path.unlink()
+        updated = _replace_text_box_content(
+            text,
+            IMPEDANCE_TABLE_TEXT_BOX_UUID,
+            "NO IMPEDANCE CONTROLLED TRACES",
+        )
+        updated = _set_text_box_font_size(updated, IMPEDANCE_TABLE_TEXT_BOX_UUID, 1.27)
+        if updated != text:
+            pcb_path.write_text(updated, encoding="utf-8")
+        return
+
+    rendered = _render_impedance_table_csv(impedance_entries)
+    csv_path.write_text(rendered, encoding="utf-8", newline="\n")
+    updated = _replace_text_box_content(text, IMPEDANCE_TABLE_TEXT_BOX_UUID, rendered.rstrip())
+    updated = _set_text_box_font_size(updated, IMPEDANCE_TABLE_TEXT_BOX_UUID, 1.0)
     if updated != text:
         pcb_path.write_text(updated, encoding="utf-8")
 
 
+def _impedance_entries(config) -> list[dict[str, str]]:
+    if config is None:
+        return []
+    entries = getattr(config, "impedance_entries", [])
+    normalized: list[dict[str, str]] = []
+    for entry in entries if isinstance(entries, list) else []:
+        normalized.append(
+            {
+                "transmission_line": str(entry.get("transmission_line", "")).strip(),
+                "impedance_ohms": str(entry.get("impedance_ohms", "")).strip(),
+                "tolerance_ohms": str(entry.get("tolerance_ohms", "")).strip(),
+                "layer": str(entry.get("layer", "")).strip(),
+                "trace_width_mm": str(entry.get("trace_width_mm", "")).strip(),
+                "gap_mm": str(entry.get("gap_mm", "")).strip(),
+                "ref_layers": str(entry.get("ref_layers", "")).strip(),
+            }
+        )
+    return [row for row in normalized if any(value.strip() for value in row.values())]
+
+
 def _impedance_table_has_rows(root: Path) -> bool:
-    template = root / IMPEDANCE_TABLE_TEMPLATE
-    if not template.is_file():
-        return False
-    rows = [
-        row
-        for row in csv.reader(template.read_text(encoding="utf-8", errors="ignore").splitlines())
-        if any(cell.strip() for cell in row)
-    ]
-    return len(rows) > 1
+    config = _load_project_config(root)
+    return bool(_impedance_entries(config))
 
 
-def _write_manufacturing_notes(root: Path) -> None:
-    values = _fabrication_note_values(root)
+def _write_manufacturing_notes(root: Path, config=None) -> None:
+    if config is None:
+        config = _load_project_config(root)
+    values = _fabrication_note_values(root, config)
     project_stem = _project_stem(root)
 
     fabrication = _resource_text(root, FABRICATION_NOTES_TEMPLATE)
     fabrication = _render_note_template(fabrication, values)
-    if not _impedance_table_has_rows(root):
+    impedance_rows = _impedance_entries(config)
+    if not impedance_rows:
         fabrication = _strip_impedance_controlled_note(fabrication)
     fabrication_dir = root / "Manufacturing" / "Fabrication"
     fabrication_dir.mkdir(parents=True, exist_ok=True)
@@ -381,6 +463,84 @@ def _write_manufacturing_notes(root: Path) -> None:
     )
 
 
+def _write_readme_summaries(root: Path, config, rows: tuple[tuple[str, int, int, int], ...]) -> None:
+    values = _fabrication_note_values(root, config)
+    project_stem = _project_stem(root)
+    impedance_rows = _impedance_entries(config)
+
+    fabrication_summary = _fabrication_summary_text(values, impedance_rows)
+    fabrication_dir = root / "Manufacturing" / "Fabrication"
+    fabrication_dir.mkdir(parents=True, exist_ok=True)
+    (fabrication_dir / f"{project_stem}-fabrication_summary.txt").write_text(
+        fabrication_summary,
+        encoding="utf-8",
+    )
+
+    component_summary = _component_summary_text(rows)
+    assembly_dir = root / "Manufacturing" / "Assembly"
+    assembly_dir.mkdir(parents=True, exist_ok=True)
+    (assembly_dir / f"{project_stem}-component_summary.txt").write_text(
+        component_summary,
+        encoding="utf-8",
+    )
+
+
+def _write_readme_badges(root: Path, config) -> None:
+    badge_path = root / ".boardwright" / "readme_badges.txt"
+    badge_path.parent.mkdir(parents=True, exist_ok=True)
+    badges = _readme_badges(config)
+    badge_path.write_text(badges, encoding="utf-8")
+
+
+def _readme_badges(config) -> str:
+    if config is None:
+        return ""
+
+    repo = _github_repo_for_badges(config)
+    if not repo:
+        return ""
+
+    badges = [
+        _workflow_badge(repo, config.preview_workflow, config.dev_branch, "Preview CI"),
+        _workflow_badge(repo, config.main_workflow, config.release_branch, "Accepted outputs"),
+        _workflow_badge(repo, "prepare-release.yaml", config.release_branch, "Prepare release"),
+        _workflow_badge(repo, "release.yaml", config.release_branch, "Publish release"),
+    ]
+    return " ".join(badges) + "\n"
+
+
+def _workflow_badge(repo: str, workflow: str, branch: str, label: str) -> str:
+    badge = f"https://github.com/{repo}/actions/workflows/{workflow}/badge.svg?branch={branch}"
+    link = f"https://github.com/{repo}/actions/workflows/{workflow}"
+    return f"[![{label}]({badge})]({link})"
+
+
+def _github_repo_for_badges(config) -> str:
+    repo = str(getattr(config, "github_repo", "") or "").strip()
+    if repo:
+        return repo
+
+    git_url = str(config.project.get("project", {}).get("git_url") or "").strip()
+    if not git_url:
+        git_url = remote_url(config.root)
+    return _github_repo_from_url(git_url)
+
+
+def _github_repo_from_url(url: str) -> str:
+    if not url:
+        return ""
+    patterns = (
+        r"^https://github\.com/(?P<repo>[^/]+/[^/]+?)(?:\.git)?/?$",
+        r"^git@github\.com:(?P<repo>[^/]+/[^/]+?)(?:\.git)?$",
+        r"^ssh://git@github\.com/(?P<repo>[^/]+/[^/]+?)(?:\.git)?/?$",
+    )
+    for pattern in patterns:
+        match = re.match(pattern, url)
+        if match:
+            return match.group("repo")
+    return ""
+
+
 def _resource_text(root: Path, relative_path: Path) -> str:
     project_path = root / relative_path
     if project_path.is_file():
@@ -389,21 +549,34 @@ def _resource_text(root: Path, relative_path: Path) -> str:
     return repo_path.read_text(encoding="utf-8")
 
 
-def _fabrication_note_values(root: Path) -> dict[str, str]:
+def _fabrication_note_values(root: Path, config=None) -> dict[str, str]:
     pcb = _pcb_path(root).read_text(encoding="utf-8")
     width, height = _board_size_mm(pcb)
     pth, npth = _min_drill_sizes(pcb)
+    manufacturing = config.manufacturing if config is not None else {}
+    company = _first_match(pcb, r'\(property\s+"([^"]*)"\s+"([^"]*)"\)', "")
+    company = str(config.project.get("project", {}).get("company") or company or "COMPANY") if config is not None else company or "COMPANY"
+    silkscreen_enabled = _as_bool(manufacturing.get("silkscreen_enabled", True))
+    conformal_coating = _as_bool(manufacturing.get("conformal_coating", False))
+    tented_vias = _as_bool(manufacturing.get("tented_vias", True))
+    rohs_pb_free = _as_bool(manufacturing.get("rohs_pb_free", True))
+    halogen_free = _as_bool(manufacturing.get("halogen_free", True))
+    silk_color = _stackup_layer_value(pcb, "F.SilkS", "color", "YELLOW")
     return {
         "pcb_finish_cap": _cap(_first_match(pcb, r'\(copper_finish\s+"([^"]+)"\)', "ENIG")),
-        "solder_mask_color_text_cap": _cap(
-            _stackup_layer_value(pcb, "F.Mask", "color", "GREEN")
-        ),
-        "silk_screen_color_text_cap": _cap(
-            _stackup_layer_value(pcb, "F.SilkS", "color", "YELLOW")
-        ),
-        "COMPANY_cap": _cap(
-            _first_match(pcb, r'\(property\s+"COMPANY"\s+"([^"]*)"\)', "COMPANY")
-        ),
+        "solder_mask_color_text_cap": _cap(_stackup_layer_value(pcb, "F.Mask", "color", "GREEN")),
+        "silk_screen_color_text_cap": _cap(silk_color),
+        "manufacturing_standard_cap": _cap(str(manufacturing.get("manufacturing_standard") or "IPC-6012 Class 2")),
+        "core_material_cap": _cap(str(manufacturing.get("core_material") or "FR-4")),
+        "flammability_rating_cap": _cap(str(manufacturing.get("flammability_rating") or "UL94V-0")),
+        "tg_rating_cap": _cap(str(manufacturing.get("tg_rating") or "170 C")),
+        "silkscreen_note": _silkscreen_note(silkscreen_enabled, silk_color),
+        "tented_vias_note": _tented_vias_note(tented_vias),
+        "rohs_note": _rohs_note(rohs_pb_free),
+        "material_compliance_note": _material_compliance_note(rohs_pb_free, halogen_free, company),
+        "conformal_coating_note": _conformal_coating_note(conformal_coating),
+        "fabrication_extra_notes": _extra_note_block(str(manufacturing.get("fabrication_notes") or "")),
+        "COMPANY_cap": _cap(company),
         "bb_w_mm": _mm(width),
         "bb_h_mm": _mm(height),
         "thickness_mm": _mm(float(_first_match(pcb, r"\(thickness\s+([-0-9.]+)\)", "0"))),
@@ -418,11 +591,116 @@ def _fabrication_note_values(root: Path) -> dict[str, str]:
     }
 
 
+
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _silkscreen_note(enabled: bool, color: str) -> str:
+    if not enabled:
+        return "NO SILKSCREEN LEGEND REQUIRED. DO NOT ADD MANUFACTURER MARKINGS UNLESS REQUIRED FOR TRACEABILITY."
+    return f"SILK SCREEN LEGEND TO BE APPLIED PER LAYER STACKUP USING {_cap(color)} NON-CONDUCTIVE EPOXY INK."
+
+
+def _tented_vias_note(enabled: bool) -> str:
+    if enabled:
+        return "ALL VIAS ARE TENTED ON BOTH SIDES UNLESS SOLDERMASK OPENED IN GERBER."
+    return "VIAS ARE NOT REQUIRED TO BE TENTED UNLESS SPECIFIED IN GERBER."
+
+
+def _rohs_note(enabled: bool) -> str:
+    if enabled:
+        return "VENDOR SHOULD FOLLOW ROHS COMPLIANT PROCESS AND Pb-FREE MANUFACTURING."
+    return "ROHS / Pb-FREE PROCESS IS NOT REQUIRED UNLESS SPECIFIED BY PURCHASE ORDER."
+
+
+def _material_compliance_note(rohs_pb_free: bool, halogen_free: bool, company: str) -> str:
+    requirements = []
+    if rohs_pb_free:
+        requirements.append("RoHS COMPLIANT")
+    if halogen_free:
+        requirements.append("HALOGEN FREE")
+    if not requirements:
+        requirements.append("APPROVED")
+    return f"EQUIVALENT MATERIAL SHALL BE {' AND '.join(requirements)} AND APPROVED BY {_cap(company)}."
+
+
+def _conformal_coating_note(enabled: bool) -> str:
+    if enabled:
+        return "CONFORMAL COATING REQUIRED AFTER ASSEMBLY UNLESS OTHERWISE SPECIFIED."
+    return "CONFORMAL COATING IS NOT REQUIRED."
+
+
+def _extra_note_block(text: str) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return ""
+    return "ADDITIONAL FABRICATION NOTES:\n" + stripped
+
+def _fabrication_summary_text(
+    values: dict[str, str],
+    impedance_rows: list[dict[str, str]],
+) -> str:
+    lines = [
+        "FABRICATION SNAPSHOT",
+        f"- Board size: {values['bb_w_mm']} x {values['bb_h_mm']} mm",
+        f"- Thickness: {values['thickness_mm']} mm",
+        f"- Surface finish: {values['pcb_finish_cap']}",
+        f"- Soldermask color: {values['solder_mask_color_text_cap']}",
+        f"- Silkscreen color: {values['silk_screen_color_text_cap']}",
+        f"- Minimum PTH drill: {values['drill_pth_real_mm']} mm",
+        f"- Minimum NPTH drill: {values['drill_npth_real_mm']} mm",
+    ]
+    if impedance_rows:
+        lines.append(f"- Impedance entries: {len(impedance_rows)}")
+    else:
+        lines.append("- Impedance: no impedance controlled traces")
+    return "\n".join(lines) + "\n"
+
+
+def _render_impedance_table_csv(rows: list[dict[str, str]]) -> str:
+    buffer = io.StringIO()
+    output = csv.writer(buffer)
+    output.writerow(
+        [
+            "Transmission Line",
+            "Impedance [ohms]",
+            "Tolerance [ohms]",
+            "Layer",
+            "Trace Width [mm]",
+            "Gap [mm]",
+            "Ref. Layers",
+        ]
+    )
+    for row in rows:
+        output.writerow(
+            [
+                row["transmission_line"],
+                row["impedance_ohms"],
+                row["tolerance_ohms"],
+                row["layer"],
+                row["trace_width_mm"],
+                row["gap_mm"],
+                row["ref_layers"],
+            ]
+        )
+    return buffer.getvalue()
+
+
+def _component_summary_text(rows: tuple[tuple[str, int, int, int], ...]) -> str:
+    lines = ["COMPONENT SNAPSHOT"]
+    for label, front, back, total in rows:
+        lines.append(f"- {label}: {front} front, {back} back, {total} total")
+    return "\n".join(lines) + "\n"
+
+
 def _render_note_template(template: str, values: dict[str, str]) -> str:
     rendered = template
     for key, value in values.items():
         rendered = rendered.replace("${" + key + "}", value)
-    return rendered.replace("Ã—", "×")
+    return rendered.replace("ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â", "ÃƒÆ’Ã¢â‚¬â€")
 
 
 def _strip_impedance_controlled_note(text: str) -> str:
@@ -732,7 +1010,47 @@ def _escape_kicad_string(value: str) -> str:
 
 
 def _yaml_quote(value: str) -> str:
-    return "'" + value.replace("'", "''") + "'"
+    return "'" + value.replace("\\", "\\\\").replace("\n", "\\\\n").replace("'", "''") + "'"
+
+
+def _render_project_text(value: str, project: dict[str, object]) -> str:
+    replacements = {
+        "PROJECT_NAME": str(project.get("name") or ""),
+        "BOARD_NAME": str(project.get("board_name") or project.get("name") or ""),
+        "BOARD_REVISION": str(project.get("board_revision") or ""),
+        "PCBA_NUMBER": str(project.get("pcba_number") or ""),
+        "PCB_NUMBER": str(project.get("pcb_number") or ""),
+        "DOCUMENT_REVISION": str(project.get("document_revision") or "A"),
+        "DOCUMENT_REVISION_SCHEME": str(project.get("document_revision_scheme") or "lettered"),
+        "DRAWN_BY": str(project.get("drawn_by") or ""),
+        "DRAWN_DATE": str(project.get("drawn_date") or ""),
+        "CHECKED_BY": str(project.get("checked_by") or ""),
+        "CHECKED_DATE": str(project.get("checked_date") or ""),
+        "APPROVED_BY": str(project.get("approved_by") or ""),
+        "APPROVED_DATE": str(project.get("approved_date") or ""),
+        "COMPANY": str(project.get("company") or ""),
+        "DESIGNER": str(project.get("designer") or ""),
+    }
+    rendered = value
+    for key, replacement in replacements.items():
+        rendered = rendered.replace("${" + key + "}", replacement)
+        rendered = rendered.replace("{" + key + "}", replacement)
+    return rendered
+
+
+def _pcb_worksheet(root: Path, fallback: str) -> str:
+    return _worksheet_from_kicad_project(root, preferred_sections=("pcbnew",)) or fallback
+
+
+def _worksheet_definition(path: str) -> str:
+    value = path.replace("\\", "/").strip()
+    if not value:
+        value = "Templates/Boardwright_Template_PCB_GIT_A4.kicad_wks"
+    if value.startswith("${KIPRJMOD}/"):
+        return value
+    if value.startswith("/") or (len(value) > 2 and value[1] == ":" and value[2] == "/"):
+        return value
+    return "${KIPRJMOD}/" + value.lstrip("./")
 
 
 def _unescape_kicad_string(value: str) -> str:

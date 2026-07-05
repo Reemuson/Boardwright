@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 import unittest
 from pathlib import Path
 
@@ -17,6 +20,13 @@ class WorkflowTests(unittest.TestCase):
             text = workflow.read_text(encoding="utf-8")
             for marker in markers:
                 self.assertIn(marker, text)
+
+    def test_workflows_expose_src_to_kibot_python_helpers(self) -> None:
+        for workflow in Path(".github/workflows").glob("*.yaml"):
+            text = workflow.read_text(encoding="utf-8")
+
+            self.assertIn("PYTHONPATH: ${{ github.workspace }}/src", text)
+            self.assertNotIn("\n  PYTHONPATH: ${{ github.workspace }}/src\n          GH_TOKEN", text)
 
     def test_workflows_do_not_run_notes_as_standalone_target(self) -> None:
         for workflow in Path(".github/workflows").glob("*.yaml"):
@@ -96,6 +106,16 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("Cache Python packages", text)
         self.assertIn("~/.cache/pip", text)
 
+    def test_release_workflows_can_publish_curated_source_archive(self) -> None:
+        prepare = Path(".github/workflows/prepare-release.yaml").read_text(encoding="utf-8")
+        release = Path(".github/workflows/release.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("RELEASE_INCLUDE_SOURCE_ARCHIVE", prepare)
+        self.assertIn("Build curated source archive", release)
+        self.assertIn("boardwright-${{ github.ref_name }}-source.zip", release)
+        self.assertIn("Curated source package", release)
+        self.assertIn("RELEASE_INCLUDE_SOURCE_ARCHIVE", release)
+
     def test_preview_runs_are_explicitly_dispatched(self) -> None:
         text = Path(".github/workflows/dev-preview.yaml").read_text(encoding="utf-8")
 
@@ -164,6 +184,16 @@ class WorkflowTests(unittest.TestCase):
 
         self.assertNotIn('echo "# ${tag}"', text)
         self.assertIn('echo "Generated \\`${RELEASE_VARIANT}\\` package', text)
+
+    def test_prepare_release_can_dispatch_draft_release(self) -> None:
+        prepare = Path(".github/workflows/prepare-release.yaml").read_text(encoding="utf-8")
+        release = Path(".github/workflows/release.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("- draft", prepare)
+        self.assertIn("default: prerelease", prepare)
+        self.assertIn("release_kind", prepare)
+        self.assertIn("draft: ${{ env.RELEASE_KIND == 'draft' }}", release)
+        self.assertIn("RELEASE_KIND: release", release)
 
 
 if __name__ == "__main__":

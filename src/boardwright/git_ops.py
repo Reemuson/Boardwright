@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 from __future__ import annotations
 
 import re
@@ -36,6 +39,12 @@ def remote_branch_sha(root: Path, remote: str, branch: str) -> str:
 def dirty_files(root: Path) -> list[str]:
     output = _git(root, "status", "--short")
     return [line for line in output.splitlines() if line.strip()]
+
+
+def remote_url(root: Path, remote: str = "origin") -> str:
+    if not remote.strip():
+        return ""
+    return _git(root, "remote", "get-url", remote, check=False)
 
 
 def latest_tag(root: Path) -> str | None:

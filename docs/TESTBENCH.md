@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available -->
+<!-- Copyright (c) Ryan Hicks -->
+
 # Boardwright Live Testbench
 
 Use a separate repository for live CI testing. Do not run preview, accept, or

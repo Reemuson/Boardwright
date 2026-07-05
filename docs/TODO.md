@@ -1,20 +1,102 @@
+<!-- SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available -->
+<!-- Copyright (c) Ryan Hicks -->
+
 # Boardwright TODO
 
 This is the actionable tracker. Product rules live in `SPEC.md`; sequencing
 lives in `ROADMAP.md`.
 
-## Current Focus: Source Of Truth And TUI Clarity
+## Current Focus: Productization Critical Path
 
-Goal: keep the docs, dashboard, and live workflow aligned after the first full
-end-to-end release run.
+Goal: turn the now-working workflow into a clean template product: clear README,
+clear legal/provenance, neutral configurable KiCad sheets, and project metadata
+editing.
 
 - [x] Replace compact CI abbreviations with readable phase names in the TUI
       status strip and evidence panel.
 - [x] Make the dashboard tag display use the latest semantic release tag, with
       prerelease fallback when no stable release tags exist.
 - [x] Document the latest-tag rule in `SPEC.md`.
-- [ ] Do one more TUI happy-path pass after the latest status-strip changes.
-- [ ] Capture any remaining live CI/release findings in this tracker.
+- [x] Add legal/provenance and configurable KiCad sheet/title-block requirements
+      to `SPEC.md`.
+- [x] Do one more TUI happy-path pass after the latest status-strip changes.
+- [x] Replace root `README.md` with a Boardwright-native README.
+- [x] Complete first-pass file-level legal/provenance review for Nguyen-derived
+      files, Boardwright-original code/docs, bundled fonts/assets, helper
+      scripts, and generated-output notices.
+- [x] Replace hardcoded local business title-block/worksheet legal text with
+      Boardwright-neutral defaults and project-configured variables.
+- [x] Add project config fields for sheet/title-block legal notice, logo,
+      embedded sheet image, and organization metadata.
+- [x] Collapse worksheet branding to one sheet image field; keep README logo
+      and project images separate.
+- [x] Re-embed the configured sheet image into all worksheet templates when
+      Project Info is saved from the TUI.
+- [x] Replace embedded worksheet bitmap image data from project-configured
+      `template.sheet_image` paths with `boardwright worksheet-logo`.
+- [x] Capture known live CI/release findings in this tracker.
+
+## Next: Root README, Legal, And Template Branding
+
+- [ ] Table full worksheet consolidation until combined PDF output stabilizes:
+      keep the normal GIT worksheet as the intended single Boardwright template,
+      keep the CME worksheet as the worked branded example, and retire permanent
+      `_PCB` templates once standalone assembly/fabrication numbering no longer
+      needs them.
+- [ ] Design Boardwright-native standardized worksheet families after the
+      consolidation decision: AS 1100, ISO, and ANSI-style layouts, all driven
+      by project config/text variables rather than hardcoded business fields.
+- [ ] Add a controlled numbering/revision metadata model: PCBA number, bare PCB
+      number, board revision/spin, document revision, and configurable document
+      revision scheme. Keep Git release/package version separate.
+- [ ] Add drawing signoff metadata and text variables for drawn, checked,
+      approved, and their dates.
+- [ ] Extend revision-history variables/sheets to support controlled-document
+      rows with revision, description, drawn/date, checked/date, and optional
+      approved/date columns.
+- [x] Audit root README draft notes and decide what moves into
+      the real root README.
+- [x] Add a clear section explaining the difference between the Boardwright
+      template README and generated board-project READMEs.
+- [x] Review `LICENSE`, `NOTICE.md`, and `THIRD_PARTY_NOTICES.md` for current
+      accuracy.
+- [x] Create a provenance inventory for inherited Nguyen files/patterns,
+      Boardwright original work, bundled fonts, logos/assets, and scripts.
+- [x] Rewrite public provenance as a source-of-truth engineering inventory
+      rather than narrative legal notes.
+- [x] Add git-history-based Nguyen provenance audit in archived local notes.
+- [x] Add a licensing review covering Nguyen MIT inheritance, Ryan Hicks
+      ownership goals, source-available options, and downstream hardware output
+      carve-out.
+- [x] Capture detailed three-layer licensing reconciliation in archived local
+      notes.
+- [x] Decide Ryan Hicks licensing policy: Apache-2.0 with Commons Clause,
+      plus the Boardwright Hardware Output Exception.
+- [x] Move inherited Nguyen MIT text into `LICENSES/Nguyen-MIT.txt`.
+- [x] Replace root `LICENSE` with the selected Boardwright/Ryan Hicks
+      source-available license/index.
+- [x] Add `LICENSES/Apache-2.0.txt` and `LICENSES/Commons-Clause.txt`.
+- [x] Drop standalone trademark policy; keep branding restrictions in
+      `LICENSE` and `NOTICE.md` because there is no registered trademark.
+- [x] Add `CONTRIBUTING.md` with inbound-equals-outbound contribution terms.
+- [x] Restructure `.boardwright/legal.yaml` so it clearly describes downstream
+      hardware-project defaults rather than the Boardwright repository license.
+- [ ] Get the implemented license stack reviewed by qualified legal counsel.
+- [x] Add SPDX/file headers to safe Boardwright-authored and inherited
+      Nguyen-unchanged text/code files.
+- [x] Decide SPDX/header policy for mixed Nguyen/Boardwright derivative files:
+      keep Nguyen MIT SPDX attribution and add a Boardwright modification line.
+- [x] Use the archived Nguyen provenance audit as the source map for SPDX/header
+      classification.
+- [x] Decide default public-template legal/title-block wording.
+- [x] Make KiCad worksheet/title-block legal text configurable without editing
+      every sheet manually; worksheet selection now follows the KiCad project
+      file.
+- [x] Make worksheet embedded logo artwork configurable without editing every
+      worksheet manually.
+- [x] Add validation warnings for known-local hardcoded branding once neutral
+      defaults are in place.
+- [x] Confirm or replace bundled KiCad color theme files.
 
 ## Done: Fresh Preview Acceptance
 
@@ -56,7 +138,7 @@ rules.
       created time, state, and reviewed marker.
 - [x] Provide fetch/review action from the screen.
 - [x] Show manual GitHub fallback instructions in the screen.
-- [ ] Add richer artifact open/browse shortcuts after download.
+- [x] Add richer artifact open/browse shortcuts after download.
 
 ## Done: Accepted Main And Release Readiness
 
@@ -100,16 +182,19 @@ Goal: prove workflows still work after moving visible generated media under
       fallback.
 - [x] Replace the impedance table body with "No impedance controlled traces"
       when no controlled-impedance entries are configured.
-- [ ] Add a controlled-impedance data model and restore impedance table output
+- [x] Add a controlled-impedance data model and restore impedance table output
       when projects explicitly opt in.
-- [x] Keep the PCB template's explicit Arial typography and install bundled
-      fonts for CI rendering.
-- [ ] Decide how Boardwright should model/edit fabrication notes,
+- [x] Replace Arial/Times New Roman CI rendering dependency with bundled
+      Arimo/Tinos OFL fonts.
+- [x] Add `LICENSES/OFL-1.1.txt` for bundled Arimo/Tinos fonts.
+- [x] Install bundled Arimo/Tinos fonts from the PowerShell installer for
+      local KiCad rendering, with `-NoFonts` opt-out.
+- [x] Decide how Boardwright should model/edit fabrication notes,
       assembly notes, testpoint policy, and controlled-impedance requirements
       from the TUI.
 - [x] Add a TUI project-information editor for project name, company, author,
       GitHub repository, assets, and variant defaults.
-- [ ] Extend the TUI project-information editor to fabrication notes, assembly
+- [x] Extend the TUI project-information editor to fabrication notes, assembly
       notes, and other project-specific manufacturing metadata.
 - [x] Review stackup legend layer colors against the original template.
 - [x] Preview workflow uses `assets/renders` and `assets/3d` correctly.
@@ -128,24 +213,28 @@ Goal: prove workflows still work after moving visible generated media under
       `README.md`, and `assets/renders/*.png`.
 - [x] Release workflow packages `assets/` and attaches board render PNGs to the
       GitHub Release.
-- [ ] Record any live CI findings back into this tracker.
+- [x] Record any live CI findings back into this tracker.
 
 ## Next: Generated README
 
 Goal: make the generated README a useful hardware project front page.
 
 - [x] Add Boardwright-specific README structure.
-- [ ] Add CI status badges only when repository URL metadata is reliable and
+- [x] Keep the generated project README separate from the root product README.
+- [x] Add CI status badges only when repository URL metadata is reliable and
       generated README links will not be broken.
 - [x] Keep `${REVISION}` as semantic version and add `${BOARD_REVISION}` for
       A/B/C board spins.
+- [ ] Split controlled document revision from semantic release/package version
+      in title blocks, generated README, release metadata, and revision-history
+      generation.
 - [x] Add board dimensions.
 - [x] Keep board images side by side in README and release markdown.
-- [ ] Add latest release/package links.
-- [ ] Add brief stackup/fabrication summary if KiBot exposes reliable variables.
-- [ ] Add component count summary if KiBot output data supports it.
+- [x] Add latest release/package links.
+- [x] Add brief stackup/fabrication summary if KiBot exposes reliable variables.
+- [x] Add component count summary if KiBot output data supports it.
 - [x] Remove or reword placeholder text that will look stale in real projects.
-- [ ] Confirm generated README still mentions `LICENSE`, `NOTICE.md`, and
+- [x] Confirm generated README still mentions `LICENSE`, `NOTICE.md`, and
       `THIRD_PARTY_NOTICES.md`.
 
 ## Near: CLI And Packaging Polish
@@ -153,14 +242,15 @@ Goal: make the generated README a useful hardware project front page.
 - [x] Add `src/boardwright/__main__.py` so `python -m boardwright` works.
 - [x] Update `boardwright release --prepare` output so it no longer suggests
       the old local tag/push sequence as the primary release path.
-- [ ] Decide whether to add a dev/test optional dependency group.
-- [ ] Make bare test instructions explicit in contributor docs:
+- [x] Decide whether to add a dev/test optional dependency group.
+- [x] Make bare test instructions explicit in contributor docs:
       `python -m unittest discover -s tests -v`.
+- [x] Add/refresh root README installation and contributor instructions.
 
 ## Near: TUI Polish
 
 - [x] Show exact manual fallback commands when GitHub CLI is unavailable.
-- [ ] Add direct GitHub Actions URLs after repository metadata is configured.
+- [x] Add direct GitHub Actions URLs after repository metadata is configured.
 - [x] Make Generate Preview a direct TUI action instead of hiding dispatch in
       CLI-only/manual fallback flows.
 - [x] Rebalance primary/secondary action layout now that Generate Preview and
@@ -169,9 +259,11 @@ Goal: make the generated README a useful hardware project front page.
       inspector or modal screens instead.
 - [x] Add a sectioned Now/Evidence/Release inspector instead of a raw status
       dump.
+- [x] Make the TUI adapt to shorter terminals and turn Project Info into
+      cleaner labeled sections with lighter helper text.
 - [x] Make TUI keybindings use the same action gates as disabled/enabled
       buttons.
-- [ ] Tune next-action labels after more full-path live use.
+- [x] Tune next-action labels after more full-path live use.
 - [x] Verify the TUI can drive the full happy path after CI retest.
 
 ## Verification Targets
@@ -184,7 +276,7 @@ Goal: make the generated README a useful hardware project front page.
 - [x] Revision variable populates on generated schematic.
 - [x] Cover ToC includes nested sheets.
 - [x] Prepare-release workflow can create a prerelease tag from `main`.
-- [ ] Prepare-release workflow can create a draft tag from `main`.
+- [x] Prepare-release workflow can create a draft tag from `main`.
 - [x] Prepare-release workflow can create a full release tag from `main`.
 - [x] TUI can drive record -> commit/push -> review -> accept -> release.
 - [ ] Measure CI time after switching caches to `actions/cache@v4`; decide
@@ -225,9 +317,17 @@ Goal: make the generated README a useful hardware project front page.
 
 ## Later
 
-- [ ] Add `boardwright adopt` for existing projects.
-- [ ] Add richer legal/licence profiles.
-- [ ] Add curated source package support if needed.
-- [ ] Add local KiBot/Docker runner support after CI-first flow is solid.
+- [x] Add `boardwright adopt` for existing projects.
+- [x] Add worksheet/schematic generation tools:
+      generate extra revision-history sheets, create one-sheet projects, create
+      hierarchical-sheet project skeletons, and add new hierarchical schematic
+      sheets from the TUI.
+- [x] Add a sheet-title sync/check tool:
+      read KiCad hierarchical `Sheetname` values, update local
+      `SHEET_NAME_1..40` placeholder text variables for interactive editing,
+      and warn when visible navigation labels drift from actual sheet names.
+- [x] Add richer legal/licence profiles after the initial provenance pass.
+- [x] Add curated source package support if needed.
+- [x] Add local KiBot/Docker runner support after CI-first flow is solid.
 - [ ] Revisit multi-board or assembly variants after KiCad/KiBot variant support
       settles.

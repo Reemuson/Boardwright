@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available -->
+<!-- Copyright (c) Ryan Hicks -->
+
 # Boardwright Roadmap
 
 This roadmap tracks the product sequence. `TODO.md` is the tactical work queue.
@@ -8,12 +11,37 @@ This roadmap tracks the product sequence. `TODO.md` is the tactical work queue.
 Boardwright has a working local tooling foundation, a usable TUI workflow
 cockpit, and split GitHub Actions workflows for preview, accepted outputs,
 release preparation, and tag publishing. A full live run through preview,
-review, accept to main, and release has succeeded. The next build should focus
-on source-of-truth cleanup, README usefulness, and deeper project metadata
-editing.
+review, accept to main, and release has succeeded. The critical path is now
+productization: the root project README, legal/provenance clarity, configurable
+KiCad title-block/worksheet branding, and deeper project metadata editing.
 
 The current branch is expected to be `main` for accepted template work. Normal
 Boardwright project usage still expects design changes on `dev`.
+
+## Critical Path
+
+Do these before treating Boardwright as a clean public/template release:
+
+1. Root project README: replace the inherited/root README with a
+   Boardwright-native README that explains what this repository is, how to use
+   it, and how the generated project README differs from the template README.
+2. Legal and provenance review: maintain the implemented source-available
+   Boardwright license stack, identify Nguyen-derived files, confirm bundled
+   third-party assets/fonts/scripts, and keep NOTICE/THIRD_PARTY_NOTICES
+   accurate.
+3. Configurable KiCad sheets/title blocks: worksheet selection follows the
+   KiCad project file, while legal text and embedded worksheet logo replacement
+   come from project config/tooling; continue refining the TUI and validation
+   around these fields.
+4. Project Info 2.0: the TUI now exposes project, template, sheet, variant, and
+   asset sections; continue expanding it to cover legal/provenance, fabrication metadata,
+   assembly notes, controlled impedance, and output/readme policy through the
+   TUI/config model.
+5. Generated README polish: make project READMEs useful hardware front pages
+   without broken badges or stale placeholders.
+6. Project generation: add tools for revision-history sheet generation,
+   one-sheet project setup, hierarchical schematic skeletons, and TUI-assisted
+   hierarchical sheet creation.
 
 ## Milestone 1: Local Project Control
 
@@ -35,6 +63,7 @@ Delivered:
 Remaining polish:
 
 - consider a developer/test extra for smoother local test setup
+- developer/test extra is now available via `pip install -e ".[dev]"`
 
 ## Milestone 2: Preview Loop
 
@@ -58,6 +87,7 @@ Delivered:
 Remaining:
 
 - keep tuning review/download UX after real project use
+- add artifact folder/README open shortcuts after downloads
 
 ## Milestone 3: Accepted Main Outputs
 
@@ -100,7 +130,7 @@ Remaining:
 - live retest draft release
 - measure whether CI runtime needs further optimization
 
-## Milestone 5: Rich README And Usable Dashboard
+## Milestone 5: Project README, Legal Review, And Usable Dashboard
 
 Status: active.
 
@@ -123,36 +153,93 @@ Delivered:
   CI testing in a separate repository
 - compact CI status with readable phase names: Preview, Accept, Release
 - latest semantic release/prerelease tag display in the TUI status strip
+- root README replaced with a Boardwright-native product/template README
+- initial provenance inventory in `docs/PROVENANCE.md`
+- detailed Nguyen git-history provenance audit captured in local archived notes
+- licensing options/recommendation captured in local archived notes
+- detailed three-layer reconciliation captured in local archived notes
+- inherited Nguyen MIT text moved to `LICENSES/Nguyen-MIT.txt`
+- root `LICENSE` replaced with the Boardwright source-available license/index:
+  Apache-2.0 with Commons Clause, plus the Boardwright Hardware Output
+  Exception
+- `LICENSES/Apache-2.0.txt` and `LICENSES/Commons-Clause.txt` added
+- `LICENSES/OFL-1.1.txt` added for bundled Arimo/Tinos fonts
+- `CONTRIBUTING.md` added
+- `.boardwright/legal.yaml` restructured as downstream hardware-project
+  defaults instead of repository licensing
+- `NOTICE.md` and `THIRD_PARTY_NOTICES.md` updated to reflect the implemented
+  license split
+- first-pass file-level provenance/SPDX policy completed for Boardwright,
+  Nguyen-derived, and mixed files
+- worksheet/title-block branding made project-configurable, with validation for
+  known local branding markers
+- controlled-impedance table output now comes from project config when enabled,
+  with an explicit no-traces fallback when projects do not opt in
+- generated README legal references confirmed for `LICENSE`, `NOTICE.md`, and
+  `THIRD_PARTY_NOTICES.md`
+- generated README now includes optional CI status badges when repository URL
+  metadata is trustworthy enough to avoid broken links
+- bundled KiCad color theme references now point at the repo-managed KiCad_Theme
+  resources instead of local ad hoc files
+- next-action labels now use more explicit action wording for validation,
+  changelog, preview, and editing states
 
 Remaining:
 
 - keep `SPEC.md`, `TODO.md`, and this roadmap as the source of truth after live
   workflow changes
+- get the implemented license stack reviewed by qualified legal counsel
+- table the full worksheet consolidation until the current combined-PDF work is
+  stable, then reduce each project/brand to one active worksheet template. CME
+  can serve as the branded example; Boardwright-native templates should be
+  refreshed into standardized AS 1100, ISO, and ANSI-style families.
 - add latest release/package links to generated README
 - add stackup/fabrication summary if KiBot variables are available
 - add component count summary if KiBot output data supports it
-- tune TUI labels and modal density after real workflow use
-- add CI status badges only after repository URL metadata is reliable enough to
-  avoid broken generated README links
-- add direct GitHub Actions/release URLs once repository metadata is configured
 
 Success criteria:
 
+- root `README.md` clearly describes Boardwright itself
+- legal files make inherited/original/third-party provenance clear enough for a
+  public template repository
+- default KiCad sheets no longer require manually editing every title block to
+  remove one business's branding
 - generated `README.md` is useful as the front page of a hardware repo
 - TUI shows enough state that normal users rarely need to open GitHub Actions
 - Accept to Main is based on fresh reviewed preview evidence
+- generated README includes release, workflow, fabrication, and component snapshots
 
 ## Milestone 6: Project Metadata Editing And Onboarding
 
-Status: planned, with identity/variant editing started.
+Status: planned, with identity/variant editing, adopt support, and schematic
+generation helpers started.
+
+Delivered:
+
+- `boardwright adopt` for existing KiCad projects
+- `boardwright generate` helpers for revision-history sheets, one-sheet
+  schematics, hierarchical skeletons, and TUI-driven sheet insertion
+- named downstream legal profiles for public-hardware, compatibility-friendly,
+  and internal-prototype project defaults
+- curated source-package support for release archives when requested by the
+  project config
+- local KiBot/Docker runner surfaced as a helper command after the CI-first
+  flow proved stable
 
 Scope:
 
 - first-run setup when `.boardwright/` is missing or incomplete
-- adopt an existing KiCad project into Boardwright
 - edit/view project metadata from the TUI
 - set GitHub repository, branch names, variants, logo/assets paths, and legal
   metadata without hand-editing YAML
+- configure KiCad title-block/worksheet identity values without manually
+  editing each sheet
+- select from Boardwright-native worksheet standards such as AS 1100, ISO, and
+  ANSI once the single-template-per-project model replaces permanent `_PCB`
+  variants
+- generate extra revision-history worksheets/schematic sheets when the default
+  fixed set is not enough
+- create new one-sheet or hierarchical project structures from the TUI
 - edit fabrication metadata, assembly notes, testpoint policy, and controlled
   impedance data without hand-editing KiBot templates
 - detect missing GitHub CLI authentication and show exact fallback commands
@@ -170,3 +257,18 @@ Success criteria:
 - local KiBot/Docker runner after the CI-first flow is solid
 - multi-board or assembly variants once KiCad/KiBot variant support is stable
 - richer artifact browser if the small cockpit proves insufficient
+## Planned Local Docker Output Engine
+
+Boardwright should grow a first-class local Docker output engine alongside the current GitHub Actions flow. The target user experience is a non-interactive local command such as `boardwright preview --local` or `boardwright outputs generate --engine docker --variant PRELIMINARY` that mirrors the CI pipeline without requiring the user to remember KiBot groups or helper scripts.
+
+The local engine should:
+
+- detect Docker and report a clear doctor/setup action when it is missing or not running
+- use the KiCad 9 KiBot image, currently `ghcr.io/inti-cmnb/kicad9_auto_full:dev`
+- mount the project directory read/write and keep generated files project-local
+- install bundled fonts inside the container before generation
+- run `prepare_pcb_tables.py`, KiBot `table_sources`, `prune_pdf_pages.py`, the selected KiBot output group, and `clean_generated_outputs.py` in the same order as CI
+- write reviewable preview files to `boardwright-preview/` for local review workflows
+- support a project setting such as `outputs.preview_engine: docker` while keeping GitHub Actions available for shared/release workflows
+
+Installing Docker Desktop itself should remain guided rather than silent: Windows/macOS installs may need admin approval, WSL2 setup, service startup, license prompts, or reboot. Boardwright can offer `boardwright local setup` to validate Docker and pull the image, but it should not make hidden system-level changes.

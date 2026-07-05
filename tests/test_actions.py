@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 import unittest
 from pathlib import Path
 
@@ -81,6 +84,17 @@ class ActionTests(unittest.TestCase):
         self.assertIn(("version", "0.1.2"), action.fields)
         self.assertIn(("variant", "PRELIMINARY"), action.fields)
         self.assertIn(("release_kind", "prerelease"), action.fields)
+
+    def test_build_prepare_release_action_supports_draft(self) -> None:
+        action = build_prepare_release_action(
+            _config(),
+            "0.1.2",
+            "checked",
+            "draft",
+        )
+
+        self.assertIn(("release_kind", "draft"), action.fields)
+        self.assertEqual("prepare-release.yaml", action.workflow)
 
     def test_rejects_bad_release_kind(self) -> None:
         with self.assertRaises(BoardwrightError):

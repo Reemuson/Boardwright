@@ -1,6 +1,6 @@
 FABRICATION NOTES (UNLESS OTHERWISE SPECIFIED)
 
-1)	FABRICATE PER IPC-6012A CLASS 2.
+1)	FABRICATE PER ${manufacturing_standard_cap}.
 
 2)	OUTLINE DEFINED IN SEPARATE GERBER FILE WITH
 	"Edge_Cuts.GBR" SUFFIX.
@@ -8,46 +8,43 @@ FABRICATION NOTES (UNLESS OTHERWISE SPECIFIED)
 	DIMENSIONS OF CIRCUMSIZED RECTANGLE SHOWN ON THIS
 	DRAWING FOR REFERENCE ONLY.
 
-3)	SEE SEPARATE DRILL FILES WITH ".DRL" SUFFIX 
+3)	SEE SEPARATE DRILL FILES WITH ".DRL" SUFFIX
 	FOR HOLE LOCATIONS.
 
-	SELECTED HOLE LOCATIONS SHOWN ON THIS DRAWING 
+	SELECTED HOLE LOCATIONS SHOWN ON THIS DRAWING
 	FOR REFERENCE ONLY.
 
 4)	SURFACE FINISH: ${pcb_finish_cap}
 
-5)	SOLDERMASK ON BOTH SIDES OF THE BOARD SHALL 
+5)	SOLDERMASK ON BOTH SIDES OF THE BOARD SHALL
 	BE LPI, COLOR ${solder_mask_color_text_cap}.
 
-6)	SILK SCREEN LEGEND TO BE APPLIED PER LAYER 
-	STACKUP USING ${silk_screen_color_text_cap} NON-CONDUCTIVE EPOXY INK.
+6)	${silkscreen_note}
 
-7)	ALL VIAS ARE TENTED ON BOTH SIDES UNLESS 
-	SOLDERMASK OPENED IN GERBER.
+7)	${tented_vias_note}
 
-8)	VENDOR SHOULD FOLLOW ROHS COMPLIANT PROCESS 
-	AND Pb FREE FOR MANUFACTURING
+8)	${rohs_note}
 
 9)	PCB MATERIAL REQUIREMENTS:
 
-	A.	FLAMMABILITY RATING MUST MEET OR EXCEED 
-		UL94V-0 REQUIREMENTS.
-	B.	Tg 170 C OR EQUIVALENT.
-	C.	EQUIVALENT MATERIAL SHALL BE RoHS COMPLIANT, 
-		HALOGEN FREE AND APPROVED BY ${COMPANY_cap}.
+	A.	CORE MATERIAL: ${core_material_cap}.
+	B.	FLAMMABILITY RATING MUST MEET OR EXCEED
+		${flammability_rating_cap} REQUIREMENTS.
+	C.	Tg ${tg_rating_cap} OR EQUIVALENT.
+	D.	${material_compliance_note}
 
 10)	DESIGN GEOMETRY MINIMUM FEATURE SIZES:
 
-	BOARD SIZE				${bb_w_mm} × ${bb_h_mm} mm
+	BOARD SIZE			${bb_w_mm} x ${bb_h_mm} mm
 	BOARD THICKNESS		${thickness_mm} mm
 	TRACE WIDTH			${track_mm} mm
 	TRACE TO TRACE		${clearance_mm} mm
-	MIN. HOLE (PTH)			${drill_pth_real_mm} mm
-	MIN. HOLE (NPTH)		${drill_npth_real_mm} mm
-	ANNULAR RING			${oar_mm} mm
+	MIN. HOLE (PTH)		${drill_pth_real_mm} mm
+	MIN. HOLE (NPTH)	${drill_npth_real_mm} mm
+	ANNULAR RING		${oar_mm} mm
 	COPPER TO HOLE		${c2h_mm} mm
 	COPPER TO EDGE		${c2e_mm} mm
-	HOLE TO HOLE			${h2h_mm} mm
+	HOLE TO HOLE		${h2h_mm} mm
 #?stackup and impedance_controlled
 
 #?stackup and impedance_controlled
@@ -56,3 +53,8 @@ FABRICATION NOTES (UNLESS OTHERWISE SPECIFIED)
 
 #?stackup and impedance_controlled
 12)	CONFIRM SPACE WIDTHS AND SPACINGS.
+#?stackup and impedance_controlled
+
+13)	${conformal_coating_note}
+
+${fabrication_extra_notes}

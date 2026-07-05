@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 from __future__ import annotations
 
 import json
@@ -41,7 +44,7 @@ class WorkflowAction:
             "GitHub CLI is unavailable or could not complete the request.",
             "",
             "Manual fallback:",
-            f"Open GitHub Actions -> {self.workflow} -> Run workflow",
+            f"GitHub Actions: {self.workflow} -> Run workflow",
             f"Ref: {self.ref}",
         ]
         if self.repo:

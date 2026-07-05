@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
@@ -10,9 +13,14 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "PyYAML>=6.0",
+  "pypdf>=4.0",
 ]
 
 [project.optional-dependencies]
+dev = [
+  "Jinja2>=3.1",
+  "textual>=0.80",
+]
 tui = [
   "textual>=0.80",
 ]

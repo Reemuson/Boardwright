@@ -281,7 +281,7 @@
 			(at 190.5 135.2046 0)
 			(effects
 				(font
-					(face "Arial")
+					(face "Arimo")
 					(size 1.27 1.27)
 				)
 				(justify left top)
@@ -325,7 +325,7 @@
 			(at 190.5 97.1046 0)
 			(effects
 				(font
-					(face "Arial")
+					(face "Arimo")
 					(size 1.27 1.27)
 				)
 				(justify left top)

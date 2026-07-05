@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
+# Original template material copyright Nguyen Vincent.
+# Modified for Boardwright by Ryan Hicks.
 
 # ANSI color codes
 GREEN='\033[0;32m'
