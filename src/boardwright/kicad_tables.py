@@ -81,21 +81,7 @@ def _sync_kibot_project_metadata(root: Path, config=None) -> None:
         git_url = origin_url if origin_url else git_url
 
     replacements = {
-        "PROJECT_NAME": config.project_name,
-        "BOARD_NAME": config.board_name,
-        "BOARD_REVISION": config.board_revision,
-        "PCBA_NUMBER": config.pcba_number,
-        "PCB_NUMBER": config.pcb_number,
-        "DOCUMENT_REVISION": config.document_revision,
-        "DOCUMENT_REVISION_SCHEME": config.document_revision_scheme,
-        "DRAWN_BY": config.drawn_by,
-        "DRAWN_DATE": config.drawn_date,
-        "CHECKED_BY": config.checked_by,
-        "CHECKED_DATE": config.checked_date,
-        "APPROVED_BY": config.approved_by,
-        "APPROVED_DATE": config.approved_date,
-        "COMPANY": str(project.get("company") or ""),
-        "DESIGNER": str(project.get("designer") or ""),
+        **config.drawing_variables("schematic"),
         "LOGO": str(config.assets.get("logo") or ""),
         "TEMPLATE_LOGO": config.template_logo,
         "SHEET_LEGAL_NOTICE": _render_project_text(config.sheet_legal_notice, project),
@@ -120,16 +106,16 @@ def _sync_kibot_project_metadata(root: Path, config=None) -> None:
 
 def _insert_kibot_definition(text: str, key: str, line: str) -> str:
     anchors = {
-        "PCBA_NUMBER": "BOARD_REVISION",
-        "PCB_NUMBER": "PCBA_NUMBER",
-        "DOCUMENT_REVISION": "PCB_NUMBER",
-        "DOCUMENT_REVISION_SCHEME": "DOCUMENT_REVISION",
-        "DRAWN_BY": "DOCUMENT_REVISION_SCHEME",
+        "PCBA_NAME": "PROJECT_NUMBER",
+        "PCB_NAME": "PCBA_NAME",
+        "DOCUMENT_TYPE": "BOARD_REVISION",
+        "DRAWING_TITLE": "DOCUMENT_TYPE",
+        "DRAWING_NUMBER": "DRAWING_TITLE",
+        "DRAWING_REVISION": "DRAWING_NUMBER",
+        "RELEASE_VERSION": "DRAWING_REVISION",
+        "RELEASE_DATE": "RELEASE_VERSION",
+        "DRAWN_BY": "RELEASE_DATE",
         "DRAWN_DATE": "DRAWN_BY",
-        "CHECKED_BY": "DRAWN_DATE",
-        "CHECKED_DATE": "CHECKED_BY",
-        "APPROVED_BY": "CHECKED_DATE",
-        "APPROVED_DATE": "APPROVED_BY",
     }
     anchor = anchors.get(key, "BOARD_REVISION")
     match = re.search(rf"(?m)^  {re.escape(anchor)}:.*$", text)
@@ -700,7 +686,7 @@ def _render_note_template(template: str, values: dict[str, str]) -> str:
     rendered = template
     for key, value in values.items():
         rendered = rendered.replace("${" + key + "}", value)
-    return rendered.replace("ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â", "ÃƒÆ’Ã¢â‚¬â€")
+    return rendered.replace("ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â", "ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â")
 
 
 def _strip_impedance_controlled_note(text: str) -> str:
@@ -1015,19 +1001,10 @@ def _yaml_quote(value: str) -> str:
 
 def _render_project_text(value: str, project: dict[str, object]) -> str:
     replacements = {
-        "PROJECT_NAME": str(project.get("name") or ""),
-        "BOARD_NAME": str(project.get("board_name") or project.get("name") or ""),
         "BOARD_REVISION": str(project.get("board_revision") or ""),
-        "PCBA_NUMBER": str(project.get("pcba_number") or ""),
-        "PCB_NUMBER": str(project.get("pcb_number") or ""),
-        "DOCUMENT_REVISION": str(project.get("document_revision") or "A"),
-        "DOCUMENT_REVISION_SCHEME": str(project.get("document_revision_scheme") or "lettered"),
-        "DRAWN_BY": str(project.get("drawn_by") or ""),
-        "DRAWN_DATE": str(project.get("drawn_date") or ""),
-        "CHECKED_BY": str(project.get("checked_by") or ""),
-        "CHECKED_DATE": str(project.get("checked_date") or ""),
-        "APPROVED_BY": str(project.get("approved_by") or ""),
-        "APPROVED_DATE": str(project.get("approved_date") or ""),
+        "PROJECT_NUMBER": str(project.get("name") or ""),
+        "PCBA_NAME": str(project.get("pcba_name") or project.get("name") or ""),
+        "PCB_NAME": str(project.get("pcb_name") or project.get("pcba_name") or project.get("name") or ""),
         "COMPANY": str(project.get("company") or ""),
         "DESIGNER": str(project.get("designer") or ""),
     }

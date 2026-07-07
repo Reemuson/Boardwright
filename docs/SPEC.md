@@ -139,7 +139,7 @@ Boardwright config lives in `.boardwright/`:
   release.env
 ```
 
-`project.yaml` holds project identity, part/document numbering, GitHub
+`project.yaml` holds project identity, drawing identifiers, GitHub
 repository settings, variant defaults, workflow filenames, output policy, and
 visible asset paths.
 
@@ -163,22 +163,18 @@ RELEASE_KIND=prerelease
 
 KiCad text-variable naming:
 
-- `${REVISION}` is currently the semantic release/version value, normally
+- `${RELEASE_VERSION}` is the semantic package/release value, normally
   sourced from `.boardwright/release.env` during release preparation or from
-  git tags as a fallback. This came from the Git-driven Nguyen template lineage,
-  but controlled drawing packages often need lettered document revisions; the
-  longer-term model should split this into explicit document revision fields.
-- `${RELEASE_VERSION}` is an explicit alias for the semantic package/release
-  version. It should remain useful for GitHub tags and release artifacts even
-  when the drawing document revision is lettered.
+  git tags as a fallback. It is not the controlled drawing revision.
 - `${BOARD_REVISION}` is the hardware board spin such as `A`, `B`, `C`, `1`,
   `2`, or `3`, sourced from `project.board_revision`.
-- Future title blocks should support separate identifiers for the PCBA/assembly
-  number and the bare PCB number. These are controlled-document identifiers,
-  not interchangeable with the Git release version or the board spin.
-- Future title blocks should support a separate `${DOCUMENT_REVISION}` or
-  equivalent field whose scheme can be semantic, lettered, or numeric per
-  project/customer requirements.
+- `${PROJECT_NUMBER}` is the configured project name from `project.name`.
+- `${DRAWING_NUMBER}` is resolved per output context from the configured
+  document name source. Schematic and assembly use the PCBA name;
+  fabrication uses the PCB name.
+- `${DRAWING_REVISION}` is the controlled drawing revision for the current
+  document. Its scheme can be semantic, lettered, or numeric per
+  document/customer requirements.
 
 Numbering and revision model:
 
@@ -186,36 +182,32 @@ Boardwright should distinguish four related but separate concepts:
 
 | Concept | Examples | Intended use |
 | --- | --- | --- |
-| PCBA / assembly number | `7-087598-700` | Assembly drawing, BOM, release package identity |
-| Bare PCB number | `7-087598-701` | Fabrication drawing and board marking identity |
+| Project name | `GRICE-PSW-0028` | User/customer/job/program identity printed via `${PROJECT_NUMBER}` |
+| PCBA name | `7-087598-700` | Schematic and assembly drawing identity |
+| PCB name | `7-087598-701` | Fabrication drawing and board marking identity |
 | Board revision / spin | `A`, `B`, `C`, `1`, `2`, `3` | Hardware design spin for the PCB/PCBA |
-| Document revision | `A`, `B`, `C`, `0.1.0`, `1.2.0` | Controlled drawing/document revision shown in title blocks and revision history |
+| Drawing revision | `A`, `B`, `C`, `0.1.0`, `1.2.0` | Controlled drawing revision shown in title blocks and revision history |
 
 Projects may use the same value for some of these fields, especially small or
 early-stage designs, but Boardwright should not force that coupling. The data
 model should make the distinction explicit so a CME-style project can show a
-PCBA number, a different bare PCB number, a board revision, and a separately
-controlled drawing revision without abusing `${TITLE}` or `${REVISION}`.
+PCBA name, a different bare PCB name, a board revision, and a separately
+controlled drawing revision without abusing `${TITLE}` or `${RELEASE_VERSION}`.
 
-Document revision schemes should be configurable. Supported schemes should
+Drawing revision schemes should be configurable. Supported schemes should
 include at least semantic, lettered, and numeric. Git tags can remain semantic
 for automation and package publishing while the drawing revision shown on
 controlled sheets is lettered or numeric.
 
-Approval and signoff metadata:
+Drawing authorship and signoff metadata:
 
-Controlled drawings should support signoff fields independent of Git commit
-metadata:
-
-- drawn by, checked by, and approved by
-- drawn date, checked date, and approved date
-- revision-history rows with revision, description, drawn by/date, checked
-  by/date, and optionally approved by/date
-
-These values should be editable project metadata and render into KiCad/KiBot
-text variables for title blocks and revision-history sheets. Git commit hashes
-and release tags remain useful traceability evidence, but they should not be
-the only representation of controlled-document approval.
+Controlled drawings should emit drawn-by and drawn-date metadata independent of
+Git commit metadata. Checked and approved fields are physical/electronic
+signature areas applied after generation, not Boardwright text variables.
+Revision-history rows should include revision, date, description, and drawn-by
+metadata. Git commit hashes and release tags remain useful traceability
+evidence, but they should not be the only representation of controlled-document
+authorship.
 
 Dashboard tag display:
 
@@ -233,7 +225,7 @@ Boardwright should treat project-specific manufacturing text as structured
 project data, not as hardcoded KiBot YAML. The TUI should expose this as a
 `Info` screen with compact tabs or sections:
 
-- Identity: project name, board name, PCBA/assembly number, bare PCB number,
+- Identity: project name, PCBA name, PCB name,
   board revision, document revision, document revision scheme, company,
   designer/author, logo path, repository URL, development branch, preview
   branch, release branch.
@@ -419,11 +411,13 @@ and make review work visible in the TUI/CLI.
 
 ## Changelog And Revision History
 
-`CHANGELOG.md` is currently the source of release notes and schematic
-revision-history content. This should evolve into a two-layer model: changelog
-entries remain the human/Git release narrative, while controlled drawing
-revision rows can carry document revision, drawn, checked, approved, and date
-metadata.
+`CHANGELOG.md` remains the human/Git release narrative. Commit messages and
+recorded changes stay with Git and release notes. Controlled drawing revision
+history is a separate YAML-backed table: when preparing an actual release, the
+operator supplies a drawing revision and a short revision-table description.
+Boardwright writes that row to `.boardwright/document_revisions.yaml`, updates
+the current document drawing revision, and regenerates fixed `REVTABLE_*`
+variables.
 
 Supported changelog sections are:
 
@@ -455,13 +449,15 @@ No changelog entries recorded for this release.
 ```
 
 This keeps release packages traceable while still allowing the TUI to show the
-missing changelog entry as a warning.
+missing changelog entry as a warning. The controlled revision table row is not
+derived from the changelog body; it uses the release-time drawing revision and
+short description instead.
 
 KiCad sheets consume fixed text-variable slots:
 
 ```text
-${REVHIST_1_TITLE}
-${REVHIST_1_BODY}
+${REVTABLE_1_REV}
+${REVTABLE_1_DESC}
 ```
 
 Boardwright writes every configured slot to
@@ -470,16 +466,14 @@ fills slot 1, and unused slots are written as blank values. The KiBot preflight
 defines a larger ceiling than the default visible slot count so projects can
 expand their revision-history sheets later.
 
-Future revision-history generation should support richer controlled-document
-rows, for example:
+Revision-history generation supports controlled-document rows from YAML:
 
 ```text
-Revision | Description | Drawn | Drawn date | Checked | Checked date | Approved | Approved date
+Revision | Date | Description | Drawn
 ```
 
-Projects should be able to keep simple changelog-derived rows when that is
-enough, but controlled projects should be able to fill the formal drawing
-approval columns without hand-editing schematic text.
+Checked and approved signoffs are handled as signature areas after generation,
+so Boardwright does not export checked/approved text variables.
 
 ## CI/CD Workflows
 
@@ -658,7 +652,7 @@ Implemented scriptable review/testbench support:
   separate repository.
 - `boardwright testbench init`: copies the template into a separate local
   testbench repo, excludes generated/local artifacts, optionally sets
-  `project.github_repo`, and initializes local `main`/`dev` branches.
+  `project.git_url`, and initializes local `main`/`dev` branches. The GitHub repo slug is derived from `git_url`.
 - `boardwright outputs clean`: removes KiBot packaging noise after generation.
   It drops numbered PDF page shards when a combined PDF exists and removes empty
   generated CSV tables for component-count, testpoint, and impedance-style
@@ -797,9 +791,12 @@ Current implemented TUI behavior:
   artifact has been reviewed locally. The dispatch pins that reviewed source
   SHA and tells CI to push the accepted state to `main`.
 - Release opens a release readiness checklist before dispatching
-  `prepare-release.yaml`. The checklist shows accepted-main evidence, release
-  inputs, unreleased changelog readiness, local tag availability, and dispatch
-  target. Preview is disabled while any checklist item is blocking.
+  `prepare-release.yaml`. The release modal collects semantic release version,
+  variant, release kind, controlled drawing revision, and a short revision-table
+  description. The checklist shows accepted-main evidence, release inputs, the
+  controlled revision row, unreleased changelog readiness, local tag
+  availability, and dispatch target. Preview is disabled while any checklist
+  item is blocking.
 - primary action buttons lock/unlock from the shared workflow-state model
 - keybindings use the same action gates as the visible buttons
 - Info edits project id, name, company, designer, Git URL, GitHub repo, logo

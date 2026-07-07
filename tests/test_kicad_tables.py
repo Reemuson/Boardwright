@@ -122,22 +122,34 @@ class KiCadTablesTests(unittest.TestCase):
                 """project:
   id: DEMO
   name: Demo Project
-  board_name: Demo Board
+  pcba_name: Demo PCBA
+  pcb_name: Demo PCB
   board_revision: B
-  pcba_number: PCBA-123
-  pcb_number: PCB-456
-  document_revision: C
-  document_revision_scheme: lettered
-  drawn_by: RH
-  drawn_date: 2026-07-01
-  checked_by: AB
-  checked_date: 2026-07-02
-  approved_by: CD
-  approved_date: 2026-07-03
   company: Demo Co
   designer: A. Designer
-  git_url: ""
-  github_repo: owner/demo
+  git_url: https://github.com/owner/demo.git
+release:
+  version: v1.2.3
+  date: 2026-07-05
+documents:
+  schematic:
+    title: Demo Schematic
+    type: SCHEMATIC
+    number_source: pcba_name
+    revision: C
+    revision_scheme: lettered
+    drawn_by: RH
+    drawn_date: 2026-07-01
+  assembly:
+    title: Assembly Drawing
+    type: ASSEMBLY
+    number_source: pcba_name
+    revision: C
+  fabrication:
+    title: Fabrication Drawing
+    type: FABRICATION
+    number_source: pcb_name
+    revision: F
 variants:
   dev_default: DRAFT
   preview_default: CHECKED
@@ -173,8 +185,8 @@ manufacturing:
             kibot_dir.mkdir(parents=True)
             (kibot_dir / "kibot_main.yaml").write_text(
                 """definitions:
-  PROJECT_NAME: PROJECT NAME
-  BOARD_NAME: BOARD NAME
+  PCBA_NAME: PCBA NAME
+  PCB_NAME: PCB NAME
   BOARD_REVISION: A
   COMPANY: COMPANY
   DESIGNER: F. LAST
@@ -244,12 +256,19 @@ manufacturing:
                 (root / "Manufacturing" / "Assembly" / "boardwright-assembly_notes.txt").is_file()
             )
             kibot_main = (kibot_dir / "kibot_main.yaml").read_text(encoding="utf-8")
-            self.assertIn("PROJECT_NAME: 'Demo Project'", kibot_main)
-            self.assertIn("BOARD_NAME: 'Demo Board'", kibot_main)
+            self.assertIn("PCBA_NAME: 'Demo PCBA'", kibot_main)
+            self.assertIn("PCB_NAME: 'Demo PCB'", kibot_main)
             self.assertIn("BOARD_REVISION: 'B'", kibot_main)
-            self.assertIn("PCBA_NUMBER: 'PCBA-123'", kibot_main)
-            self.assertIn("PCB_NUMBER: 'PCB-456'", kibot_main)
-            self.assertIn("DOCUMENT_REVISION: 'C'", kibot_main)
+            self.assertIn("PROJECT_NUMBER: 'Demo Project'", kibot_main)
+            self.assertNotIn("PCBA_NUMBER:", kibot_main)
+            self.assertNotIn("PCB_NUMBER:", kibot_main)
+            self.assertIn("DOCUMENT_TYPE: 'SCHEMATIC'", kibot_main)
+            self.assertIn("DRAWING_TITLE: 'Demo Schematic'", kibot_main)
+            self.assertIn("DRAWING_NUMBER: 'Demo PCBA'", kibot_main)
+            self.assertIn("DRAWING_REVISION: 'C'", kibot_main)
+            self.assertIn("RELEASE_VERSION: 'v1.2.3'", kibot_main)
+            self.assertNotIn("CHECKED_BY:", kibot_main)
+            self.assertNotIn("CHECKED_DATE:", kibot_main)
             self.assertIn("DRAWN_DATE: '2026-07-01'", kibot_main)
             self.assertIn("COMPANY: 'Demo Co'", kibot_main)
             self.assertIn("TEMPLATE_LOGO: 'assets/sheet-image.png'", kibot_main)
@@ -261,7 +280,7 @@ manufacturing:
                 "SHEET_WKS: '${KIPRJMOD}/Templates/Boardwright_Template_PCB_A3.kicad_wks'",
                 kibot_main,
             )
-            self.assertIn("GIT_URL: 'https://github.com/owner/demo'", kibot_main)
+            self.assertIn("GIT_URL: 'https://github.com/owner/demo.git'", kibot_main)
             badges = (root / ".boardwright" / "readme_badges.txt").read_text(encoding="utf-8")
             self.assertIn("badge.svg?branch=dev", badges)
             self.assertIn("actions/workflows/dev-preview.yaml", badges)
@@ -323,22 +342,34 @@ manufacturing:
                 """project:
   id: DEMO
   name: Demo Project
-  board_name: Demo Board
+  pcba_name: Demo PCBA
+  pcb_name: Demo PCB
   board_revision: B
-  pcba_number: PCBA-123
-  pcb_number: PCB-456
-  document_revision: C
-  document_revision_scheme: lettered
-  drawn_by: RH
-  drawn_date: 2026-07-01
-  checked_by: AB
-  checked_date: 2026-07-02
-  approved_by: CD
-  approved_date: 2026-07-03
   company: Demo Co
   designer: A. Designer
-  git_url: ""
-  github_repo: owner/demo
+  git_url: https://github.com/owner/demo.git
+release:
+  version: v1.2.3
+  date: 2026-07-05
+documents:
+  schematic:
+    title: Demo Schematic
+    type: SCHEMATIC
+    number_source: pcba_name
+    revision: C
+    revision_scheme: lettered
+    drawn_by: RH
+    drawn_date: 2026-07-01
+  assembly:
+    title: Assembly Drawing
+    type: ASSEMBLY
+    number_source: pcba_name
+    revision: C
+  fabrication:
+    title: Fabrication Drawing
+    type: FABRICATION
+    number_source: pcb_name
+    revision: F
 variants:
   dev_default: DRAFT
   preview_default: CHECKED
@@ -376,8 +407,8 @@ manufacturing:
             kibot_dir.mkdir(parents=True)
             (kibot_dir / "kibot_main.yaml").write_text(
                 """definitions:
-  PROJECT_NAME: PROJECT NAME
-  BOARD_NAME: BOARD NAME
+  PCBA_NAME: PCBA NAME
+  PCB_NAME: PCB NAME
   BOARD_REVISION: A
   COMPANY: COMPANY
   DESIGNER: F. LAST

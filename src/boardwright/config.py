@@ -14,27 +14,85 @@ from .workflows import install_workflows
 
 
 CONFIG_DIR = ".boardwright"
+DOCUMENT_DEFAULTS: dict[str, dict[str, Any]] = {
+    "schematic": {
+        "title": "Schematic",
+        "type": "SCHEMATIC",
+        "number_source": "pcba_name",
+        "revision": "A",
+        "revision_scheme": "lettered",
+        "drawn_by": "",
+        "drawn_date": "",
+        "include_full_revision_history": True,
+    },
+    "assembly": {
+        "title": "Assembly Drawing",
+        "type": "ASSEMBLY",
+        "number_source": "pcba_name",
+        "revision": "A",
+        "revision_scheme": "lettered",
+    },
+    "fabrication": {
+        "title": "PCB Fabrication Drawing",
+        "type": "FABRICATION",
+        "number_source": "pcb_name",
+        "revision": "A",
+        "revision_scheme": "lettered",
+    },
+    "package": {
+        "title": "Package",
+        "type": "PACKAGE",
+        "number_source": "pcba_name",
+        "revision": "A",
+        "revision_scheme": "lettered",
+    },
+    "review": {
+        "title": "Review Package",
+        "type": "REVIEW",
+        "number_source": "pcba_name",
+        "revision": "A",
+        "revision_scheme": "lettered",
+    },
+}
+
 DEFAULT_CONFIG_FILES = {
     "project.yaml": """project:
-  id: BOARDWRIGHT-TEMPLATE
   name: Boardwright KiCad/KiBot Template
+  pcba_name: Boardwright KiCad/KiBot Template
+  pcb_name: Boardwright KiCad/KiBot Template PCB
   board_revision: A
-  pcba_number: ""
-  pcb_number: ""
-  document_revision: A
-  document_revision_scheme: lettered
-  drawn_by: ""
-  drawn_date: ""
-  checked_by: ""
-  checked_date: ""
-  approved_by: ""
-  approved_date: ""
   company: RYAN HICKS
   designer: R. HICKS
   git_url: ""
-  github_repo: ""
   product_family: BOARDWRIGHT
   product_generation: TEMPLATE
+
+release:
+  version: ""
+  date: ""
+
+documents:
+  schematic:
+    title: Schematic
+    type: SCHEMATIC
+    number_source: pcba_name
+    revision: A
+    revision_scheme: lettered
+    drawn_by: ""
+    drawn_date: ""
+    include_full_revision_history: true
+  assembly:
+    title: Assembly Drawing
+    type: ASSEMBLY
+    number_source: pcba_name
+    revision: A
+    revision_scheme: lettered
+  fabrication:
+    title: PCB Fabrication Drawing
+    type: FABRICATION
+    number_source: pcb_name
+    revision: A
+    revision_scheme: lettered
 
 variants:
   dev_default: DRAFT
@@ -52,9 +110,6 @@ outputs:
   release_workflow: release.yaml
   release_include_source_archive: false
   combined_review_pdf: false
-  combined_pdf_name: Manufacturing/boardwright-combined.pdf
-  combined_pdf_toc: true
-  combined_pdf_page_numbers: true
 
 assets:
   logo: assets/logos/logo-wordmark-colour.png
@@ -176,7 +231,12 @@ generated_outputs:
   include_unreleased_in_preview: true
 """,
     "document_revisions.yaml": """document_revisions:
-  rows: []
+  schematic:
+    rows: []
+  assembly:
+    rows: []
+  fabrication:
+    rows: []
 """,
 }
 
@@ -192,64 +252,86 @@ class BoardwrightConfig:
 
     @property
     def project_id(self) -> str:
-        return str(self.project.get("project", {}).get("id", "unknown"))
+        return self.project_name
 
     @property
     def project_name(self) -> str:
-        return str(self.project.get("project", {}).get("name", "unknown"))
+        project = self.project.get("project", {})
+        return str(project.get("name") or "unknown")
 
     @property
-    def board_name(self) -> str:
+    def pcba_name(self) -> str:
         project = self.project.get("project", {})
-        return str(project.get("board_name") or project.get("name", "unknown"))
+        return str(project.get("pcba_name") or self.project_name)
+
+    @property
+    def pcb_name(self) -> str:
+        project = self.project.get("project", {})
+        return str(project.get("pcb_name") or project.get("pcba_name") or self.project_name)
 
     @property
     def board_revision(self) -> str:
         return str(self.project.get("project", {}).get("board_revision", "A"))
 
     @property
-    def pcba_number(self) -> str:
-        return str(self.project.get("project", {}).get("pcba_number", ""))
+    def release_settings(self) -> dict[str, Any]:
+        settings = self.project.get("release", {})
+        return settings if isinstance(settings, dict) else {}
 
     @property
-    def pcb_number(self) -> str:
-        return str(self.project.get("project", {}).get("pcb_number", ""))
+    def release_version(self) -> str:
+        return str(self.release_settings.get("version") or "")
 
     @property
-    def document_revision(self) -> str:
-        return str(self.project.get("project", {}).get("document_revision") or "A")
+    def release_date(self) -> str:
+        return str(self.release_settings.get("date") or "")
 
     @property
-    def document_revision_scheme(self) -> str:
-        return str(self.project.get("project", {}).get("document_revision_scheme") or "lettered")
+    def documents(self) -> dict[str, Any]:
+        documents = self.project.get("documents", {})
+        return documents if isinstance(documents, dict) else {}
 
-    @property
-    def drawn_by(self) -> str:
-        return str(self.project.get("project", {}).get("drawn_by", ""))
+    def document_settings(self, document_key: str = "schematic") -> dict[str, Any]:
+        key = str(document_key or "schematic").strip().lower()
+        defaults = dict(DOCUMENT_DEFAULTS.get(key, DOCUMENT_DEFAULTS["schematic"]))
+        configured = self.documents.get(key, {})
+        if isinstance(configured, dict):
+            defaults.update(configured)
+        return defaults
 
-    @property
-    def drawn_date(self) -> str:
-        return str(self.project.get("project", {}).get("drawn_date", ""))
+    def drawing_variables(self, document_key: str = "schematic") -> dict[str, str]:
+        project = self.project.get("project", {})
+        document = self.document_settings(document_key)
+        number_source = str(document.get("number_source") or "pcba_name").strip()
+        number = str(project.get(number_source) or "")
+        if not number:
+            number = self.pcb_name if document_key == "fabrication" else self.pcba_name
+        return {
+            "COMPANY": str(project.get("company") or ""),
+            "DESIGNER": str(project.get("designer") or ""),
+            "PROJECT_NUMBER": self.project_name,
+            "PCBA_NAME": self.pcba_name,
+            "PCB_NAME": self.pcb_name,
+            "BOARD_REVISION": self.board_revision,
+            "DOCUMENT_TYPE": str(document.get("type") or "").strip(),
+            "DRAWING_TITLE": str(document.get("title") or "").strip(),
+            "DRAWING_NUMBER": number,
+            "DRAWING_REVISION": str(document.get("revision") or "").strip(),
+            "RELEASE_VERSION": self.release_version,
+            "RELEASE_DATE": self.release_date,
+            "DRAWN_BY": str(document.get("drawn_by") or "").strip(),
+            "DRAWN_DATE": str(document.get("drawn_date") or "").strip(),
+        }
 
-    @property
-    def checked_by(self) -> str:
-        return str(self.project.get("project", {}).get("checked_by", ""))
 
-    @property
-    def checked_date(self) -> str:
-        return str(self.project.get("project", {}).get("checked_date", ""))
-
-    @property
-    def approved_by(self) -> str:
-        return str(self.project.get("project", {}).get("approved_by", ""))
-
-    @property
-    def approved_date(self) -> str:
-        return str(self.project.get("project", {}).get("approved_date", ""))
 
     @property
     def github_repo(self) -> str:
-        return _normalize_github_repo_slug(str(self.project.get("project", {}).get("github_repo", "")))
+        project = self.project.get("project", {})
+        git_url = str(project.get("git_url", "") or "").strip()
+        if git_url:
+            return _normalize_github_repo_slug(git_url)
+        return _normalize_github_repo_slug(str(project.get("github_repo", "") or ""))
 
     @property
     def dev_branch(self) -> str:
@@ -500,6 +582,8 @@ def update_project_config(
     output_fields: dict[str, Any] | None = None,
     legal_fields: dict[str, Any] | None = None,
     manufacturing_fields: dict[str, Any] | None = None,
+    release_fields: dict[str, Any] | None = None,
+    document_fields: dict[str, dict[str, Any]] | None = None,
 ) -> Path:
     """Update editable project metadata in `.boardwright/project.yaml`."""
 
@@ -560,6 +644,25 @@ def update_project_config(
             branch_key = branch_aliases.get(key, key)
             branches[branch_key] = value
         _write_yaml(branches_path, branches_data)
+
+
+    if release_fields:
+        release = data.setdefault("release", {})
+        if not isinstance(release, dict):
+            raise BoardwrightError("project.yaml field `release` must be a mapping.")
+        for key, value in release_fields.items():
+            release[key] = _coerce_project_value(value)
+
+    if document_fields:
+        documents = data.setdefault("documents", {})
+        if not isinstance(documents, dict):
+            raise BoardwrightError("project.yaml field `documents` must be a mapping.")
+        for document_key, fields in document_fields.items():
+            document = documents.setdefault(document_key, {})
+            if not isinstance(document, dict):
+                raise BoardwrightError(f"project.yaml field `documents.{document_key}` must be a mapping.")
+            for key, value in fields.items():
+                document[key] = _coerce_project_value(value)
 
     if output_fields:
         outputs = data.setdefault("outputs", {})

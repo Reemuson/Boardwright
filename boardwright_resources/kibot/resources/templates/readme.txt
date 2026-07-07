@@ -2,7 +2,7 @@
   <img alt="Logo" width="33%" src="assets/logos/logo-wordmark-colour.png">
 </p>
 
-<h1 align="center">${BOARD_NAME}</h1>
+<h1 align="center">${PCBA_NAME}</h1>
 
 ${README_BADGES}
 
@@ -18,9 +18,12 @@ ${README_BADGES}
 
 | Parameter | Value | 
 | --- | --- |
-| PCBA number | ${PCBA_NUMBER} |
-| PCB number | ${PCB_NUMBER} |
-| Document revision | ${DOCUMENT_REVISION} |
+| Project name | ${PROJECT_NUMBER} |
+| PCBA name | ${PCBA_NAME} |
+| PCB name | ${PCB_NAME} |
+| Drawing number | ${DRAWING_NUMBER} |
+| Document type | ${DOCUMENT_TYPE} |
+| Drawing revision | ${DRAWING_REVISION} |
 | Board revision | ${BOARD_REVISION} |
 | Release version | ${RELEASE_VERSION} |
 | Variant | ${VARIANT} |

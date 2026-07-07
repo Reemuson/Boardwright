@@ -197,21 +197,20 @@ import:
   # Set text variables
   - file: kibot_pre_set_text_variables.yaml
     definitions:
-      PROJECT_NAME: @PROJECT_NAME@
-      BOARD_NAME: @BOARD_NAME@
-      BOARD_REVISION: @BOARD_REVISION@
-      PCBA_NUMBER: @PCBA_NUMBER@
-      PCB_NUMBER: @PCB_NUMBER@
-      DOCUMENT_REVISION: @DOCUMENT_REVISION@
-      DOCUMENT_REVISION_SCHEME: @DOCUMENT_REVISION_SCHEME@
-      DRAWN_BY: @DRAWN_BY@
-      DRAWN_DATE: @DRAWN_DATE@
-      CHECKED_BY: @CHECKED_BY@
-      CHECKED_DATE: @CHECKED_DATE@
-      APPROVED_BY: @APPROVED_BY@
-      APPROVED_DATE: @APPROVED_DATE@
+      PCBA_NAME: @PCBA_NAME@
+      PCB_NAME: @PCB_NAME@
       COMPANY: @COMPANY@
       DESIGNER: @DESIGNER@
+      PROJECT_NUMBER: @PROJECT_NUMBER@
+      BOARD_REVISION: @BOARD_REVISION@
+      DOCUMENT_TYPE: @DOCUMENT_TYPE@
+      DRAWING_TITLE: @DRAWING_TITLE@
+      DRAWING_NUMBER: @DRAWING_NUMBER@
+      DRAWING_REVISION: @DRAWING_REVISION@
+      RELEASE_VERSION: @RELEASE_VERSION@
+      RELEASE_DATE: @RELEASE_DATE@
+      DRAWN_BY: @DRAWN_BY@
+      DRAWN_DATE: @DRAWN_DATE@
       SHEET_LEGAL_NOTICE: @SHEET_LEGAL_NOTICE@
       TEMPLATE_LOGO: @TEMPLATE_LOGO@
       SCRIPTS_DIR: @SCRIPTS_DIR@
@@ -370,7 +369,7 @@ import:
       COMMENT: Interactive BOM in HTML format
       DIR: @ASSEMBLY_DIR@
       EXCLUDE_FILTER: @FILT_TP_EXCLUDE@
-      TITLE: @BOARD_NAME@ Assembly
+      TITLE: @PCBA_NAME@ Assembly
       MPN_FIELD: @MPN_FIELD@
 
   # TXT fabrication notes ------------------------------------------------------
@@ -533,7 +532,7 @@ import:
       NAME: @HTML_NAV_RES_OUTPUT@
       COMMENT: Results webpage in HTML format
       DIR: HTML
-      TITLE: @BOARD_NAME@
+      TITLE: @PCBA_NAME@
       LOGO: @LOGO@
       LOGO_URL: @GIT_URL@
 
@@ -544,22 +543,20 @@ definitions:
 
   # Metadata ===================================================================
 
-  PROJECT_NAME: PROJECT NAME
-  BOARD_NAME: BOARD NAME
-  BOARD_REVISION: A
-  PCBA_NUMBER: ''
-  PCB_NUMBER: ''
-  DOCUMENT_REVISION: A
-  DOCUMENT_REVISION_SCHEME: lettered
-  DRAWN_BY: ''
-  DRAWN_DATE: ''
-  CHECKED_BY: ''
-  CHECKED_DATE: ''
-  APPROVED_BY: ''
-  APPROVED_DATE: ''
-
+  PCBA_NAME: PCBA NAME
+  PCB_NAME: PCB NAME
   COMPANY: COMPANY
   DESIGNER: F. LAST
+  PROJECT_NUMBER: ''
+  BOARD_REVISION: A
+  DOCUMENT_TYPE: SCHEMATIC
+  DRAWING_TITLE: Schematic
+  DRAWING_NUMBER: ''
+  DRAWING_REVISION: A
+  RELEASE_VERSION: ''
+  RELEASE_DATE: ''
+  DRAWN_BY: ''
+  DRAWN_DATE: ''
 
   LOGO: 'assets/logos/logo-wordmark-colour.png'
   TEMPLATE_LOGO: 'assets/logos/logo-block-black.png'

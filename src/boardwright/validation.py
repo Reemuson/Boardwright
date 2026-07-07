@@ -52,28 +52,40 @@ def _validate_project_config(
     config: BoardwrightConfig, issues: list[ValidationIssue]
 ) -> None:
     project = config.project.get("project", {})
-    for key in ("id", "name", "company", "designer"):
+    for key in ("name", "company", "designer"):
         if not str(project.get(key, "")).strip():
             issues.append(ValidationIssue("error", f"Missing project.{key} in project.yaml"))
 
-    scheme = str(project.get("document_revision_scheme") or "lettered").strip()
-    if scheme not in {"lettered", "numeric", "semantic"}:
-        issues.append(
-            ValidationIssue(
-                "error",
-                f"Unsupported project.document_revision_scheme '{scheme}' in project.yaml",
-            )
-        )
-
-    for key in ("drawn_date", "checked_date", "approved_date"):
-        value = str(project.get(key, "")).strip()
-        if value and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+    documents = config.documents
+    for document_key, document in documents.items():
+        if not isinstance(document, dict):
+            issues.append(ValidationIssue("error", f"documents.{document_key} must be a mapping"))
+            continue
+        scheme = str(document.get("revision_scheme") or "lettered").strip()
+        if scheme not in {"lettered", "numeric", "semantic"}:
             issues.append(
                 ValidationIssue(
-                    "warning",
-                    f"project.{key} should use YYYY-MM-DD format",
+                    "error",
+                    f"Unsupported documents.{document_key}.revision_scheme '{scheme}' in project.yaml",
                 )
             )
+        number_source = str(document.get("number_source") or "pcba_name").strip()
+        if number_source not in {"name", "pcba_name", "pcb_name"}:
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    f"Unsupported documents.{document_key}.number_source '{number_source}' in project.yaml",
+                )
+            )
+        for key in ("drawn_date",):
+            value = str(document.get(key, "")).strip()
+            if value and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+                issues.append(
+                    ValidationIssue(
+                        "warning",
+                        f"documents.{document_key}.{key} should use YYYY-MM-DD format",
+                    )
+                )
 
     variants = config.project.get("variants", {})
     for key in ("dev_default", "preview_default", "main_default", "release_default"):
@@ -157,7 +169,7 @@ def _validate_revision_history_config(
             ValidationIssue(
                 "warning",
                 "revision_history.slots is greater than revision_history.preflight_slots; "
-                "KiBot may not define every REVHIST_* variable.",
+                "KiBot may not define every REVTABLE_* variable.",
             )
         )
 
@@ -242,7 +254,7 @@ def _validate_repository_metadata(config: BoardwrightConfig, issues: list[Valida
     issues.append(
         ValidationIssue(
             "warning",
-            "Repository URL metadata is blank; generated README release links will be limited until git_url or github_repo is configured.",
+            "Repository URL metadata is blank; generated README release links will be limited until git_url is configured.",
         )
     )
 

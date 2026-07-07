@@ -46,14 +46,13 @@ editing.
 - [ ] Design Boardwright-native standardized worksheet families after the
       consolidation decision: AS 1100, ISO, and ANSI-style layouts, all driven
       by project config/text variables rather than hardcoded business fields.
-- [ ] Add a controlled numbering/revision metadata model: PCBA number, bare PCB
+- [ ] Keep the simplified drawing identity model aligned: project name, PCBA name, PCB
       number, board revision/spin, document revision, and configurable document
       revision scheme. Keep Git release/package version separate.
-- [ ] Add drawing signoff metadata and text variables for drawn, checked,
-      approved, and their dates.
+- [ ] Add drawing signoff metadata and text variables for drawn, checked, and their dates.
 - [ ] Extend revision-history variables/sheets to support controlled-document
       rows with revision, description, drawn/date, checked/date, and optional
-      approved/date columns.
+      date columns.
 - [x] Audit root README draft notes and decide what moves into
       the real root README.
 - [x] Add a clear section explaining the difference between the Boardwright
@@ -223,9 +222,9 @@ Goal: make the generated README a useful hardware project front page.
 - [x] Keep the generated project README separate from the root product README.
 - [x] Add CI status badges only when repository URL metadata is reliable and
       generated README links will not be broken.
-- [x] Keep `${REVISION}` as semantic version and add `${BOARD_REVISION}` for
+- [x] Keep `${RELEASE_VERSION}` as package metadata and add `${BOARD_REVISION}` for
       A/B/C board spins.
-- [ ] Split controlled document revision from semantic release/package version
+- [ ] Keep controlled drawing revision separate from semantic release/package version
       in title blocks, generated README, release metadata, and revision-history
       generation.
 - [x] Add board dimensions.
@@ -312,7 +311,7 @@ Goal: make the generated README a useful hardware project front page.
 - [x] Consolidate visible project media under `assets/`.
 - [x] Make schematic ToC recurse through nested KiCad sheets.
 - [x] Add KiBot revision-history variables with newest release first.
-- [x] Populate `${REVISION}` from git tags during release builds.
+- [x] Populate `${RELEASE_VERSION}` from release metadata or git tags during release builds.
 - [x] Attach generated README and board images to GitHub Releases.
 
 ## Later

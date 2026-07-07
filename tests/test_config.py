@@ -33,14 +33,13 @@ class ConfigTests(unittest.TestCase):
             config_dir.mkdir()
             (config_dir / "project.yaml").write_text(
                 """project:
-  id: OLD
-  name: Old
-  board_name: Old Board
+  name: Old Project
+  pcba_name: Old PCBA
+  pcb_name: Old PCB
   board_revision: A
   company: Old Co
   designer: Old Designer
   git_url: ""
-  github_repo: ""
 variants:
   dev_default: DRAFT
   preview_default: PRELIMINARY
@@ -163,18 +162,8 @@ downstream_project_defaults:
             update_project_config(
                 config,
                 project_fields={
-                    "id": "NEW",
-                    "github_repo": "owner/repo",
-                    "pcba_number": "PCBA-001",
-                    "pcb_number": "PCB-001",
-                    "document_revision": "B",
-                    "document_revision_scheme": "numeric",
-                    "drawn_by": "RH",
-                    "drawn_date": "2026-07-05",
-                    "checked_by": "AB",
-                    "checked_date": "2026-07-06",
-                    "approved_by": "CD",
-                    "approved_date": "2026-07-07",
+                    "name": "New Project",
+                    "git_url": "https://github.com/owner/repo.git",
                 },
                 variant_fields={"preview_default": "checked"},
                 asset_fields={"logo": "assets/logo.png"},
@@ -215,20 +204,13 @@ downstream_project_defaults:
             )
 
             updated = load_config(root)
-            self.assertEqual("NEW", updated.project_id)
-            self.assertEqual("Old Board", updated.board_name)
+            self.assertEqual("New Project", updated.project_id)
+            self.assertEqual("New Project", updated.project_name)
+            self.assertEqual("Old PCBA", updated.pcba_name)
+            self.assertEqual("Old PCB", updated.pcb_name)
             self.assertEqual("A", updated.board_revision)
             self.assertEqual("owner/repo", updated.github_repo)
-            self.assertEqual("PCBA-001", updated.pcba_number)
-            self.assertEqual("PCB-001", updated.pcb_number)
-            self.assertEqual("B", updated.document_revision)
-            self.assertEqual("numeric", updated.document_revision_scheme)
-            self.assertEqual("RH", updated.drawn_by)
-            self.assertEqual("2026-07-05", updated.drawn_date)
-            self.assertEqual("AB", updated.checked_by)
-            self.assertEqual("2026-07-06", updated.checked_date)
-            self.assertEqual("CD", updated.approved_by)
-            self.assertEqual("2026-07-07", updated.approved_date)
+            updated.project["project"].pop("git_url")
             updated.project["project"]["github_repo"] = "https://github.com/Reemuson/7-087598-700.git"
             self.assertEqual("Reemuson/7-087598-700", updated.github_repo)
 
@@ -269,14 +251,86 @@ downstream_project_defaults:
             init_config(root, workflows=False)
             config = load_config(root)
 
-            self.assertEqual("A", config.document_revision)
-            self.assertEqual("lettered", config.document_revision_scheme)
-            self.assertEqual("", config.pcba_number)
-            self.assertEqual("", config.pcb_number)
-            self.assertEqual({"document_revisions": {"rows": []}}, config.document_revisions)
+            self.assertEqual("A", config.document_settings("schematic")["revision"])
+            self.assertEqual("lettered", config.document_settings("schematic")["revision_scheme"])
+            self.assertEqual("Boardwright KiCad/KiBot Template", config.project_name)
+            self.assertEqual("Boardwright KiCad/KiBot Template", config.pcba_name)
+            self.assertEqual("Boardwright KiCad/KiBot Template PCB", config.pcb_name)
+            self.assertEqual("SCHEMATIC", config.document_settings("schematic")["type"])
+            self.assertEqual("pcba_name", config.document_settings("assembly")["number_source"])
+            self.assertEqual("pcb_name", config.document_settings("fabrication")["number_source"])
+            self.assertEqual(
+                {
+                    "document_revisions": {
+                        "schematic": {"rows": []},
+                        "assembly": {"rows": []},
+                        "fabrication": {"rows": []},
+                    }
+                },
+                config.document_revisions,
+            )
         finally:
             if root.exists():
                 shutil.rmtree(root)
+
+
+    def test_resolves_document_specific_drawing_variables(self) -> None:
+        config = BoardwrightConfig(
+            root=Path("."),
+            project={
+                "project": {
+                    "name": "Example Project",
+                    "pcba_name": "Example Board Assembly",
+                    "pcb_name": "Example Bare PCB",
+                    "company": "Example Co",
+                    "designer": "RH",
+                    "board_revision": "C",
+                },
+                "release": {"version": "v9.9.9", "date": "2026-07-05"},
+                "documents": {
+                    "schematic": {
+                        "title": "Schematic",
+                        "type": "SCHEMATIC",
+                        "number_source": "pcba_name",
+                        "revision": "A",
+                    },
+                    "assembly": {
+                        "title": "Assembly Drawing",
+                        "type": "ASSEMBLY",
+                        "number_source": "pcba_name",
+                        "revision": "B",
+                    },
+                    "fabrication": {
+                        "title": "PCB Fabrication Drawing",
+                        "type": "FABRICATION",
+                        "number_source": "pcb_name",
+                        "revision": "D",
+                    },
+                },
+            },
+            branches={"branches": {}},
+            legal={"legal": {}},
+            revision_history={"revision_history": {}},
+        )
+
+        schematic = config.drawing_variables("schematic")
+        assembly = config.drawing_variables("assembly")
+        fabrication = config.drawing_variables("fabrication")
+
+        self.assertEqual("Example Project", schematic["PROJECT_NUMBER"] )
+        self.assertEqual("Example Board Assembly", schematic["PCBA_NAME"])
+        self.assertEqual("Example Bare PCB", schematic["PCB_NAME"])
+        self.assertEqual("Example Board Assembly", schematic["DRAWING_NUMBER"])
+        self.assertEqual("Example Board Assembly", assembly["DRAWING_NUMBER"])
+        self.assertEqual("Example Bare PCB", fabrication["DRAWING_NUMBER"])
+        self.assertEqual("A", schematic["DRAWING_REVISION"])
+        self.assertEqual("D", fabrication["DRAWING_REVISION"])
+        self.assertEqual("C", fabrication["BOARD_REVISION"])
+        self.assertEqual("v9.9.9", fabrication["RELEASE_VERSION"])
+        self.assertNotIn("CHECKED_BY", schematic)
+        self.assertNotIn("CHECKED_DATE", schematic)
+        self.assertNotEqual(fabrication["DRAWING_REVISION"], fabrication["BOARD_REVISION"])
+        self.assertNotEqual(fabrication["DRAWING_REVISION"], fabrication["RELEASE_VERSION"])
 
 
 if __name__ == "__main__":

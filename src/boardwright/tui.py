@@ -35,7 +35,7 @@ from .preview import fetch_latest_preview_artifact
 from .preview import build_preview_plan, build_preview_state, dispatch_preview, format_preview_state
 from .preview import latest_preview_variant, list_preview_runs
 from .release import build_release_plan, validate_release_plan
-from .revision_history import write_revision_variables
+from .revision_history import document_revision_rows, write_document_revision_rows, write_revision_variables
 from .schematic_generation import add_hierarchical_sheet, slugify
 from .sheet_titles import find_primary_schematic
 from .status import ProjectStatus, collect_status
@@ -89,6 +89,8 @@ class ReleaseChecklist:
     version: str
     variant: str
     kind: str
+    drawing_revision: str
+    revision_description: str
     accepted_summary: str
     items: tuple[ReleaseChecklistItem, ...]
     action: WorkflowAction | None = None
@@ -138,6 +140,8 @@ def collect_dashboard_state(
         release_version,
         "RELEASED",
         "release",
+        config.document_settings("schematic").get("revision", "A"),
+        "Release readiness",
     )
     release_plan = build_release_plan(config, release_version, check_remote=False)
     release_problems = validate_release_plan(release_plan, allow_dirty=True)
@@ -292,8 +296,6 @@ def _build_textual_app():
         ProgressBar,
         Select,
         Static,
-        TabbedContent,
-        TabPane,
         TextArea,
     )
 
@@ -334,25 +336,57 @@ def _build_textual_app():
             background: {SURFACE_DARK};
         }
 
-        #project_info_tabs {
-            height: 1fr;
-            max-height: 72vh;
-        }
-
         #review_status {
             padding: 1;
             border: solid {BORDER_SUBTLE};
             background: {SURFACE_RAISED};
         }
 
-        #project_info_scroll {
+        #project_info_body {
             height: 1fr;
-            overflow-y: auto;
+            max-height: 72vh;
+        }
+
+        #project_info_nav {
+            width: 22;
+            height: 1fr;
+            padding: 1 1 1 0;
+            border-right: solid {BORDER_SUBTLE};
+        }
+
+        #project_info_content {
+            width: 1fr;
+            height: 1fr;
+        }
+
+        .info-nav-button {
+            width: 100%;
+            height: 3;
+            min-height: 3;
+            margin-bottom: 0;
+        }
+
+        .info-nav-active {
+            border: tall {BRAND_TEAL};
+            background: {SURFACE_RAISED};
         }
 
         .project-info-pane {
             height: 1fr;
-            padding: 1;
+            padding: 1 2;
+            overflow-y: auto;
+        }
+
+        .field-block {
+            width: 1fr;
+            height: auto;
+            margin-bottom: 0;
+        }
+
+        .section-block {
+            width: 1fr;
+            height: auto;
+            margin-top: 1;
         }
 
         #change_message {
@@ -537,9 +571,11 @@ def _build_textual_app():
             sheet = config.sheet
             legal_project = config.legal_project_defaults
             legal_profiles = config.legal_profiles
+            document = config.document_settings("schematic")
             manufacturing = config.manufacturing
             impedance_table_text = _format_impedance_table_input(config.impedance_entries)
             outputs = config.output_settings
+            revision_table_text = _format_document_revision_rows_input(document_revision_rows(config, "schematic"))
 
             bool_options = [("true", "true"), ("false", "false")]
             revision_scheme_options = [(scheme, scheme) for scheme in ("lettered", "numeric", "semantic")]
@@ -553,10 +589,11 @@ def _build_textual_app():
                 widget_id: str,
                 hint: str = "",
             ):
-                yield Label(label, classes="field-label")
-                if hint:
-                    yield Static(hint, classes="field-hint")
-                yield Input(value=value, placeholder=placeholder, id=widget_id)
+                with Vertical(classes="field-block"):
+                    yield Label(label, classes="field-label")
+                    if hint:
+                        yield Static(hint, classes="field-hint")
+                    yield Input(value=value, placeholder=placeholder, id=widget_id)
 
             def field_select(
                 label: str,
@@ -566,10 +603,11 @@ def _build_textual_app():
                 hint: str = "",
                 options: list[tuple[str, str]],
             ):
-                yield Label(label, classes="field-label")
-                if hint:
-                    yield Static(hint, classes="field-hint")
-                yield Select(options, value=value, id=widget_id)
+                with Vertical(classes="field-block"):
+                    yield Label(label, classes="field-label")
+                    if hint:
+                        yield Static(hint, classes="field-hint")
+                    yield Select(options, value=value, id=widget_id)
 
             def field_textarea(
                 label: str,
@@ -578,128 +616,42 @@ def _build_textual_app():
                 widget_id: str,
                 hint: str = "",
             ):
-                yield Label(label, classes="field-label")
-                if hint:
-                    yield Static(hint, classes="field-hint")
-                yield TextArea(value, id=widget_id)
+                with Vertical(classes="field-block"):
+                    yield Label(label, classes="field-label")
+                    if hint:
+                        yield Static(hint, classes="field-hint")
+                    yield TextArea(value, id=widget_id)
 
             def section_intro(title: str, hint: str):
-                yield Label(title, classes="section-title")
-                yield Static(hint, classes="field-hint")
+                with Vertical(classes="section-block"):
+                    yield Label(title, classes="section-title")
+                    yield Static(hint, classes="field-hint")
 
             with Vertical(id="project_info_dialog"):
-                with TabbedContent(id="project_info_tabs"):
-                    with TabPane("Identity", id="project_tab"):
-                        with VerticalScroll(id="project_info_scroll", classes="project-info-pane"):
-                            yield from field_input(
-                                "Project ID",
-                                str(project.get("id", "")),
-                                placeholder="BOARDWRIGHT",
-                                widget_id="project_id",
-                                hint="Short identifier used in status, artifacts, and release names.",
+                with Horizontal(id="project_info_body"):
+                    with Vertical(id="project_info_nav"):
+                        yield Static("Sections", classes="section-title")
+                        yield Button("Project", id="info_nav_project", classes="info-nav-button")
+                        yield Button("Drawing", id="info_nav_drawing", classes="info-nav-button")
+                        yield Button("Revisions", id="info_nav_revisions", classes="info-nav-button")
+                        yield Button("Workflow", id="info_nav_workflow", classes="info-nav-button")
+                        yield Button("Outputs", id="info_nav_outputs", classes="info-nav-button")
+                        yield Button("Branding", id="info_nav_branding", classes="info-nav-button")
+                        yield Button("Legal", id="info_nav_legal", classes="info-nav-button")
+                        yield Button("Fabrication", id="info_nav_fabrication", classes="info-nav-button")
+                        yield Button("Notes", id="info_nav_notes", classes="info-nav-button")
+                    with Vertical(id="project_info_content"):
+                        with VerticalScroll(id="info_section_project", classes="project-info-pane info-section"):
+                            yield from section_intro(
+                                "Project",
+                                "Core identifiers and ownership used across Boardwright outputs.",
                             )
                             yield from field_input(
-                                "Project name",
-                                str(project.get("name", "")),
-                                placeholder="Boardwright Controller",
+                                "Project name (${PROJECT_NUMBER})",
+                                config.project_name,
+                                placeholder="Customer Project",
                                 widget_id="project_name",
-                                hint="Human-readable project name shown in docs and outputs.",
-                            )
-                            yield from section_intro(
-                                "Board identity",
-                                "These values flow into worksheet titles and generated documentation.",
-                            )
-                            yield from field_input(
-                                "Board name",
-                                config.board_name,
-                                placeholder="Main Controller",
-                                widget_id="project_board_name",
-                                hint="Board or assembly name printed on sheets and reports.",
-                            )
-                            yield from field_input(
-                                "Board revision",
-                                config.board_revision,
-                                placeholder="A",
-                                widget_id="project_board_revision",
-                                hint="Current hardware revision string.",
-                            )
-                            yield from field_input(
-                                "PCBA number",
-                                config.pcba_number,
-                                placeholder="Assembly part number",
-                                widget_id="project_pcba_number",
-                                hint="Controlled number for the populated assembly.",
-                            )
-                            yield from field_input(
-                                "PCB number",
-                                config.pcb_number,
-                                placeholder="Bare board part number",
-                                widget_id="project_pcb_number",
-                                hint="Controlled number for the bare fabricated PCB.",
-                            )
-                            yield from section_intro(
-                                "Document control",
-                                "These fields are formal drawing metadata; release version remains Git/package oriented.",
-                            )
-                            yield from field_input(
-                                "Document revision",
-                                config.document_revision,
-                                placeholder="A",
-                                widget_id="project_document_revision",
-                                hint="Controlled document revision printed on formal sheets.",
-                            )
-                            yield from field_select(
-                                "Revision scheme",
-                                config.document_revision_scheme,
-                                widget_id="project_document_revision_scheme",
-                                hint="Controls validation and future revision helpers.",
-                                options=revision_scheme_options,
-                            )
-                            yield from field_input(
-                                "Drawn by",
-                                config.drawn_by,
-                                placeholder="Initials or name",
-                                widget_id="project_drawn_by",
-                                hint="Person or role that drew the document.",
-                            )
-                            yield from field_input(
-                                "Drawn date",
-                                config.drawn_date,
-                                placeholder="YYYY-MM-DD",
-                                widget_id="project_drawn_date",
-                                hint="Use YYYY-MM-DD.",
-                            )
-                            yield from field_input(
-                                "Checked by",
-                                config.checked_by,
-                                placeholder="Initials or name",
-                                widget_id="project_checked_by",
-                                hint="Person or role that checked the document.",
-                            )
-                            yield from field_input(
-                                "Checked date",
-                                config.checked_date,
-                                placeholder="YYYY-MM-DD",
-                                widget_id="project_checked_date",
-                                hint="Use YYYY-MM-DD.",
-                            )
-                            yield from field_input(
-                                "Approved by",
-                                config.approved_by,
-                                placeholder="Initials or name",
-                                widget_id="project_approved_by",
-                                hint="Person or role that approved the document.",
-                            )
-                            yield from field_input(
-                                "Approved date",
-                                config.approved_date,
-                                placeholder="YYYY-MM-DD",
-                                widget_id="project_approved_date",
-                                hint="Use YYYY-MM-DD.",
-                            )
-                            yield from section_intro(
-                                "Ownership",
-                                "Use the owning organisation and primary design contact for notices and generated docs.",
+                                hint="KiCad `${PROJECT_NUMBER}`; also used as the Boardwright project identifier.",
                             )
                             yield from field_input(
                                 "Company",
@@ -715,86 +667,102 @@ def _build_textual_app():
                                 widget_id="project_designer",
                                 hint="Primary engineer or maintainer.",
                             )
-                            yield from section_intro(
-                                "Repository links",
-                                "These links are used for generated README and release references.",
-                            )
                             yield from field_input(
                                 "Git URL",
                                 str(project.get("git_url", "")),
                                 placeholder="https://github.com/owner/repo.git",
                                 widget_id="project_git_url",
-                                hint="Clone URL for the canonical repository.",
+                                hint="Canonical repository URL. GitHub repo metadata is derived from this.",
+                            )
+                        with VerticalScroll(id="info_section_drawing", classes="project-info-pane info-section"):
+                            yield from section_intro(
+                                "Board identity",
+                                "Hardware and controlled drawing metadata kept separate from release versioning.",
                             )
                             yield from field_input(
-                                "GitHub repo",
-                                str(project.get("github_repo", "")),
-                                placeholder="owner/repo",
-                                widget_id="project_github_repo",
-                                hint="Repository slug used for release and workflow links.",
+                                "PCBA name (${PCBA_NAME})",
+                                config.pcba_name,
+                                placeholder="Main Controller Assembly",
+                                widget_id="project_pcba_name",
+                                hint="KiCad `${PCBA_NAME}`; schematic and assembly `${DRAWING_NUMBER}`.",
                             )
-                    with TabPane("Workflow", id="workflow_tab"):
-                        with VerticalScroll(classes="project-info-pane"):
+                            yield from field_input(
+                                "PCB name (${PCB_NAME})",
+                                config.pcb_name,
+                                placeholder="Main Controller PCB",
+                                widget_id="project_pcb_name",
+                                hint="KiCad `${PCB_NAME}`; fabrication `${DRAWING_NUMBER}`.",
+                            )
+                            yield from field_input(
+                                "Board revision",
+                                config.board_revision,
+                                placeholder="A",
+                                widget_id="project_board_revision",
+                                hint="Current hardware revision string.",
+                            )
+                            yield from section_intro(
+                                "Document control",
+                                "Formal drawing metadata for the schematic document.",
+                            )
+                            yield from field_input(
+                                "Drawing revision",
+                                str(document.get("revision") or ""),
+                                placeholder="A",
+                                widget_id="project_document_revision",
+                                hint="Controlled drawing revision printed on formal sheets.",
+                            )
+                            yield from field_select(
+                                "Revision scheme",
+                                str(document.get("revision_scheme") or "lettered"),
+                                widget_id="project_document_revision_scheme",
+                                hint="Controls validation and future revision helpers.",
+                                options=revision_scheme_options,
+                            )
+                            yield from field_input(
+                                "Drawn by",
+                                str(document.get("drawn_by") or ""),
+                                placeholder="Initials or name",
+                                widget_id="project_drawn_by",
+                                hint="Person or role that drew the document.",
+                            )
+                            yield from field_input(
+                                "Drawn date",
+                                str(document.get("drawn_date") or ""),
+                                placeholder="YYYY-MM-DD",
+                                widget_id="project_drawn_date",
+                                hint="Use YYYY-MM-DD.",
+                            )
+                        with VerticalScroll(id="info_section_revisions", classes="project-info-pane info-section"):
+                            yield from section_intro(
+                                "Revision history",
+                                "Newest first. CSV columns: REV, DATE, DESCRIPTION, DRAWN.",
+                            )
+                            yield from field_textarea(
+                                "Rows",
+                                revision_table_text,
+                                widget_id="document_revision_rows",
+                                hint="One row per line. Example: B, 2026-08-01, Updated connector callouts, RH",
+                            )
+                        with VerticalScroll(id="info_section_workflow", classes="project-info-pane info-section"):
                             yield from section_intro(
                                 "Variant defaults",
                                 "Choose which lifecycle state each workflow stage should target by default.",
                             )
-                            yield from field_select(
-                                "Dev default",
-                                str(config.default_variant),
-                                widget_id="variant_dev",
-                                hint="Used for local work and normal commits.",
-                                options=variant_options,
-                            )
-                            yield from field_select(
-                                "Preview default",
-                                str(config.preview_variant),
-                                widget_id="variant_preview",
-                                hint="Used when dispatching preview artifacts.",
-                                options=variant_options,
-                            )
-                            yield from field_select(
-                                "Main default",
-                                str(config.main_variant),
-                                widget_id="variant_main",
-                                hint="Used when promoting accepted output to main.",
-                                options=variant_options,
-                            )
-                            yield from field_select(
-                                "Release default",
-                                str(config.release_variant),
-                                widget_id="variant_release",
-                                hint="Used when preparing formal releases.",
-                                options=variant_options,
-                            )
+                            yield from field_select("Dev default", str(config.default_variant), widget_id="variant_dev", hint="Used for local work and normal commits.", options=variant_options)
+                            yield from field_select("Preview default", str(config.preview_variant), widget_id="variant_preview", hint="Used when dispatching preview artifacts.", options=variant_options)
+                            yield from field_select("Main default", str(config.main_variant), widget_id="variant_main", hint="Used when promoting accepted output to main.", options=variant_options)
+                            yield from field_select("Release default", str(config.release_variant), widget_id="variant_release", hint="Used when preparing formal releases.", options=variant_options)
                             yield from section_intro(
                                 "Branch names",
-                                "These names control where Boardwright expects to record, preview, and release work.",
+                                "Where Boardwright records, previews, and releases work.",
                             )
-                            yield from field_input(
-                                "Development branch",
-                                str(branches.get("development", config.dev_branch)),
-                                placeholder="dev",
-                                widget_id="branch_development",
-                                hint="Branch required for local recording and commit actions.",
-                            )
-                            yield from field_input(
-                                "Preview branch",
-                                str(branches.get("preview", config.preview_branch)),
-                                placeholder="preview",
-                                widget_id="branch_preview",
-                                hint="Branch used for preview artifact review when enabled.",
-                            )
-                            yield from field_input(
-                                "Release branch",
-                                str(branches.get("release", config.release_branch)),
-                                placeholder="release",
-                                widget_id="branch_release",
-                                hint="Branch used for release preparation and tags.",
-                            )
+                            yield from field_input("Development branch", str(branches.get("development", config.dev_branch)), placeholder="dev", widget_id="branch_development", hint="Branch required for local recording and commit actions.")
+                            yield from field_input("Preview branch", str(branches.get("preview", config.preview_branch)), placeholder="preview", widget_id="branch_preview", hint="Branch used for preview artifact review when enabled.")
+                            yield from field_input("Release branch", str(branches.get("release", config.release_branch)), placeholder="release", widget_id="branch_release", hint="Branch used for release preparation and tags.")
+                        with VerticalScroll(id="info_section_outputs", classes="project-info-pane info-section"):
                             yield from section_intro(
                                 "Generated outputs",
-                                "Control where generated files are written and what ships in a release bundle.",
+                                "Small set of output policy switches for normal workflow use.",
                             )
                             yield from field_select(
                                 "Commit generated outputs to main",
@@ -821,255 +789,109 @@ def _build_textual_app():
                                 "Combined review PDF",
                                 str(outputs.get("combined_review_pdf", "false")).lower(),
                                 widget_id="outputs_combined_review_pdf",
-                                hint="Merge schematic, assembly, and fabrication PDFs into one bookmarked review PDF after generation.",
+                                hint="Generate the standard combined review PDF with ToC, bookmarks, and sheet numbering.",
                                 options=bool_options,
                             )
-                            yield from field_input(
-                                "Combined PDF name",
-                                str(outputs.get("combined_pdf_name", "Manufacturing/boardwright-combined.pdf")),
-                                placeholder="Manufacturing/boardwright-combined.pdf",
-                                widget_id="outputs_combined_pdf_name",
-                                hint="Output filename for the merged review PDF.",
-                            )
-                            yield from field_select(
-                                "Combined PDF contents",
-                                str(outputs.get("combined_pdf_toc", "true")).lower(),
-                                widget_id="outputs_combined_pdf_toc",
-                                hint="Add a contents page with links to generated schematic, assembly, and fabrication sheets.",
-                                options=bool_options,
-                            )
-                            yield from field_select(
-                                "Combined sheet numbers",
-                                str(outputs.get("combined_pdf_page_numbers", "true")).lower(),
-                                widget_id="outputs_combined_pdf_page_numbers",
-                                hint="Use native document metadata for combined review sheet numbering where supported.",
-                                options=bool_options,
-                            )
-                    with TabPane("Branding", id="branding_tab"):
-                        with VerticalScroll(classes="project-info-pane"):
+                        with VerticalScroll(id="info_section_branding", classes="project-info-pane info-section"):
                             yield from section_intro(
                                 "Worksheet assets",
-                                "These files control the title block worksheet and embedded sheet image.",
+                                "Title block worksheet and embedded sheet image.",
                             )
                             yield Static(
                                 f"Worksheet: {config.worksheet}",
                                 id="template_worksheet_display",
                                 classes="project-summary",
                             )
-                            yield from field_input(
-                                "Sheet image",
-                                str(template.get("sheet_image") or config.template_sheet_image),
-                                placeholder="Sheet image path",
-                                widget_id="template_sheet_image",
-                                hint="Image embedded into generated worksheet templates.",
-                            )
-                            yield from section_intro(
-                                "Project imagery",
-                                "These paths feed the README and product-facing generated assets.",
-                            )
-                            yield from field_input(
-                                "Logo",
-                                str(assets.get("logo", "")),
-                                placeholder="Logo path",
-                                widget_id="asset_logo",
-                                hint="Primary logo or wordmark asset.",
-                            )
-                            yield from field_input(
-                                "Render image",
-                                str(assets.get("product_image", "")),
-                                placeholder="Render image path",
-                                widget_id="asset_product_image",
-                                hint="Hero render or product image used in docs.",
-                            )
-                    with TabPane("Legal", id="legal_tab"):
-                        with VerticalScroll(classes="project-info-pane"):
-                            yield from section_intro(
-                                "Legal profile",
-                                "These defaults populate notices, worksheets, and release packaging.",
-                            )
-                            yield from field_select(
-                                "Profile",
-                                config.legal_profile,
-                                widget_id="legal_profile",
-                                hint="Select the baseline legal profile for this project.",
-                                options=[(name, name) for name in sorted(legal_profiles) or [config.legal_profile]],
-                            )
-                            yield from field_input(
-                                "Hardware design license",
-                                str(legal_project.get("hardware_design_license", "")),
-                                placeholder="CERN-OHL-S-2.0",
-                                widget_id="legal_hardware_design_license",
-                                hint="Primary hardware design license identifier.",
-                            )
-                            yield from field_input(
-                                "Copyright holder",
-                                str(legal_project.get("copyright_holder", "")),
-                                placeholder="Acme Labs",
-                                widget_id="legal_copyright_holder",
-                                hint="Entity or person named in copyright notices.",
-                            )
-                            yield from field_input(
-                                "Notice file",
-                                str(legal_project.get("notice_file", "NOTICE.md")),
-                                placeholder="NOTICE.md",
-                                widget_id="legal_notice_file",
-                                hint="Repository file that contains attribution and legal notice text.",
-                            )
-                            yield from field_textarea(
-                                "Safety notice",
-                                str(legal_project.get("safety_notice", "")),
-                                widget_id="legal_safety_notice",
-                                hint="Important warning text included in generated legal outputs.",
-                            )
-                            yield from field_textarea(
-                                "Sheet notice",
-                                str(sheet.get("legal_notice") or config.sheet_legal_notice),
-                                widget_id="sheet_legal_notice",
-                                hint="Expanded into `${SHEET_LEGAL_NOTICE}` in the worksheet.",
-                            )
-                    with TabPane("Manufacturing", id="manufacturing_tab"):
-                        with VerticalScroll(classes="project-info-pane"):
-                            yield from section_intro(
-                                "Fabrication defaults",
-                                "These switches define manufacturing assumptions used by reports and fab notes.",
-                            )
+                            yield from field_input("Sheet image", str(template.get("sheet_image") or config.template_sheet_image), placeholder="Sheet image path", widget_id="template_sheet_image", hint="Image embedded into generated worksheet templates.")
+                            yield from section_intro("Project imagery", "Paths used by README and product-facing outputs.")
+                            yield from field_input("Logo", str(assets.get("logo", "")), placeholder="Logo path", widget_id="asset_logo", hint="Primary logo or wordmark asset.")
+                            yield from field_input("Render image", str(assets.get("product_image", "")), placeholder="Render image path", widget_id="asset_product_image", hint="Hero render or product image used in docs.")
+                        with VerticalScroll(id="info_section_legal", classes="project-info-pane info-section"):
+                            yield from section_intro("Legal profile", "Defaults for notices, worksheets, and release packaging.")
+                            yield from field_select("Profile", config.legal_profile, widget_id="legal_profile", hint="Select the baseline legal profile for this project.", options=[(name, name) for name in sorted(legal_profiles) or [config.legal_profile]])
+                            yield from field_input("Hardware design license", str(legal_project.get("hardware_design_license", "")), placeholder="CERN-OHL-S-2.0", widget_id="legal_hardware_design_license", hint="Primary hardware design license identifier.")
+                            yield from field_input("Copyright holder", str(legal_project.get("copyright_holder", "")), placeholder="Acme Labs", widget_id="legal_copyright_holder", hint="Entity or person named in copyright notices.")
+                            yield from field_input("Notice file", str(legal_project.get("notice_file", "NOTICE.md")), placeholder="NOTICE.md", widget_id="legal_notice_file", hint="Repository file that contains attribution and legal notice text.")
+                            yield from field_textarea("Safety notice", str(legal_project.get("safety_notice", "")), widget_id="legal_safety_notice", hint="Important warning text included in generated legal outputs.")
+                            yield from field_textarea("Sheet notice", str(sheet.get("legal_notice") or config.sheet_legal_notice), widget_id="sheet_legal_notice", hint="Expanded into `${SHEET_LEGAL_NOTICE}` in the worksheet.")
+                        with VerticalScroll(id="info_section_fabrication", classes="project-info-pane info-section"):
+                            yield from section_intro("Fabrication defaults", "Manufacturing assumptions used by reports and fab notes.")
                             for label, key, default, hint in (
-                                (
-                                    "RoHS / Pb-free",
-                                    "rohs_pb_free",
-                                    "true",
-                                    "Marks the design as RoHS / Pb-free by default.",
-                                ),
-                                (
-                                    "Conformal coating",
-                                    "conformal_coating",
-                                    "false",
-                                    "Set true if coating is a normal build requirement.",
-                                ),
-                                (
-                                    "Silkscreen legend",
-                                    "silkscreen_enabled",
-                                    "true",
-                                    "Set false when no silkscreen legend should be manufactured.",
-                                ),
-                                (
-                                    "Tented vias",
-                                    "tented_vias",
-                                    "true",
-                                    "Controls the default via tenting expectation.",
-                                ),
-                                (
-                                    "Controlled impedance",
-                                    "impedance_enabled",
-                                    "false",
-                                    "Enable when the board requires impedance notes and a table.",
-                                ),
-                                (
-                                    "Halogen-free material",
-                                    "halogen_free",
-                                    "true",
-                                    "Marks equivalent laminate requirements as halogen-free.",
-                                ),
+                                ("RoHS / Pb-free", "rohs_pb_free", "true", "Marks the design as RoHS / Pb-free by default."),
+                                ("Conformal coating", "conformal_coating", "false", "Set true if coating is a normal build requirement."),
+                                ("Silkscreen legend", "silkscreen_enabled", "true", "Set false when no silkscreen legend should be manufactured."),
+                                ("Tented vias", "tented_vias", "true", "Controls the default via tenting expectation."),
+                                ("Controlled impedance", "impedance_enabled", "false", "Enable when the board requires impedance notes and a table."),
+                                ("Halogen-free material", "halogen_free", "true", "Marks equivalent laminate requirements as halogen-free."),
                             ):
-                                yield from field_select(
-                                    label,
-                                    str(manufacturing.get(key, default)).lower(),
-                                    widget_id=f"manufacturing_{key}",
-                                    hint=hint,
-                                    options=bool_options,
-                                )
-                            yield from field_input(
-                                "Manufacturing standard",
-                                str(manufacturing.get("manufacturing_standard", "IPC-6012 Class 2")),
-                                placeholder="IPC-6012 Class 2",
-                                widget_id="manufacturing_manufacturing_standard",
-                                hint="Fabrication workmanship standard named in fab notes.",
-                            )
-                            yield from field_input(
-                                "Core material",
-                                str(manufacturing.get("core_material", "FR-4")),
-                                placeholder="FR-4",
-                                widget_id="manufacturing_core_material",
-                                hint="Laminate or core material requirement.",
-                            )
-                            yield from field_input(
-                                "Flammability",
-                                str(manufacturing.get("flammability_rating", "UL94V-0")),
-                                placeholder="UL94V-0",
-                                widget_id="manufacturing_flammability_rating",
-                                hint="Minimum flammability rating for laminate material.",
-                            )
-                            yield from field_input(
-                                "Tg rating",
-                                str(manufacturing.get("tg_rating", "170 C")),
-                                placeholder="170 C",
-                                widget_id="manufacturing_tg_rating",
-                                hint="Minimum glass-transition temperature or equivalent requirement.",
-                            )
-                            yield from section_intro(
-                                "Manufacturing notes",
-                                "These freeform notes are exported into fabrication and assembly outputs.",
-                            )
-                            yield from field_textarea(
-                                "Fab notes",
-                                str(manufacturing.get("fabrication_notes", "")),
-                                widget_id="manufacturing_fabrication_notes",
-                                hint="Special fabrication instructions for the board house.",
-                            )
-                            yield from field_textarea(
-                                "Assembly notes",
-                                str(manufacturing.get("assembly_notes", "")),
-                                widget_id="manufacturing_assembly_notes",
-                                hint="Special assembly instructions for population and handling.",
-                            )
-                            yield from field_textarea(
-                                "Testpoint policy",
-                                str(manufacturing.get("testpoint_policy", "")),
-                                widget_id="manufacturing_testpoint_policy",
-                                hint="Define expectations for test access and coverage.",
-                            )
-                            yield from field_textarea(
-                                "Impedance notes",
-                                str(manufacturing.get("impedance_notes", "")),
-                                widget_id="manufacturing_impedance_notes",
-                                hint="Impedance assumptions.",
-                            )
+                                yield from field_select(label, str(manufacturing.get(key, default)).lower(), widget_id=f"manufacturing_{key}", hint=hint, options=bool_options)
+                            yield from field_input("Manufacturing standard", str(manufacturing.get("manufacturing_standard", "IPC-6012 Class 2")), placeholder="IPC-6012 Class 2", widget_id="manufacturing_manufacturing_standard", hint="Fabrication workmanship standard named in fab notes.")
+                            yield from field_input("Core material", str(manufacturing.get("core_material", "FR-4")), placeholder="FR-4", widget_id="manufacturing_core_material", hint="Laminate or core material requirement.")
+                            yield from field_input("Flammability", str(manufacturing.get("flammability_rating", "UL94V-0")), placeholder="UL94V-0", widget_id="manufacturing_flammability_rating", hint="Minimum flammability rating for laminate material.")
+                            yield from field_input("Tg rating", str(manufacturing.get("tg_rating", "170 C")), placeholder="170 C", widget_id="manufacturing_tg_rating", hint="Minimum glass-transition temperature or equivalent requirement.")
+                        with VerticalScroll(id="info_section_notes", classes="project-info-pane info-section"):
+                            yield from section_intro("Manufacturing notes", "Freeform notes exported into fabrication and assembly outputs.")
+                            yield from field_textarea("Fab notes", str(manufacturing.get("fabrication_notes", "")), widget_id="manufacturing_fabrication_notes", hint="Special fabrication instructions for the board house.")
+                            yield from field_textarea("Assembly notes", str(manufacturing.get("assembly_notes", "")), widget_id="manufacturing_assembly_notes", hint="Special assembly instructions for population and handling.")
+                            yield from field_textarea("Testpoint policy", str(manufacturing.get("testpoint_policy", "")), widget_id="manufacturing_testpoint_policy", hint="Define expectations for test access and coverage.")
+                            yield from field_textarea("Impedance notes", str(manufacturing.get("impedance_notes", "")), widget_id="manufacturing_impedance_notes", hint="Impedance assumptions.")
                             yield from field_textarea(
                                 "Impedance table",
                                 impedance_table_text,
                                 widget_id="manufacturing_impedance_table",
-                                hint=(
-                                    "CSV: Transmission Line, Impedance, Tolerance, Layer, Width, Gap, Ref. Layers."
-                                ),
+                                hint="CSV: Transmission Line, Impedance, Tolerance, Layer, Width, Gap, Ref. Layers.",
                             )
                 yield Button("Save", id="save_project_info")
                 yield Button("Cancel", id="cancel_project_info")
 
+        def on_mount(self) -> None:
+            self._show_info_section("project")
+
+        def _show_info_section(self, key: str) -> None:
+            for section in ("project", "drawing", "revisions", "workflow", "outputs", "branding", "legal", "fabrication", "notes"):
+                pane = self.query_one(f"#info_section_{section}")
+                pane.display = section == key
+                button = self.query_one(f"#info_nav_{section}", Button)
+                if section == key:
+                    button.add_class("info-nav-active")
+                else:
+                    button.remove_class("info-nav-active")
+
         def on_button_pressed(self, event: Button.Pressed) -> None:
+            if event.button.id and event.button.id.startswith("info_nav_"):
+                self._show_info_section(event.button.id.removeprefix("info_nav_"))
+                event.stop()
+                return
             if event.button.id == "cancel_project_info":
                 self.dismiss(None)
                 return
             self.dismiss(
                 {
                     "project": {
-                        "id": self.query_one("#project_id", Input).value.strip(),
                         "name": self.query_one("#project_name", Input).value.strip(),
-                        "board_name": self.query_one("#project_board_name", Input).value.strip(),
+                        "pcba_name": self.query_one("#project_pcba_name", Input).value.strip(),
+                        "pcb_name": self.query_one("#project_pcb_name", Input).value.strip(),
                         "board_revision": self.query_one("#project_board_revision", Input).value.strip(),
-                        "pcba_number": self.query_one("#project_pcba_number", Input).value.strip(),
-                        "pcb_number": self.query_one("#project_pcb_number", Input).value.strip(),
-                        "document_revision": self.query_one("#project_document_revision", Input).value.strip(),
-                        "document_revision_scheme": str(self.query_one("#project_document_revision_scheme", Select).value),
-                        "drawn_by": self.query_one("#project_drawn_by", Input).value.strip(),
-                        "drawn_date": self.query_one("#project_drawn_date", Input).value.strip(),
-                        "checked_by": self.query_one("#project_checked_by", Input).value.strip(),
-                        "checked_date": self.query_one("#project_checked_date", Input).value.strip(),
-                        "approved_by": self.query_one("#project_approved_by", Input).value.strip(),
-                        "approved_date": self.query_one("#project_approved_date", Input).value.strip(),
                         "company": self.query_one("#project_company", Input).value.strip(),
                         "designer": self.query_one("#project_designer", Input).value.strip(),
                         "git_url": self.query_one("#project_git_url", Input).value.strip(),
-                        "github_repo": self.query_one("#project_github_repo", Input).value.strip(),
+                    },
+                    "documents": {
+                        "schematic": {
+                            "title": "Schematic",
+                            "type": "SCHEMATIC",
+                            "number_source": "pcba_name",
+                            "revision": self.query_one("#project_document_revision", Input).value.strip(),
+                            "revision_scheme": str(self.query_one("#project_document_revision_scheme", Select).value),
+                            "drawn_by": self.query_one("#project_drawn_by", Input).value.strip(),
+                            "drawn_date": self.query_one("#project_drawn_date", Input).value.strip(),
+                            "include_full_revision_history": True,
+                        }
+                    },
+                    "document_revisions": {
+                        "schematic": _parse_document_revision_rows_input(
+                            self.query_one("#document_revision_rows", TextArea).text
+                        ),
                     },
                     "variants": {
                         "dev_default": str(self.query_one("#variant_dev", Select).value),
@@ -1123,9 +945,6 @@ def _build_textual_app():
                         "use_preview_branch": str(self.query_one("#outputs_use_preview_branch", Select).value),
                         "release_include_source_archive": str(self.query_one("#outputs_release_include_source_archive", Select).value),
                         "combined_review_pdf": str(self.query_one("#outputs_combined_review_pdf", Select).value),
-                        "combined_pdf_name": self.query_one("#outputs_combined_pdf_name", Input).value.strip(),
-                        "combined_pdf_toc": str(self.query_one("#outputs_combined_pdf_toc", Select).value),
-                        "combined_pdf_page_numbers": str(self.query_one("#outputs_combined_pdf_page_numbers", Select).value),
                     },
                 }
             )
@@ -1184,14 +1003,16 @@ def _build_textual_app():
             message = self.query_one("#commit_message", Input).value
             self.dismiss(message)
 
-    class ReleaseScreen(ModalScreen[tuple[str, str, str] | None]):
+    class ReleaseScreen(ModalScreen[tuple[str, str, str, str, str] | None]):
         CSS = ChangelogEntryScreen.CSS
 
         def compose(self) -> ComposeResult:
             with Vertical(id="dialog"):
                 yield Label("Release", classes="section-title")
-                yield Static("Review version, variant, and kind.", classes="muted")
+                yield Static("Review package release and controlled drawing revision.", classes="muted")
                 yield Input(placeholder="0.1.2", id="release_version")
+                yield Input(placeholder="Drawing revision, e.g. A", id="release_drawing_revision")
+                yield Input(placeholder="Revision table note, 60 chars max", id="release_revision_description")
                 yield Select(
                     [(variant, variant) for variant in ("DRAFT", "PRELIMINARY", "CHECKED", "RELEASED")],
                     value="RELEASED",
@@ -1210,9 +1031,11 @@ def _build_textual_app():
                 self.dismiss(None)
                 return
             version = self.query_one("#release_version", Input).value
+            drawing_revision = self.query_one("#release_drawing_revision", Input).value
+            revision_description = self.query_one("#release_revision_description", Input).value
             variant = self.query_one("#release_variant", Select).value
             kind = self.query_one("#release_kind", Select).value
-            self.dismiss((version, str(variant), str(kind)))
+            self.dismiss((version, str(variant), str(kind), drawing_revision, revision_description))
 
     class ReleaseChecklistScreen(ModalScreen[ReleaseChecklist | None]):
         CSS = ChangelogEntryScreen.CSS
@@ -1995,8 +1818,6 @@ def _build_textual_app():
             self.notify(f"Preview {variant} dispatched.")
 
         def action_project_info(self) -> None:
-            if not self._require_action("Info"):
-                return
             self.push_screen(ProjectInfoScreen(), self._save_project_info)
 
         def action_view_validation(self) -> None:
@@ -2021,8 +1842,16 @@ def _build_textual_app():
                     legal_fields=result["legal"],
                     manufacturing_fields=result["manufacturing"],
                     output_fields=result["outputs"],
+                    document_fields=result["documents"],
                 )
                 updated_config = load_config()
+                write_document_revision_rows(
+                    updated_config,
+                    result.get("document_revisions", {}).get("schematic", []),
+                    "schematic",
+                )
+                updated_config = load_config()
+                write_revision_variables(updated_config, "schematic")
                 _embed_template_sheet_image(updated_config)
                 self.state = collect_dashboard_state()
             except BoardwrightError as exc:
@@ -2340,14 +2169,22 @@ def _build_textual_app():
             self.notify(f"Accept {variant} dispatched.")
             self._poll_ci_status()
 
-        def _release_ci(self, result: tuple[str, str, str] | None) -> None:
+        def _release_ci(self, result: tuple[str, str, str, str, str] | None) -> None:
             if result is None:
                 return
-            version, variant, kind = result
+            version, variant, kind, drawing_revision, revision_description = result
             try:
                 config = load_config()
                 accepted_state = build_accepted_main_state(config)
-                checklist = build_release_checklist(config, version, variant, kind, accepted_state)
+                checklist = build_release_checklist(
+                    config,
+                    version,
+                    variant,
+                    kind,
+                    drawing_revision,
+                    revision_description,
+                    accepted_state,
+                )
             except BoardwrightError as exc:
                 self.notify(str(exc), severity="error")
                 return
@@ -2410,13 +2247,13 @@ def _build_textual_app():
                 ("review_artifacts", "Review"),
                 ("accept_main", "Accept"),
                 ("release_ci", "Release"),
-                ("project_info", "Info"),
-                ("refresh", "Refresh"),
             ):
                 self.query_one(f"#{button_id}", Button).disabled = not action_state(
                     self.state.workflow,
                     action_name,
                 ).enabled
+            self.query_one("#project_info", Button).disabled = False
+            self.query_one("#refresh", Button).disabled = False
 
     return BoardwrightTui
 
@@ -2556,7 +2393,7 @@ def _issue_summary_style(issues: tuple[ValidationIssue, ...]) -> str:
 
 def _format_project_summary(status: ProjectStatus, *, brief: bool = False) -> str:
     lines = [
-        f"Name: {status.project_name}",
+        f"PCBA: {status.project_name}",
         f"Dev default: {status.variant}",
         f"Unreleased: {'yes' if status.unreleased_changes else 'no'}",
         f"Git: {status.dirty_count} changed" if status.dirty_count else "Git: clean",
@@ -2979,11 +2816,15 @@ def build_release_checklist(
     version: str,
     variant: str,
     kind: str,
+    drawing_revision: str,
+    revision_description: str,
     accepted_state: "AcceptedMainState",
 ) -> ReleaseChecklist:
     selected_version = version.strip()
     selected_variant = variant.strip()
     selected_kind = kind.strip()
+    selected_drawing_revision = drawing_revision.strip()
+    selected_revision_description = " ".join(revision_description.split())
     accepted_summary = format_accepted_state(accepted_state)
     action: WorkflowAction | None = None
     action_error = ""
@@ -2996,6 +2837,8 @@ def build_release_checklist(
             selected_version,
             selected_variant,
             selected_kind,
+            selected_drawing_revision,
+            selected_revision_description,
         )
     except BoardwrightError as exc:
         action_error = str(exc)
@@ -3014,9 +2857,18 @@ def build_release_checklist(
             "Inputs",
             action is not None,
             (
-                f"{selected_version} | {selected_variant} | {selected_kind}"
+                f"{selected_version} | {selected_variant} | {selected_kind} | drawing rev {selected_drawing_revision}"
                 if action is not None
                 else action_error
+            ),
+        ),
+        ReleaseChecklistItem(
+            "Revision row",
+            bool(selected_drawing_revision and selected_revision_description and len(selected_revision_description) <= 60),
+            (
+                f"{selected_drawing_revision}: {selected_revision_description}"
+                if selected_drawing_revision and selected_revision_description and len(selected_revision_description) <= 60
+                else "Drawing revision and a 60-character description are required."
             ),
         ),
         ReleaseChecklistItem(
@@ -3051,6 +2903,8 @@ def build_release_checklist(
         selected_version,
         selected_variant,
         selected_kind,
+        selected_drawing_revision,
+        selected_revision_description,
         accepted_summary,
         tuple(items),
         action,
@@ -3060,6 +2914,7 @@ def build_release_checklist(
 def _format_release_checklist(checklist: ReleaseChecklist) -> str:
     lines = [
         f"Release {checklist.version or '(blank)'} | {checklist.variant} | {checklist.kind}",
+        f"Drawing rev {checklist.drawing_revision or '(blank)'} | {checklist.revision_description or '(blank)'}",
         "",
         "Readiness:",
     ]
@@ -3296,6 +3151,45 @@ def _git_status_badge(code: str) -> tuple[str, str]:
         return primary, _semantic_style("info")
     return "UNK", _semantic_style("unset")
 
+
+
+def _format_document_revision_rows_input(rows: list[dict[str, object]]) -> str:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["REV", "DATE", "DESCRIPTION", "DRAWN"])
+    for row in rows:
+        writer.writerow(
+            [
+                str(row.get("revision", "")),
+                str(row.get("date", "")),
+                str(row.get("description", "")),
+                str(row.get("drawn_by", "")),
+            ]
+        )
+    return buffer.getvalue()
+
+
+def _parse_document_revision_rows_input(text: str) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    reader = csv.reader(text.splitlines())
+    for raw_row in reader:
+        row = [cell.strip() for cell in raw_row]
+        if not any(row):
+            continue
+        first = row[0].lower() if row else ""
+        if first in {"rev", "revision"}:
+            continue
+        while len(row) < 4:
+            row.append("")
+        rows.append(
+            {
+                "revision": row[0],
+                "date": row[1],
+                "description": row[2],
+                "drawn_by": row[3],
+            }
+        )
+    return rows
 
 def _format_impedance_table_input(entries: list[dict[str, object]]) -> str:
     if not entries:

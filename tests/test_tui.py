@@ -54,14 +54,79 @@ class TuiTests(unittest.TestCase):
     def test_project_info_exposes_document_control_fields(self) -> None:
         source = Path("src/boardwright/tui.py").read_text(encoding="utf-8")
 
-        self.assertIn("project_pcba_number", source)
-        self.assertIn("project_pcb_number", source)
+        self.assertIn("Project name (${PROJECT_NUMBER})", source)
+        self.assertIn("PCBA name (${PCBA_NAME})", source)
+        self.assertIn("PCB name (${PCB_NAME})", source)
+        self.assertNotIn("project_project_number", source)
+        self.assertNotIn("project_pcba_number", source)
+        self.assertNotIn("project_pcb_number", source)
+        self.assertIn("Drawing revision", source)
         self.assertIn("project_document_revision", source)
-        self.assertIn("project_document_revision_scheme", source)
+        self.assertIn('document_fields=result["documents"]', source)
         self.assertIn("lettered", source)
         self.assertIn("numeric", source)
         self.assertIn("semantic", source)
         self.assertIn("YYYY-MM-DD", source)
+        self.assertIn("document_revision_rows", source)
+        for section in ("project", "drawing", "revisions", "workflow", "outputs", "branding", "legal", "fabrication", "notes"):
+            self.assertIn(f'info_nav_{section}', source)
+            self.assertIn(f'info_section_{section}', source)
+        self.assertNotIn("TabbedContent", source[source.find("class ProjectInfoScreen"):source.find("class ReviewArtifactsScreen")])
+        self.assertNotIn("grid-columns", source[source.find("#project_info_dialog"):source.find("#change_message")])
+
+
+    def test_project_info_modal_mounts_core_fields_at_small_size(self) -> None:
+        if not tui.textual_available():
+            self.skipTest("Textual is not installed")
+
+        import asyncio
+
+        async def check() -> None:
+            app = tui._build_textual_app()()
+            async with app.run_test(size=(82, 26)) as pilot:
+                await pilot.pause(0.2)
+                app.action_project_info()
+                await pilot.pause(0.5)
+                for widget_id in (
+                    "project_name",
+                    "project_pcba_name",
+                    "project_document_revision",
+                    "document_revision_rows",
+                    "variant_dev",
+                    "outputs_combined_review_pdf",
+                    "template_sheet_image",
+                    "legal_profile",
+                    "manufacturing_rohs_pb_free",
+                    "manufacturing_fabrication_notes",
+                ):
+                    app.screen.query_one(f"#{widget_id}")
+
+        asyncio.run(check())
+
+    def test_project_info_section_rail_switches_visible_pane(self) -> None:
+        if not tui.textual_available():
+            self.skipTest("Textual is not installed")
+
+        import asyncio
+
+        async def check() -> None:
+            app = tui._build_textual_app()()
+            async with app.run_test(size=(100, 32)) as pilot:
+                await pilot.pause(0.2)
+                app.action_project_info()
+                await pilot.pause(0.5)
+                app.screen.query_one("#info_section_project")
+                app.screen.query_one("#info_section_drawing")
+                self.assertTrue(app.screen.query_one("#info_section_project").display)
+                self.assertFalse(app.screen.query_one("#info_section_drawing").display)
+
+                app.screen._show_info_section("drawing")
+                await pilot.pause(0.1)
+                self.assertFalse(app.screen.query_one("#info_section_project").display)
+                self.assertTrue(app.screen.query_one("#info_section_drawing").display)
+                self.assertIn("info-nav-active", app.screen.query_one("#info_nav_drawing").classes)
+
+        asyncio.run(check())
 
     def test_dashboard_state_collects(self) -> None:
         state = tui.collect_dashboard_state()
@@ -234,7 +299,7 @@ class TuiTests(unittest.TestCase):
         state = tui.collect_dashboard_state()
         text = tui._format_project_summary(state.status, brief=True)
 
-        self.assertIn("Name:", text)
+        self.assertIn("PCBA:", text)
         self.assertIn("Dev default:", text)
         self.assertIn("Git:", text)
         self.assertNotIn("Preview default:", text)
@@ -538,6 +603,8 @@ class TuiTests(unittest.TestCase):
             "0.1.2",
             "RELEASED",
             "release",
+            "B",
+            "Release connector update",
             accepted_state,
         )
 
@@ -560,6 +627,8 @@ class TuiTests(unittest.TestCase):
             "v0.1.2",
             "RELEASED",
             "release",
+            "B",
+            "Release connector update",
             accepted_state,
         )
 
@@ -567,6 +636,7 @@ class TuiTests(unittest.TestCase):
         self.assertFalse(checklist.can_dispatch)
         self.assertIn("Release version must use semantic form", text)
         self.assertIn("[ ] Inputs", text)
+        self.assertIn("Drawing rev B", text)
 
 
 if __name__ == "__main__":
