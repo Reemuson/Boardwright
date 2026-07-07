@@ -578,6 +578,7 @@ def _build_textual_app():
             revision_table_text = _format_document_revision_rows_input(document_revision_rows(config, "schematic"))
 
             bool_options = [("true", "true"), ("false", "false")]
+            optional_bool_options = [("Unspecified", ""), ("true", "true"), ("false", "false")]
             revision_scheme_options = [(scheme, scheme) for scheme in ("lettered", "numeric", "semantic")]
             variant_options = [(variant, variant) for variant in ("DRAFT", "PRELIMINARY", "CHECKED", "RELEASED")]
 
@@ -824,7 +825,9 @@ def _build_textual_app():
                                 ("Controlled impedance", "impedance_enabled", "false", "Enable when the board requires impedance notes and a table."),
                                 ("Halogen-free material", "halogen_free", "true", "Marks equivalent laminate requirements as halogen-free."),
                             ):
-                                yield from field_select(label, str(manufacturing.get(key, default)).lower(), widget_id=f"manufacturing_{key}", hint=hint, options=bool_options)
+                                value = str(manufacturing.get(key, default)).strip().lower()
+                                options = bool_options if key == "impedance_enabled" else optional_bool_options
+                                yield from field_select(label, value, widget_id=f"manufacturing_{key}", hint=hint, options=options)
                             yield from field_input("Manufacturing standard", str(manufacturing.get("manufacturing_standard", "IPC-6012 Class 2")), placeholder="IPC-6012 Class 2", widget_id="manufacturing_manufacturing_standard", hint="Fabrication workmanship standard named in fab notes.")
                             yield from field_input("Core material", str(manufacturing.get("core_material", "FR-4")), placeholder="FR-4", widget_id="manufacturing_core_material", hint="Laminate or core material requirement.")
                             yield from field_input("Flammability", str(manufacturing.get("flammability_rating", "UL94V-0")), placeholder="UL94V-0", widget_id="manufacturing_flammability_rating", hint="Minimum flammability rating for laminate material.")

@@ -3,6 +3,7 @@
 
 import unittest
 from pathlib import Path
+import re
 import shutil
 from unittest.mock import patch
 
@@ -245,6 +246,7 @@ manufacturing:
             self.assertNotIn("${bb_w_mm}", fabrication_notes)
             self.assertIn("NO IMPEDANCE", pcb)
             self.assertNotIn("REFER TO IMPEDANCE TABLE", fabrication_notes)
+            self.assertNotIn("#?stackup", fabrication_notes)
             self.assertIn("FABRICATE PER IPC-6012 CLASS 2", fabrication_notes)
             self.assertIn("NO SILKSCREEN LEGEND REQUIRED", fabrication_notes)
             self.assertIn("CONFORMAL COATING IS NOT REQUIRED", fabrication_notes)
@@ -313,9 +315,9 @@ manufacturing:
             "manufacturing_standard_note": "",
             "pcb_finish_cap": "ENIG",
             "solder_mask_color_text_cap": "GREEN",
-            "silkscreen_note": "NO SILKSCREEN LEGEND REQUIRED.",
-            "tented_vias_note": "ALL VIAS ARE TENTED ON BOTH SIDES UNLESS SOLDERMASK OPENED IN GERBER.",
-            "rohs_note": "VENDOR SHOULD FOLLOW ROHS COMPLIANT PROCESS AND Pb-FREE MANUFACTURING.",
+            "silkscreen_note": kicad_tables._silkscreen_note(False, "YELLOW"),
+            "tented_vias_note": kicad_tables._tented_vias_note(True),
+            "rohs_note": kicad_tables._rohs_note(None),
             "material_requirements_block": kicad_tables._material_requirements_block(
                 "",
                 "",
@@ -335,17 +337,22 @@ manufacturing:
             "c2h_mm": "0.254",
             "c2e_mm": "0.250",
             "h2h_mm": "0.254",
-            "conformal_coating_note": "CONFORMAL COATING IS NOT REQUIRED.",
+            "conformal_coating_note": kicad_tables._conformal_coating_note(None),
             "fabrication_extra_notes": kicad_tables._extra_note_block(long_note),
         }
 
         notes = kicad_tables._render_note_template(template, values)
+        numbers = [int(match.group(1)) for match in re.finditer(r"^(\d+)\)", notes, re.MULTILINE)]
 
+        self.assertEqual(list(range(1, len(numbers) + 1)), numbers)
+        self.assertNotIn("@NOTE@", notes)
         self.assertNotIn("FABRICATE PER .", notes)
         self.assertNotIn("PCB MATERIAL REQUIREMENTS", notes)
         self.assertNotIn("CORE MATERIAL:", notes)
         self.assertNotIn("FLAMMABILITY RATING", notes)
         self.assertNotIn("Tg", notes)
+        self.assertNotIn("RoHS", notes)
+        self.assertNotIn("CONFORMAL COATING", notes)
         self.assertNotIn(long_note, notes)
         self.assertTrue(all(len(line.expandtabs(4)) <= 88 for line in notes.splitlines()))
 
@@ -487,6 +494,15 @@ manufacturing:
             csv_path = root / "Manufacturing" / "Fabrication" / "boardwright-impedance_table.csv"
             self.assertTrue(csv_path.is_file())
             self.assertIn("Diff Pair A", csv_path.read_text(encoding="utf-8"))
+            fabrication_notes = (
+                root
+                / "Manufacturing"
+                / "Fabrication"
+                / "boardwright-fabrication_notes.txt"
+            ).read_text(encoding="utf-8")
+            self.assertIn("REFER TO IMPEDANCE TABLE", fabrication_notes)
+            self.assertIn("CONFIRM TRACE WIDTHS AND SPACINGS", fabrication_notes)
+            self.assertNotIn("#?stackup", fabrication_notes)
             pcb = (root / "boardwright.kicad_pcb").read_text(encoding="utf-8")
             self.assertIn("Diff Pair A", pcb)
             self.assertNotIn("NO IMPEDANCE CONTROLLED TRACES", pcb)

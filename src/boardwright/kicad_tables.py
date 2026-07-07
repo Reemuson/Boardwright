@@ -458,6 +458,8 @@ def _write_manufacturing_notes(root: Path, config=None) -> None:
     impedance_rows = _impedance_entries(config)
     if not impedance_rows:
         fabrication = _strip_impedance_controlled_note(fabrication)
+    else:
+        fabrication = _strip_note_condition_markers(fabrication)
     fabrication_dir = root / "Manufacturing" / "Fabrication"
     fabrication_dir.mkdir(parents=True, exist_ok=True)
     (fabrication_dir / f"{project_stem}-fabrication_notes.txt").write_text(
@@ -567,11 +569,11 @@ def _fabrication_note_values(root: Path, config=None) -> dict[str, str]:
     manufacturing = config.manufacturing if config is not None else {}
     company = _first_match(pcb, r'\(property\s+"([^"]*)"\s+"([^"]*)"\)', "")
     company = str(config.project.get("project", {}).get("company") or company or "COMPANY") if config is not None else company or "COMPANY"
-    silkscreen_enabled = _as_bool(manufacturing.get("silkscreen_enabled", True))
-    conformal_coating = _as_bool(manufacturing.get("conformal_coating", False))
-    tented_vias = _as_bool(manufacturing.get("tented_vias", True))
-    rohs_pb_free = _as_bool(manufacturing.get("rohs_pb_free", True))
-    halogen_free = _as_bool(manufacturing.get("halogen_free", True))
+    silkscreen_enabled = _optional_bool(manufacturing.get("silkscreen_enabled", True))
+    conformal_coating = _optional_bool(manufacturing.get("conformal_coating", False))
+    tented_vias = _optional_bool(manufacturing.get("tented_vias", True))
+    rohs_pb_free = _optional_bool(manufacturing.get("rohs_pb_free", True))
+    halogen_free = _optional_bool(manufacturing.get("halogen_free", True))
     silk_color = _stackup_layer_value(pcb, "F.SilkS", "color", "YELLOW")
     manufacturing_standard = _manufacturing_text(manufacturing, "manufacturing_standard", "IPC-6012 Class 2")
     core_material = _manufacturing_text(manufacturing, "core_material", "FR-4")
@@ -623,15 +625,15 @@ def _manufacturing_text(manufacturing: dict[str, object], key: str, default: str
 def _manufacturing_standard_note(value: str) -> str:
     if not value:
         return ""
-    return f"FABRICATE PER {_cap(value)}."
+    return _fabrication_note(f"FABRICATE PER {_cap(value)}.")
 
 
 def _material_requirements_block(
     core_material: str,
     flammability_rating: str,
     tg_rating: str,
-    rohs_pb_free: bool,
-    halogen_free: bool,
+    rohs_pb_free: bool | None,
+    halogen_free: bool | None,
     company: str,
 ) -> str:
     requirements: list[str] = []
@@ -649,7 +651,7 @@ def _material_requirements_block(
     if not requirements:
         return ""
     lines = [f"\t{chr(ord('A') + index)}.\t{line}" for index, line in enumerate(requirements)]
-    return "9)\tPCB MATERIAL REQUIREMENTS:\n\n" + "\n".join(lines)
+    return _fabrication_note("PCB MATERIAL REQUIREMENTS:\n\n" + "\n".join(lines))
 
 
 def _as_bool(value) -> bool:
@@ -658,28 +660,47 @@ def _as_bool(value) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _silkscreen_note(enabled: bool, color: str) -> str:
+def _optional_bool(value) -> bool | None:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in {"", "none", "null", "unspecified"}:
+        return None
+    return _as_bool(value)
+
+
+def _silkscreen_note(enabled: bool | None, color: str) -> str:
+    if enabled is None:
+        return ""
     if not enabled:
-        return "NO SILKSCREEN LEGEND REQUIRED. DO NOT ADD MANUFACTURER MARKINGS UNLESS REQUIRED FOR TRACEABILITY."
-    return f"SILK SCREEN LEGEND TO BE APPLIED PER LAYER STACKUP USING {_cap(color)} NON-CONDUCTIVE EPOXY INK."
+        return _fabrication_note(
+            "NO SILKSCREEN LEGEND REQUIRED. DO NOT ADD MANUFACTURER MARKINGS UNLESS REQUIRED FOR TRACEABILITY."
+        )
+    return _fabrication_note(
+        f"SILKSCREEN LEGEND TO BE APPLIED PER LAYER STACKUP USING {_cap(color)} NON-CONDUCTIVE EPOXY INK."
+    )
 
 
-def _tented_vias_note(enabled: bool) -> str:
+def _tented_vias_note(enabled: bool | None) -> str:
+    if enabled is None:
+        return ""
     if enabled:
-        return "ALL VIAS ARE TENTED ON BOTH SIDES UNLESS SOLDERMASK OPENED IN GERBER."
-    return "VIAS ARE NOT REQUIRED TO BE TENTED UNLESS SPECIFIED IN GERBER."
+        return _fabrication_note("ALL VIAS ARE TENTED ON BOTH SIDES UNLESS SOLDER MASK IS OPENED IN THE GERBER DATA.")
+    return _fabrication_note("VIAS ARE NOT REQUIRED TO BE TENTED UNLESS SPECIFIED IN THE GERBER DATA.")
 
 
-def _rohs_note(enabled: bool) -> str:
+def _rohs_note(enabled: bool | None) -> str:
+    if enabled is None:
+        return ""
     if enabled:
-        return "VENDOR SHOULD FOLLOW ROHS COMPLIANT PROCESS AND Pb-FREE MANUFACTURING."
-    return "ROHS / Pb-FREE PROCESS IS NOT REQUIRED UNLESS SPECIFIED BY PURCHASE ORDER."
+        return _fabrication_note("VENDOR SHALL USE A RoHS-COMPLIANT, PB-FREE MANUFACTURING PROCESS.")
+    return _fabrication_note("RoHS / PB-FREE PROCESS IS NOT REQUIRED UNLESS SPECIFIED BY PURCHASE ORDER.")
 
 
-def _material_compliance_note(rohs_pb_free: bool, halogen_free: bool, company: str) -> str:
+def _material_compliance_note(rohs_pb_free: bool | None, halogen_free: bool | None, company: str) -> str:
     requirements = []
     if rohs_pb_free:
-        requirements.append("RoHS COMPLIANT")
+        requirements.append("RoHS-COMPLIANT")
     if halogen_free:
         requirements.append("HALOGEN FREE")
     if not requirements:
@@ -687,17 +708,26 @@ def _material_compliance_note(rohs_pb_free: bool, halogen_free: bool, company: s
     return f"EQUIVALENT MATERIAL SHALL BE {' AND '.join(requirements)} AND APPROVED BY {_cap(company)}."
 
 
-def _conformal_coating_note(enabled: bool) -> str:
+def _conformal_coating_note(enabled: bool | None) -> str:
+    if enabled is None:
+        return ""
     if enabled:
-        return "CONFORMAL COATING REQUIRED AFTER ASSEMBLY UNLESS OTHERWISE SPECIFIED."
-    return "CONFORMAL COATING IS NOT REQUIRED."
+        return _fabrication_note("CONFORMAL COATING IS REQUIRED AFTER ASSEMBLY UNLESS OTHERWISE SPECIFIED.")
+    return _fabrication_note("CONFORMAL COATING IS NOT REQUIRED.")
 
 
 def _extra_note_block(text: str) -> str:
     stripped = text.strip()
     if not stripped:
         return ""
-    return "ADDITIONAL FABRICATION NOTES:\n" + stripped
+    return _fabrication_note("ADDITIONAL FABRICATION NOTES:\n" + stripped)
+
+
+def _fabrication_note(text: str) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return ""
+    return "@NOTE@\t" + stripped
 
 def _fabrication_summary_text(
     values: dict[str, str],
@@ -760,7 +790,33 @@ def _render_note_template(template: str, values: dict[str, str]) -> str:
     rendered = template
     for key, value in values.items():
         rendered = rendered.replace("${" + key + "}", value)
+    rendered = _strip_empty_note_markers(rendered)
+    rendered = _number_fabrication_notes(rendered)
     return _wrap_fabrication_note_lines(_collapse_blank_note_lines(rendered))
+
+
+def _strip_empty_note_markers(text: str) -> str:
+    return "\n".join(
+        "" if line.strip() == "@NOTE@" else line
+        for line in text.splitlines()
+    )
+
+
+def _number_fabrication_notes(text: str) -> str:
+    number = 1
+    lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        indent = line[: len(line) - len(stripped)]
+        if stripped.startswith("@NOTE@"):
+            body = stripped.removeprefix("@NOTE@").lstrip()
+            if not body:
+                continue
+            lines.append(f"{indent}{number})\t{body}")
+            number += 1
+            continue
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def _collapse_blank_note_lines(text: str) -> str:
@@ -806,10 +862,19 @@ def _strip_impedance_controlled_note(text: str) -> str:
             continue
         if "REFER TO IMPEDANCE TABLE" in line:
             continue
-        if "CONFIRM SPACE WIDTHS AND SPACINGS" in line:
+        if "CONFIRM TRACE WIDTHS AND SPACINGS" in line:
             continue
         lines.append(line)
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _strip_note_condition_markers(text: str) -> str:
+    lines = [
+        line
+        for line in text.splitlines()
+        if not line.strip().startswith("#?")
+    ]
+    return _collapse_blank_note_lines("\n".join(lines))
 
 
 def _board_size_mm(pcb: str) -> tuple[float, float]:

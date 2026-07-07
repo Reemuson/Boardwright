@@ -2,32 +2,32 @@ FABRICATION NOTES (UNLESS OTHERWISE SPECIFIED)
 
 ${manufacturing_standard_note}
 
-2)	OUTLINE DEFINED IN SEPARATE GERBER FILE WITH
+@NOTE@	BOARD OUTLINE IS DEFINED IN THE SEPARATE GERBER FILE WITH
 	"Edge_Cuts.GBR" SUFFIX.
 
-	DIMENSIONS OF CIRCUMSIZED RECTANGLE SHOWN ON THIS
+	DIMENSIONS OF THE CIRCUMSCRIBED RECTANGLE SHOWN ON THIS
 	DRAWING FOR REFERENCE ONLY.
 
-3)	SEE SEPARATE DRILL FILES WITH ".DRL" SUFFIX
+@NOTE@	SEE SEPARATE DRILL FILES WITH ".DRL" SUFFIX
 	FOR HOLE LOCATIONS.
 
 	SELECTED HOLE LOCATIONS SHOWN ON THIS DRAWING
 	FOR REFERENCE ONLY.
 
-4)	SURFACE FINISH: ${pcb_finish_cap}
+@NOTE@	SURFACE FINISH: ${pcb_finish_cap}
 
-5)	SOLDERMASK ON BOTH SIDES OF THE BOARD SHALL
+@NOTE@	SOLDER MASK ON BOTH SIDES OF THE BOARD SHALL
 	BE LPI, COLOR ${solder_mask_color_text_cap}.
 
-6)	${silkscreen_note}
+${silkscreen_note}
 
-7)	${tented_vias_note}
+${tented_vias_note}
 
-8)	${rohs_note}
+${rohs_note}
 
 ${material_requirements_block}
 
-10)	DESIGN GEOMETRY MINIMUM FEATURE SIZES:
+@NOTE@	DESIGN GEOMETRY MINIMUM FEATURE SIZES:
 
 	BOARD SIZE				${bb_w_mm} x ${bb_h_mm} mm
 	BOARD THICKNESS		${thickness_mm} mm
@@ -42,13 +42,13 @@ ${material_requirements_block}
 #?stackup and impedance_controlled
 
 #?stackup and impedance_controlled
-11)	REFER TO IMPEDANCE TABLE FOR IMPEDANCE CONTROL REQUIREMENTS.
+@NOTE@	REFER TO IMPEDANCE TABLE FOR IMPEDANCE CONTROL REQUIREMENTS.
 #?stackup and impedance_controlled
 
 #?stackup and impedance_controlled
-12)	CONFIRM SPACE WIDTHS AND SPACINGS.
+@NOTE@	CONFIRM TRACE WIDTHS AND SPACINGS.
 #?stackup and impedance_controlled
 
-13)	${conformal_coating_note}
+${conformal_coating_note}
 
 ${fabrication_extra_notes}
