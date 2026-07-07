@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+import textwrap
 import uuid
 from collections import Counter
 from dataclasses import dataclass
@@ -572,18 +573,29 @@ def _fabrication_note_values(root: Path, config=None) -> dict[str, str]:
     rohs_pb_free = _as_bool(manufacturing.get("rohs_pb_free", True))
     halogen_free = _as_bool(manufacturing.get("halogen_free", True))
     silk_color = _stackup_layer_value(pcb, "F.SilkS", "color", "YELLOW")
+    manufacturing_standard = _manufacturing_text(manufacturing, "manufacturing_standard", "IPC-6012 Class 2")
+    core_material = _manufacturing_text(manufacturing, "core_material", "FR-4")
+    flammability_rating = _manufacturing_text(manufacturing, "flammability_rating", "UL94V-0")
+    tg_rating = _manufacturing_text(manufacturing, "tg_rating", "170 C")
     return {
         "pcb_finish_cap": _cap(_first_match(pcb, r'\(copper_finish\s+"([^"]+)"\)', "ENIG")),
         "solder_mask_color_text_cap": _cap(_stackup_layer_value(pcb, "F.Mask", "color", "GREEN")),
         "silk_screen_color_text_cap": _cap(silk_color),
-        "manufacturing_standard_cap": _cap(str(manufacturing.get("manufacturing_standard") or "IPC-6012 Class 2")),
-        "core_material_cap": _cap(str(manufacturing.get("core_material") or "FR-4")),
-        "flammability_rating_cap": _cap(str(manufacturing.get("flammability_rating") or "UL94V-0")),
-        "tg_rating_cap": _cap(str(manufacturing.get("tg_rating") or "170 C")),
+        "manufacturing_standard_note": _manufacturing_standard_note(manufacturing_standard),
+        "core_material_cap": _cap(core_material),
+        "flammability_rating_cap": _cap(flammability_rating),
+        "tg_rating_cap": _cap(tg_rating),
         "silkscreen_note": _silkscreen_note(silkscreen_enabled, silk_color),
         "tented_vias_note": _tented_vias_note(tented_vias),
         "rohs_note": _rohs_note(rohs_pb_free),
-        "material_compliance_note": _material_compliance_note(rohs_pb_free, halogen_free, company),
+        "material_requirements_block": _material_requirements_block(
+            core_material,
+            flammability_rating,
+            tg_rating,
+            rohs_pb_free,
+            halogen_free,
+            company,
+        ),
         "conformal_coating_note": _conformal_coating_note(conformal_coating),
         "fabrication_extra_notes": _extra_note_block(str(manufacturing.get("fabrication_notes") or "")),
         "COMPANY_cap": _cap(company),
@@ -600,6 +612,44 @@ def _fabrication_note_values(root: Path, config=None) -> dict[str, str]:
         "h2h_mm": _mm(0.254),
     }
 
+
+
+def _manufacturing_text(manufacturing: dict[str, object], key: str, default: str) -> str:
+    if key not in manufacturing:
+        return default
+    return str(manufacturing.get(key) or "").strip()
+
+
+def _manufacturing_standard_note(value: str) -> str:
+    if not value:
+        return ""
+    return f"FABRICATE PER {_cap(value)}."
+
+
+def _material_requirements_block(
+    core_material: str,
+    flammability_rating: str,
+    tg_rating: str,
+    rohs_pb_free: bool,
+    halogen_free: bool,
+    company: str,
+) -> str:
+    requirements: list[str] = []
+    if core_material:
+        requirements.append(f"CORE MATERIAL: {_cap(core_material)}.")
+    if flammability_rating:
+        requirements.append(
+            f"FLAMMABILITY RATING MUST MEET OR EXCEED {_cap(flammability_rating)} REQUIREMENTS."
+        )
+    if tg_rating:
+        requirements.append(f"Tg {_cap(tg_rating)} OR EQUIVALENT.")
+    compliance = _material_compliance_note(rohs_pb_free, halogen_free, company)
+    if compliance:
+        requirements.append(compliance)
+    if not requirements:
+        return ""
+    lines = [f"\t{chr(ord('A') + index)}.\t{line}" for index, line in enumerate(requirements)]
+    return "9)\tPCB MATERIAL REQUIREMENTS:\n\n" + "\n".join(lines)
 
 
 def _as_bool(value) -> bool:
@@ -633,7 +683,7 @@ def _material_compliance_note(rohs_pb_free: bool, halogen_free: bool, company: s
     if halogen_free:
         requirements.append("HALOGEN FREE")
     if not requirements:
-        requirements.append("APPROVED")
+        return ""
     return f"EQUIVALENT MATERIAL SHALL BE {' AND '.join(requirements)} AND APPROVED BY {_cap(company)}."
 
 
@@ -710,7 +760,42 @@ def _render_note_template(template: str, values: dict[str, str]) -> str:
     rendered = template
     for key, value in values.items():
         rendered = rendered.replace("${" + key + "}", value)
-    return rendered.replace("ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â", "ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â")
+    return _wrap_fabrication_note_lines(_collapse_blank_note_lines(rendered))
+
+
+def _collapse_blank_note_lines(text: str) -> str:
+    lines = [line.rstrip() for line in text.splitlines()]
+    collapsed: list[str] = []
+    blank_count = 0
+    for line in lines:
+        if line.strip():
+            collapsed.append(line)
+            blank_count = 0
+            continue
+        blank_count += 1
+        if blank_count <= 2:
+            collapsed.append("")
+    return "\n".join(collapsed).strip() + "\n"
+
+
+def _wrap_fabrication_note_lines(text: str, width: int = 80) -> str:
+    wrapped: list[str] = []
+    for line in text.splitlines():
+        if len(line.expandtabs(4)) <= width or not line.strip():
+            wrapped.append(line.rstrip())
+            continue
+        indent = re.match(r"^\s*", line).group(0)
+        wrapped.extend(
+            textwrap.wrap(
+                line.strip(),
+                width=width,
+                initial_indent=indent,
+                subsequent_indent=indent + "\t",
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+        )
+    return "\n".join(wrapped).rstrip() + "\n"
 
 
 def _strip_impedance_controlled_note(text: str) -> str:

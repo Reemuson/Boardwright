@@ -250,6 +250,11 @@ manufacturing:
             self.assertIn("CONFORMAL COATING IS NOT REQUIRED", fabrication_notes)
             self.assertIn("CORE MATERIAL: FR-4", fabrication_notes)
             self.assertIn("UL94V-0 REQUIREMENTS", fabrication_notes)
+            self.assertIn("\tBOARD SIZE\t\t\t\t", fabrication_notes)
+            self.assertIn("\tMIN. HOLE (PTH)\t\t\t", fabrication_notes)
+            self.assertIn("\tMIN. HOLE (NPTH)\t\t", fabrication_notes)
+            self.assertIn("\tANNULAR RING\t\t\t", fabrication_notes)
+            self.assertIn("\tHOLE TO HOLE\t\t\t", fabrication_notes)
             self.assertIn("FABRICATION SNAPSHOT", fabrication_summary)
             self.assertIn("COMPONENT SNAPSHOT", component_summary)
             self.assertTrue(
@@ -295,6 +300,54 @@ manufacturing:
             self.assertIn("actions/workflows/main-outputs.yaml", badges)
         finally:
             shutil.rmtree(root, ignore_errors=True)
+
+    def test_fabrication_notes_omit_blank_manufacturing_requirements_and_wrap_notes(self) -> None:
+        template = Path("boardwright_resources/kibot/resources/templates/fabrication_notes.txt").read_text(
+            encoding="utf-8"
+        )
+        long_note = (
+            "This fabrication instruction is deliberately long so it should wrap at a "
+            "word boundary instead of staying as one hard to read line in the generated notes."
+        )
+        values = {
+            "manufacturing_standard_note": "",
+            "pcb_finish_cap": "ENIG",
+            "solder_mask_color_text_cap": "GREEN",
+            "silkscreen_note": "NO SILKSCREEN LEGEND REQUIRED.",
+            "tented_vias_note": "ALL VIAS ARE TENTED ON BOTH SIDES UNLESS SOLDERMASK OPENED IN GERBER.",
+            "rohs_note": "VENDOR SHOULD FOLLOW ROHS COMPLIANT PROCESS AND Pb-FREE MANUFACTURING.",
+            "material_requirements_block": kicad_tables._material_requirements_block(
+                "",
+                "",
+                "",
+                False,
+                False,
+                "Demo Co",
+            ),
+            "bb_w_mm": "40.000",
+            "bb_h_mm": "16.000",
+            "thickness_mm": "1.600",
+            "track_mm": "0.200",
+            "clearance_mm": "0.200",
+            "drill_pth_real_mm": "0.600",
+            "drill_npth_real_mm": "0.000",
+            "oar_mm": "0.150",
+            "c2h_mm": "0.254",
+            "c2e_mm": "0.250",
+            "h2h_mm": "0.254",
+            "conformal_coating_note": "CONFORMAL COATING IS NOT REQUIRED.",
+            "fabrication_extra_notes": kicad_tables._extra_note_block(long_note),
+        }
+
+        notes = kicad_tables._render_note_template(template, values)
+
+        self.assertNotIn("FABRICATE PER .", notes)
+        self.assertNotIn("PCB MATERIAL REQUIREMENTS", notes)
+        self.assertNotIn("CORE MATERIAL:", notes)
+        self.assertNotIn("FLAMMABILITY RATING", notes)
+        self.assertNotIn("Tg", notes)
+        self.assertNotIn(long_note, notes)
+        self.assertTrue(all(len(line.expandtabs(4)) <= 88 for line in notes.splitlines()))
 
     def test_prepare_pcb_tables_writes_impedance_table_when_configured(self) -> None:
         root = Path("tests/.tmp_kicad_tables_impedance")
