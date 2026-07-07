@@ -57,6 +57,10 @@ jobs:
           cp boardwright_resources/kibot/resources/fonts/*.ttf ~/.local/share/fonts/
           fc-cache -f ~/.local/share/fonts || true
 
+      - name: Generate revision table variables
+        if: env.KIBOT_VARIANT != 'DRAFT'
+        shell: bash
+        run: python -m boardwright revision-history
       - name: Load release metadata
         shell: bash
         run: |

@@ -30,6 +30,14 @@ on:
           - draft
           - prerelease
           - release
+      drawing_revision:
+        description: Controlled drawing revision for the revision table
+        required: true
+        type: string
+      revision_description:
+        description: Revision table description, 60 characters or fewer
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -85,9 +93,11 @@ jobs:
           version="${{ inputs.version }}"
           variant="${{ inputs.variant }}"
           release_kind="${{ inputs.release_kind }}"
+          drawing_revision="${{ inputs.drawing_revision }}"
+          revision_description="${{ inputs.revision_description }}"
           release_include_source_archive="$(python -c "import sys; sys.path.insert(0, 'src'); from boardwright.config import load_config; print(str(load_config().release_include_source_archive).lower())")"
 
-          boardwright release "$version" --prepare --allow-dirty
+          boardwright release "$version" --prepare --allow-dirty --drawing-revision "$drawing_revision" --revision-description "$revision_description"
 
           cat > .boardwright/release.env <<EOF
           RELEASE_VERSION=$version
@@ -102,6 +112,8 @@ jobs:
             echo "- Version: \`${version}\`"
             echo "- Variant: \`${variant}\`"
             echo "- Release kind: \`${release_kind}\`"
+            echo "- Drawing revision: \`${drawing_revision}\`"
+            echo "- Revision description: \`${revision_description}\`"
             echo "- Target branch: \`main\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -147,6 +159,10 @@ jobs:
           cp boardwright_resources/kibot/resources/fonts/*.ttf ~/.local/share/fonts/
           fc-cache -f ~/.local/share/fonts || true
 
+      - name: Generate revision table variables
+        if: env.KIBOT_VARIANT != 'DRAFT'
+        shell: bash
+        run: python -m boardwright revision-history
       - name: Prepare Boardwright PDF table placeholders
         if: env.KIBOT_VARIANT != 'DRAFT'
         shell: bash
@@ -215,7 +231,7 @@ jobs:
           variant="${{ inputs.variant }}"
 
           git rm -r --ignore-unmatch HTML KiRI Manufacturing Reports Schematic Testing
-          git add CHANGELOG.md
+          git add CHANGELOG.md .boardwright/project.yaml .boardwright/document_revisions.yaml
           git add -f .boardwright/revision_history_variables.env .boardwright/release.env
           git add README.md assets/renders/*.png || true
 

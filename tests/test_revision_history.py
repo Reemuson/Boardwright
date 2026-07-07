@@ -1,16 +1,23 @@
 # SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
 # Copyright (c) Ryan Hicks
 
+import json
 import shutil
 import unittest
 from pathlib import Path
 
 from boardwright.config import BoardwrightConfig
-from boardwright.revision_history import build_revision_slots, build_revision_slots_from_text, write_revision_variables
+from boardwright.revision_history import (
+    build_revision_slots,
+    build_revision_slots_from_text,
+    write_document_revision_rows,
+    write_full_revision_history,
+    write_revision_variables,
+)
 
 
 class RevisionHistoryTests(unittest.TestCase):
-    def test_builds_fixed_slots(self) -> None:
+    def test_builds_changelog_slots_for_legacy_parser_tests(self) -> None:
         text = (
             "# Changelog\n\n"
             "## [Unreleased]\n\n### Added\n\n- Current work\n\n"
@@ -24,7 +31,7 @@ class RevisionHistoryTests(unittest.TestCase):
         self.assertEqual("0.1.0", slots[1].version)
         self.assertEqual("", slots[2].version)
 
-    def test_previous_releases_shift_down(self) -> None:
+    def test_previous_changelog_releases_shift_down(self) -> None:
         text = (
             "# Changelog\n\n"
             "## [Unreleased]\n\n"
@@ -46,30 +53,51 @@ class RevisionHistoryTests(unittest.TestCase):
         self.assertEqual("0.3.0 - 2026-04-25", slots[0].title)
         self.assertEqual("Changed:\n  - Second", slots[1].body)
 
-    def test_visible_variables_are_title_and_body_only(self) -> None:
-        text = "# Changelog\n\n## [0.1.0] - 2026-04-25\n\n### Added\n\n- First\n"
-
-        slots = build_revision_slots_from_text(text, slot_count=1)
-
-        self.assertEqual("0.1.0 - 2026-04-25", slots[0].title)
-        self.assertEqual("Added:\n  - First", slots[0].body)
-
-    def test_omits_empty_sections(self) -> None:
-        text = (
-            "# Changelog\n\n"
-            "## [Unreleased]\n\n"
-            "### Added\n\n"
-            "### Fixed\n\n"
-            "- Actual fix\n"
-        )
-
-        slots = build_revision_slots_from_text(text, slot_count=1)
-
-        self.assertEqual("Fixed:\n  - Actual fix", slots[0].body)
-
-
-    def test_document_revision_rows_generate_legacy_and_structured_variables(self) -> None:
+    def test_document_rows_generate_latest_six_table_variables_and_note(self) -> None:
         root = Path("tests/.tmp_revision_history_document_rows")
+        shutil.rmtree(root, ignore_errors=True)
+        try:
+            (root / ".boardwright").mkdir(parents=True)
+            rows = []
+            for index, revision in enumerate("HGFEDCBA", start=1):
+                rows.append(
+                    {
+                        "revision": revision,
+                        "description": f"Revision {revision}",
+                        "date": f"2026-08-{index:02d}",
+                        "drawn_by": "RH",
+                    }
+                )
+            config = BoardwrightConfig(
+                root=root,
+                project={"project": {}},
+                branches={"branches": {}},
+                legal={"legal": {}},
+                revision_history={"revision_history": {}},
+                document_revisions={"document_revisions": {"schematic": {"rows": rows}}},
+            )
+
+            slots = build_revision_slots(config)
+            output = write_revision_variables(config).read_text(encoding="utf-8")
+            full = write_full_revision_history(config).read_text(encoding="utf-8").replace("\r\n", "\n")
+
+            self.assertEqual("C", slots[0].revision)
+            self.assertEqual("H", slots[5].revision)
+            self.assertIn('REVTABLE_1_REV="C"', output)
+            self.assertIn('REVTABLE_1_DATE="2026-08-06"', output)
+            self.assertIn('REVTABLE_1_DESC="Revision C"', output)
+            self.assertIn('REVTABLE_1_DRAWN="RH"', output)
+            self.assertNotIn('REVTABLE_1_CHECKED', output)
+            self.assertIn('REVTABLE_6_REV="H"', output)
+            self.assertIn('REVTABLE_NOTE="Latest 6 revisions shown. See full revision history."', output)
+            self.assertIn("REV,DATE,DESCRIPTION,DRAWN\n", full)
+            self.assertIn("B,2026-08-07,Revision B,RH\n", full)
+            self.assertIn("A,2026-08-08,Revision A,RH\n", full)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_unused_title_block_rows_emit_blank_values(self) -> None:
+        root = Path("tests/.tmp_revision_history_blank_rows")
         shutil.rmtree(root, ignore_errors=True)
         try:
             (root / ".boardwright").mkdir(parents=True)
@@ -78,44 +106,154 @@ class RevisionHistoryTests(unittest.TestCase):
                 project={"project": {}},
                 branches={"branches": {}},
                 legal={"legal": {}},
-                revision_history={"revision_history": {"slots": 2}},
+                revision_history={"revision_history": {}},
                 document_revisions={
                     "document_revisions": {
-                        "rows": [
-                            {
-                                "revision": "B",
-                                "description": "Released to production",
-                                "date": "2026-07-05",
-                                "drawn_by": "RH",
-                                "drawn_date": "2026-07-01",
-                                "checked_by": "AB",
-                                "checked_date": "2026-07-03",
-                                "approved_by": "CD",
-                                "approved_date": "2026-07-05",
-                            }
-                        ]
+                        "fabrication": {
+                            "rows": [
+                                {
+                                    "revision": "A",
+                                    "date": "2026-07-05",
+                                    "description": "Initial release",
+                                }
+                            ]
+                        }
                     }
                 },
             )
 
-            slots = build_revision_slots(config)
-            output = write_revision_variables(config).read_text(encoding="utf-8")
+            output = write_revision_variables(config, "fabrication").read_text(encoding="utf-8")
 
-            self.assertEqual("B", slots[0].version)
-            self.assertEqual("B - 2026-07-05", slots[0].title)
-            self.assertEqual("Released to production", slots[0].body)
-            self.assertIn('REVHIST_1_TITLE="B - 2026-07-05"', output)
-            self.assertIn('REVHIST_1_BODY="Released to production"', output)
-            self.assertIn('REVHIST_1_REVISION="B"', output)
-            self.assertIn('REVHIST_1_DESCRIPTION="Released to production"', output)
-            self.assertIn('REVHIST_1_DRAWN_BY="RH"', output)
-            self.assertIn('REVHIST_2_TITLE=""', output)
-            self.assertIn('REVHIST_2_APPROVED_DATE=""', output)
+            self.assertIn('REVTABLE_1_REV="A"', output)
+            self.assertIn('REVTABLE_2_REV=""', output)
+            self.assertNotIn('REVTABLE_6_CHECKED', output)
+            self.assertIn('REVTABLE_NOTE=""', output)
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
-    def test_missing_document_revision_rows_preserves_changelog_output(self) -> None:
-        root = Path("tests/.tmp_revision_history_changelog_fallback")
+
+    def test_write_document_revision_rows_persists_newest_first_yaml(self) -> None:
+        root = Path("tests/.tmp_revision_history_editor_rows")
+        shutil.rmtree(root, ignore_errors=True)
+        try:
+            (root / ".boardwright").mkdir(parents=True)
+            config = BoardwrightConfig(
+                root=root,
+                project={"project": {}},
+                branches={"branches": {}},
+                legal={"legal": {}},
+                revision_history={"revision_history": {}},
+                document_revisions={},
+            )
+
+            write_document_revision_rows(
+                config,
+                [
+                    {
+                        "revision": "B",
+                        "date": "2026-08-01",
+                        "description": "Updated connector callouts",
+                        "drawn_by": "RH",
+                    },
+                    {
+                        "revision": "A",
+                        "date": "2026-07-05",
+                        "description": "Initial release",
+                        "drawn_by": "RH",
+                    },
+                ],
+            )
+            loaded = BoardwrightConfig(
+                root=root,
+                project={"project": {}},
+                branches={"branches": {}},
+                legal={"legal": {}},
+                revision_history={"revision_history": {}},
+                document_revisions={
+                    "document_revisions": {
+                        "schematic": {
+                            "rows": [
+                                {"revision": "B", "date": "2026-08-01", "description": "Updated connector callouts", "drawn_by": "RH"},
+                                {"revision": "A", "date": "2026-07-05", "description": "Initial release", "drawn_by": "RH"},
+                            ]
+                        }
+                    }
+                },
+            )
+            output = write_revision_variables(loaded).read_text(encoding="utf-8")
+            saved = (root / ".boardwright" / "document_revisions.yaml").read_text(encoding="utf-8")
+
+            self.assertIn("revision: B", saved)
+            self.assertIn("description: Updated connector callouts", saved)
+            self.assertIn('REVTABLE_1_REV="A"', output)
+            self.assertIn('REVTABLE_2_REV="B"', output)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+
+    def test_write_revision_variables_syncs_kicad_project_text_variables(self) -> None:
+        root = Path("tests/.tmp_revision_history_kicad_project")
+        shutil.rmtree(root, ignore_errors=True)
+        try:
+            (root / ".boardwright").mkdir(parents=True)
+            (root / "demo.kicad_pro").write_text(
+                json.dumps({"text_variables": {"EXISTING": "keep"}}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            config = BoardwrightConfig(
+                root=root,
+                project={
+                    "project": {
+                        "name": "Demo Project",
+                        "pcba_name": "Demo PCBA",
+                        "pcb_name": "Demo PCB",
+                        "company": "Demo Co",
+                        "designer": "RH",
+                        "board_revision": "B",
+                    },
+                    "documents": {
+                        "schematic": {
+                            "title": "Schematic",
+                            "type": "SCHEMATIC",
+                            "number_source": "pcba_name",
+                            "revision": "C",
+                        }
+                    },
+                },
+                branches={"branches": {}},
+                legal={"legal": {}},
+                revision_history={"revision_history": {}},
+                document_revisions={
+                    "document_revisions": {
+                        "schematic": {
+                            "rows": [
+                                {
+                                    "revision": "C",
+                                    "date": "2026-07-07",
+                                    "description": "Updated title block",
+                                    "drawn_by": "RH",
+                                }
+                            ]
+                        }
+                    }
+                },
+            )
+
+            write_revision_variables(config)
+
+            variables = json.loads((root / "demo.kicad_pro").read_text(encoding="utf-8"))["text_variables"]
+            self.assertEqual("keep", variables["EXISTING"])
+            self.assertEqual("Demo Project", variables["PROJECT_NUMBER"])
+            self.assertEqual("Demo PCBA", variables["PCBA_NAME"])
+            self.assertEqual("Demo PCBA", variables["DRAWING_NUMBER"])
+            self.assertEqual("C", variables["DRAWING_REVISION"])
+            self.assertEqual("C", variables["REVTABLE_1_REV"])
+            self.assertEqual("Updated title block", variables["REVTABLE_1_DESC"])
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_empty_yaml_history_does_not_fall_back_to_changelog_exports(self) -> None:
+        root = Path("tests/.tmp_revision_history_no_changelog_fallback")
         shutil.rmtree(root, ignore_errors=True)
         try:
             (root / ".boardwright").mkdir(parents=True)
@@ -134,9 +272,9 @@ class RevisionHistoryTests(unittest.TestCase):
 
             output = write_revision_variables(config).read_text(encoding="utf-8")
 
-            self.assertIn('REVHIST_1_TITLE="0.1.0 - 2026-04-25"', output)
-            self.assertIn('REVHIST_1_REVISION="0.1.0"', output)
-            self.assertIn('REVHIST_1_DESCRIPTION="Added:\\n  - First"', output)
+            self.assertIn('REVTABLE_1_REV=""', output)
+            self.assertNotIn("REVHIST_", output)
+            self.assertNotIn("0.1.0", output)
         finally:
             shutil.rmtree(root, ignore_errors=True)
 

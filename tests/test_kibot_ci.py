@@ -238,6 +238,8 @@ class KiBotCiTests(unittest.TestCase):
         self.assertNotIn("PCBA_NUMBER: @PCBA_NUMBER@", main)
         self.assertNotIn("PCB_NUMBER: @PCB_NUMBER@", main)
         self.assertIn("DRAWING_NUMBER: @DRAWING_NUMBER@", main)
+        self.assertIn("DRAWING_NUMBER: @PCB_NAME@", main)
+        self.assertIn("DRAWING_NUMBER: @PCBA_NAME@", main)
         self.assertIn("DRAWING_REVISION: @DRAWING_REVISION@", main)
         self.assertNotIn("DOCUMENT_REVISION: @DOCUMENT_REVISION@", main)
         self.assertIn("BOARD_REVISION: A", main)

@@ -464,6 +464,7 @@ import:
       COMMENT: Fabrication document in PDF format
       DIR: @FABRICATION_DIR@
       COLOR_THEME: @COLOR_THEME@
+      DRAWING_NUMBER: @PCB_NAME@
       SHEET_WKS: @SHEET_WKS@
       SCALING: @FAB_SCALING@
       PTH_NPTH: '@GROUP_PTH_NPTH@'
@@ -483,6 +484,7 @@ import:
       COMMENT: Assembly document in PDF format
       DIR: @ASSEMBLY_DIR@
       COLOR_THEME: @COLOR_THEME@
+      DRAWING_NUMBER: @PCBA_NAME@
       SHEET_WKS: @SHEET_WKS@
       SCALING: @ASSEMBLY_SCALING@
       FAB_EXCLUDE_FILTER: @FILT_TP_EXCLUDE@

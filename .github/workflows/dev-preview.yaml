@@ -112,6 +112,10 @@ jobs:
           cp boardwright_resources/kibot/resources/fonts/*.ttf ~/.local/share/fonts/
           fc-cache -f ~/.local/share/fonts || true
 
+      - name: Generate revision table variables
+        if: env.KIBOT_VARIANT != 'DRAFT'
+        shell: bash
+        run: python -m boardwright revision-history
       - name: Generate draft README
         if: env.KIBOT_VARIANT == 'DRAFT'
         uses: INTI-CMNB/KiBot@v2_dk9

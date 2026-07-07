@@ -16,6 +16,7 @@ from pathlib import Path
 from .config import _worksheet_from_kicad_project, load_config
 from .errors import BoardwrightError
 from .git_ops import remote_url
+from .kicad_variables import sync_kicad_project_text_variables
 
 
 COMPONENT_COUNT_TEXT_BOX_UUID = "511273fd-c939-4feb-bf05-ae1b43c3644e"
@@ -88,6 +89,8 @@ def _sync_kibot_project_metadata(root: Path, config=None) -> None:
         "SHEET_WKS": _worksheet_definition(_pcb_worksheet(config.root, config.worksheet)),
         "GIT_URL": git_url,
     }
+    sync_kicad_project_text_variables(config, "schematic", replacements)
+
     path = root / KIBOT_MAIN_YAML
     if not path.is_file():
         return
