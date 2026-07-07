@@ -197,7 +197,7 @@ class RevisionHistoryTests(unittest.TestCase):
         try:
             (root / ".boardwright").mkdir(parents=True)
             (root / "demo.kicad_pro").write_text(
-                json.dumps({"text_variables": {"EXISTING": "keep"}}, indent=2) + "\n",
+                json.dumps({"text_variables": {"EXISTING": "keep", "PROJECT_NAME": "stale", "PROJECT_ID": "stale"}}, indent=2) + "\n",
                 encoding="utf-8",
             )
             config = BoardwrightConfig(
@@ -243,6 +243,8 @@ class RevisionHistoryTests(unittest.TestCase):
 
             variables = json.loads((root / "demo.kicad_pro").read_text(encoding="utf-8"))["text_variables"]
             self.assertEqual("keep", variables["EXISTING"])
+            self.assertNotIn("PROJECT_NAME", variables)
+            self.assertNotIn("PROJECT_ID", variables)
             self.assertEqual("Demo Project", variables["PROJECT_NUMBER"])
             self.assertEqual("Demo PCBA", variables["PCBA_NAME"])
             self.assertEqual("Demo PCBA", variables["DRAWING_NUMBER"])

@@ -1,4 +1,4 @@
-﻿# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
 # Copyright (c) Ryan Hicks
 
 from __future__ import annotations
@@ -9,6 +9,18 @@ from typing import Any
 
 from .config import BoardwrightConfig
 from .git_ops import remote_url
+
+
+DEPRECATED_KICAD_TEXT_VARIABLES = {
+    "BOARD_NAME",
+    "DOCUMENT_REVISION",
+    "DOCUMENT_REVISION_SCHEME",
+    "PCB_NUMBER",
+    "PCBA_NUMBER",
+    "PROJECT_ID",
+    "PROJECT_NAME",
+    "REVISION",
+}
 
 
 def sync_kicad_project_text_variables(
@@ -35,6 +47,10 @@ def sync_kicad_project_text_variables(
             text_variables = {}
             data["text_variables"] = text_variables
         changed = False
+        for key in DEPRECATED_KICAD_TEXT_VARIABLES:
+            if key in text_variables:
+                del text_variables[key]
+                changed = True
         for key, value in variables.items():
             if text_variables.get(key) != value:
                 text_variables[key] = value
