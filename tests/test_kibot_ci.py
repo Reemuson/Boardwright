@@ -130,6 +130,8 @@ class KiBotCiTests(unittest.TestCase):
         self.assertIn('%f-fabrication_notes%v.txt', preflight)
         self.assertNotIn("REPORT_TEMPLATE_DIR@/fabrication_notes.txt", preflight)
         self.assertIn("assembly_notes.txt", preflight)
+        main = Path("boardwright_resources/kibot/yaml/kibot_main.yaml").read_text(encoding="utf-8")
+        self.assertNotIn("      - notes\n\n  - name: table_sources", main)
 
     def test_table_fill_preflight_is_not_global(self) -> None:
         main = Path("boardwright_resources/kibot/yaml/kibot_main.yaml").read_text(

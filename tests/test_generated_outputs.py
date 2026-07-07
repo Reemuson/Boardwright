@@ -58,6 +58,20 @@ class GeneratedOutputCleanupTests(unittest.TestCase):
         self.assertTrue(bom.exists())
         self.assertEqual(2, len(cleanup.removed_empty_tables))
 
+    def test_removes_combined_sources_intermediate_directory(self) -> None:
+        root = self.make_root()
+        combined_sources = root / "Manufacturing" / "CombinedSources"
+        combined_sources.mkdir(parents=True)
+        (combined_sources / "board-combined-003-l1-copper.pdf").write_bytes(b"%PDF")
+        combined_pdf = root / "Manufacturing" / "boardwright-combined.pdf"
+        combined_pdf.write_bytes(b"%PDF")
+
+        cleanup = clean_generated_outputs(root)
+
+        self.assertFalse(combined_sources.exists())
+        self.assertTrue(combined_pdf.exists())
+        self.assertEqual((combined_sources.resolve(),), cleanup.removed_combined_sources)
+
     def test_format_cleanup_summary_lists_removed_files(self) -> None:
         root = self.make_root()
         schematic = root / "Schematic"

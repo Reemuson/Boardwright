@@ -125,7 +125,6 @@ groups:
   - name: tables
     outputs:
       - table_sources
-      - notes
 
   - name: table_sources
     outputs:
