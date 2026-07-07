@@ -67,6 +67,11 @@ class WorkflowTests(unittest.TestCase):
             self.assertIn("env.KIBOT_VARIANT != 'DRAFT'", text)
             self.assertIn("Prune empty conditional PDF pages", text)
             self.assertIn("prune_pdf_pages.py", text)
+            self.assertIn("Normalize project ownership before combined PDF prep", text)
+            self.assertLess(
+                text.index("Normalize project ownership before combined PDF prep"),
+                text.index("Prepare native combined PDF contents"),
+            )
 
 
     def test_workflows_regenerate_document_pdfs_with_document_metadata(self) -> None:

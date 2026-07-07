@@ -361,7 +361,12 @@ def _patch_schematic_project_worksheet(root: Path, worksheet: Path) -> None:
         if not isinstance(schematic, dict):
             continue
         schematic["page_layout_descr_file"] = worksheet_ref
-        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+        try:
+            path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+        except PermissionError as exc:
+            raise BoardwrightError(
+                f"Cannot update schematic worksheet in {path.name}; normalize project file ownership before combined PDF prep."
+            ) from exc
         return
 
 

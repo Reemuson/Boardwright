@@ -172,6 +172,11 @@ jobs:
         shell: bash
         run: python boardwright_resources/kibot/resources/scripts/prune_pdf_pages.py .
 
+      - name: Normalize project ownership before combined PDF prep
+        if: env.KIBOT_VARIANT != 'DRAFT'
+        shell: bash
+        run: sudo chown -R "$USER:$USER" . 2>/dev/null || true
+
       - name: Prepare native combined PDF contents
         if: env.KIBOT_VARIANT != 'DRAFT'
         shell: bash
