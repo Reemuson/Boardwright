@@ -189,7 +189,7 @@ jobs:
         if: env.KIBOT_VARIANT != 'DRAFT'
         uses: INTI-CMNB/KiBot@v2_dk9
         with:
-          additional_args: --log kibot_main_fabrication_document.log pdf_fabrication zip_compress_fab
+          additional_args: --skip-pre draw_fancy_stackup,erc,drc --log kibot_main_fabrication_document.log pdf_fabrication zip_compress_fab
           variant: ${{ env.KIBOT_VARIANT }}
           config: boardwright_resources/kibot/yaml/kibot_document_fabrication.generated.yaml
           cache3D: YES
@@ -198,7 +198,7 @@ jobs:
         if: env.KIBOT_VARIANT != 'DRAFT'
         uses: INTI-CMNB/KiBot@v2_dk9
         with:
-          additional_args: --log kibot_main_assembly_document.log pdf_assembly
+          additional_args: --skip-pre draw_fancy_stackup,erc,drc --log kibot_main_assembly_document.log pdf_assembly
           variant: ${{ env.KIBOT_VARIANT }}
           config: boardwright_resources/kibot/yaml/kibot_document_assembly.generated.yaml
           cache3D: YES

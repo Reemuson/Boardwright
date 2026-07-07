@@ -75,6 +75,7 @@ class WorkflowTests(unittest.TestCase):
 
             self.assertIn("Regenerate fabrication PDF metadata", text)
             self.assertIn("kibot_document_fabrication.generated.yaml", text)
+            self.assertIn("--skip-pre draw_fancy_stackup,erc,drc --log", text)
             self.assertIn("pdf_fabrication zip_compress_fab", text)
             self.assertIn("Regenerate assembly PDF metadata", text)
             self.assertIn("kibot_document_assembly.generated.yaml", text)

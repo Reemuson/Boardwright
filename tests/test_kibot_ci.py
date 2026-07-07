@@ -127,7 +127,8 @@ class KiBotCiTests(unittest.TestCase):
         self.assertIn(" x ", fabrication)
         self.assertNotIn("\u00c3", fabrication)
         self.assertIn("REPORT_TEMPLATE_DIR", preflight)
-        self.assertIn("fabrication_notes.txt", preflight)
+        self.assertIn('%f-fabrication_notes%v.txt', preflight)
+        self.assertNotIn("REPORT_TEMPLATE_DIR@/fabrication_notes.txt", preflight)
         self.assertIn("assembly_notes.txt", preflight)
 
     def test_table_fill_preflight_is_not_global(self) -> None:
