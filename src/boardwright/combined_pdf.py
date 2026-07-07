@@ -252,7 +252,7 @@ def _write_native_pcb_outputs(root: Path, manifest: CombinedSheetManifest) -> tu
             source_worksheets[sheet.source_kind],
             worksheet,
             f"SHEET {sheet.number} OF {len(manifest.sheets)}",
-            _document_text_variables(root, sheet.source_kind, definitions),
+            _page_text_variables(root, sheet, definitions),
         )
         worksheets.append(worksheet)
         output_names.append(name)
@@ -384,6 +384,13 @@ def _write_numbered_worksheet(
     for key, value in (text_variables or {}).items():
         text = text.replace("${" + key + "}", value)
     target.write_text(text, encoding="utf-8", newline="\n")
+
+
+def _page_text_variables(root: Path, sheet: CombinedSheet, definitions: dict[str, str]) -> dict[str, str]:
+    values = dict(_document_text_variables(root, sheet.source_kind, definitions))
+    if sheet.title:
+        values["DRAWING_TITLE"] = sheet.title.upper()
+    return values
 
 
 def _main_definitions(root: Path) -> dict[str, str]:
