@@ -454,12 +454,12 @@ def _write_manufacturing_notes(root: Path, config=None) -> None:
     project_stem = _project_stem(root)
 
     fabrication = _resource_text(root, FABRICATION_NOTES_TEMPLATE)
-    fabrication = _render_note_template(fabrication, values)
     impedance_rows = _impedance_entries(config)
     if not impedance_rows:
         fabrication = _strip_impedance_controlled_note(fabrication)
     else:
         fabrication = _strip_note_condition_markers(fabrication)
+    fabrication = _render_note_template(fabrication, values)
     fabrication_dir = root / "Manufacturing" / "Fabrication"
     fabrication_dir.mkdir(parents=True, exist_ok=True)
     (fabrication_dir / f"{project_stem}-fabrication_notes.txt").write_text(
@@ -720,7 +720,11 @@ def _extra_note_block(text: str) -> str:
     stripped = text.strip()
     if not stripped:
         return ""
-    return _fabrication_note("ADDITIONAL FABRICATION NOTES:\n" + stripped)
+    return _fabrication_note("ADDITIONAL FABRICATION NOTES:\n" + _indent_note_body(stripped))
+
+
+def _indent_note_body(text: str) -> str:
+    return "\n".join("\t" + line.strip() if line.strip() else "" for line in text.splitlines())
 
 
 def _fabrication_note(text: str) -> str:
@@ -840,18 +844,48 @@ def _wrap_fabrication_note_lines(text: str, width: int = 80) -> str:
         if len(line.expandtabs(4)) <= width or not line.strip():
             wrapped.append(line.rstrip())
             continue
+        numbered = re.match(r"^(\d+\)\t)(.*)$", line)
+        if numbered:
+            prefix, body = numbered.groups()
+            wrapped.extend(_wrap_numbered_note_line(prefix, body, width))
+            continue
         indent = re.match(r"^\s*", line).group(0)
         wrapped.extend(
             textwrap.wrap(
                 line.strip(),
                 width=width,
                 initial_indent=indent,
-                subsequent_indent=indent + "\t",
+                subsequent_indent=indent,
                 break_long_words=False,
                 break_on_hyphens=False,
             )
         )
     return "\n".join(wrapped).rstrip() + "\n"
+
+
+def _wrap_numbered_note_line(prefix: str, body: str, width: int) -> list[str]:
+    body_width = max(20, width - len(prefix.expandtabs(4)))
+    parts = textwrap.wrap(
+        body.strip(),
+        width=body_width,
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+    if not parts:
+        return [prefix.rstrip()]
+    lines = [prefix + parts[0]]
+    continuation_width = max(20, width - len("\t".expandtabs(4)))
+    for part in parts[1:]:
+        if len(part.expandtabs(4)) <= continuation_width:
+            lines.append("\t" + part)
+        else:
+            lines.extend("\t" + chunk for chunk in textwrap.wrap(
+                part,
+                width=continuation_width,
+                break_long_words=False,
+                break_on_hyphens=False,
+            ))
+    return lines
 
 
 def _strip_impedance_controlled_note(text: str) -> str:

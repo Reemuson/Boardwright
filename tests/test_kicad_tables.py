@@ -247,6 +247,13 @@ manufacturing:
             self.assertIn("NO IMPEDANCE", pcb)
             self.assertNotIn("REFER TO IMPEDANCE TABLE", fabrication_notes)
             self.assertNotIn("#?stackup", fabrication_notes)
+            note_numbers = [
+                int(match.group(1))
+                for match in re.finditer(r"^(\d+)\)", fabrication_notes, re.MULTILINE)
+            ]
+            self.assertEqual(list(range(1, len(note_numbers) + 1)), note_numbers)
+            self.assertIn("\n1)", fabrication_notes)
+            self.assertNotRegex(fabrication_notes, r"(?m)^\d+\) {2,}")
             self.assertIn("FABRICATE PER IPC-6012 CLASS 2", fabrication_notes)
             self.assertIn("NO SILKSCREEN LEGEND REQUIRED", fabrication_notes)
             self.assertIn("CONFORMAL COATING IS NOT REQUIRED", fabrication_notes)
@@ -346,6 +353,7 @@ manufacturing:
 
         self.assertEqual(list(range(1, len(numbers) + 1)), numbers)
         self.assertNotIn("@NOTE@", notes)
+        self.assertNotRegex(notes, r"(?m)^\d+\) {2,}")
         self.assertNotIn("FABRICATE PER .", notes)
         self.assertNotIn("PCB MATERIAL REQUIREMENTS", notes)
         self.assertNotIn("CORE MATERIAL:", notes)
