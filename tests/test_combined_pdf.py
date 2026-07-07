@@ -65,35 +65,21 @@ class CombinedPdfTests(unittest.TestCase):
             self.config(
                 root,
                 combined_review_pdf=True,
-                combined_pdf_name="Manufacturing/combined.pdf",
+                combined_pdf_name="Manufacturing/ignored.pdf",
+                combined_pdf_toc=False,
+                combined_pdf_page_numbers=False,
             )
         )
 
         self.assertTrue(plan.enabled)
         self.assertTrue(plan.toc_enabled)
         self.assertTrue(plan.page_numbers_enabled)
-        self.assertEqual(root.resolve() / "Manufacturing" / "combined.pdf", plan.output_path)
+        self.assertEqual(root.resolve() / "Manufacturing" / "boardwright-combined.pdf", plan.output_path)
         self.assertEqual(("Schematic", "Assembly", "Fabrication"), tuple(item.title for item in plan.inputs))
         self.assertTrue(all(not item.path.stem.endswith("-1") for item in plan.inputs))
-        self.assertIn("combined.pdf", format_combined_pdf_summary(plan))
+        self.assertIn("boardwright-combined.pdf", format_combined_pdf_summary(plan))
 
-    def test_plan_allows_contents_and_sheet_numbers_to_be_disabled(self) -> None:
-        root = self.make_root()
-
-        plan = build_combined_pdf_plan(
-            self.config(
-                root,
-                combined_review_pdf=True,
-                combined_pdf_toc=False,
-                combined_pdf_page_numbers=False,
-            )
-        )
-
-        self.assertFalse(plan.toc_enabled)
-        self.assertFalse(plan.page_numbers_enabled)
-
-
-    def test_manifest_still_exists_when_only_combined_page_numbers_are_enabled(self) -> None:
+    def test_manifest_is_enabled_with_combined_review_pdf(self) -> None:
         root = self.make_root()
         (root / "boardwright.kicad_sch").write_text(
             """(kicad_sch
@@ -106,12 +92,7 @@ class CombinedPdfTests(unittest.TestCase):
         )
 
         manifest = write_combined_sheet_manifest(
-            self.config(
-                root,
-                combined_review_pdf=True,
-                combined_pdf_toc=False,
-                combined_pdf_page_numbers=True,
-            )
+            self.config(root, combined_review_pdf=True)
         )
 
         self.assertTrue(manifest.enabled)
@@ -227,7 +208,7 @@ import:
         )
 
         manifest = write_combined_sheet_manifest(
-            self.config(root, combined_review_pdf=True, combined_pdf_toc=True)
+            self.config(root, combined_review_pdf=True)
         )
 
         self.assertTrue(manifest.enabled)
@@ -244,7 +225,7 @@ import:
         templates = root / "Templates"
         templates.mkdir()
         (templates / "Boardwright_Template_PCB_GIT_A4.kicad_wks").write_text(
-            '(kicad_wks\n\t(tbtext "${#} OF ${##}"\n)\n)',
+            '(kicad_wks\n\t(tbtext "${DRAWING_TITLE}"\n)\n\t(tbtext "${DRAWING_NUMBER}"\n)\n\t(tbtext "${#} OF ${##}"\n)\n)',
             encoding="utf-8",
         )
         yaml_dir = root / "boardwright_resources" / "kibot" / "yaml"
@@ -267,8 +248,26 @@ import:
 definitions:
   SHEET_WKS: ${KIPRJMOD}/Templates/Boardwright_Template_PCB_GIT_A4.kicad_wks
   COLOR_THEME: KiCad_Theme
+  PCBA_NAME: Demo PCBA
+  PCB_NAME: Demo PCB
   ASSEMBLY_SCALING: 1.0
   FAB_SCALING: 1.0
+""",
+            encoding="utf-8",
+        )
+        (yaml_dir / "kibot_document_assembly.generated.yaml").write_text(
+            """definitions:
+  DOCUMENT_TYPE: 'ASSEMBLY'
+  DRAWING_TITLE: 'ASSEMBLY DRAWING'
+  DRAWING_NUMBER: 'Demo PCBA'
+""",
+            encoding="utf-8",
+        )
+        (yaml_dir / "kibot_document_fabrication.generated.yaml").write_text(
+            """definitions:
+  DOCUMENT_TYPE: 'FABRICATION'
+  DRAWING_TITLE: 'FABRICATION DRAWING'
+  DRAWING_NUMBER: 'Demo PCB'
 """,
             encoding="utf-8",
         )
@@ -309,12 +308,16 @@ definitions:
         )
 
         result = prepare_native_combined_outputs(
-            self.config(root, combined_review_pdf=True, combined_pdf_toc=True)
+            self.config(root, combined_review_pdf=True)
         )
 
         self.assertEqual(("pdf_combined_native_002", "pdf_combined_native_003"), result.output_names)
         self.assertIn("2 OF 3", result.worksheets[0].read_text(encoding="utf-8"))
         self.assertIn("3 OF 3", result.worksheets[1].read_text(encoding="utf-8"))
+        self.assertIn("ASSEMBLY DRAWING", result.worksheets[0].read_text(encoding="utf-8"))
+        self.assertIn("Demo PCBA", result.worksheets[0].read_text(encoding="utf-8"))
+        self.assertIn("FABRICATION DRAWING", result.worksheets[1].read_text(encoding="utf-8"))
+        self.assertIn("Demo PCB", result.worksheets[1].read_text(encoding="utf-8"))
         generated = result.yaml_path.read_text(encoding="utf-8")
         self.assertIn("pdf_combined_native_002", generated)
         self.assertIn("combined-002-top-assembly", generated)

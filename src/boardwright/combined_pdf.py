@@ -69,27 +69,21 @@ def build_combined_pdf_plan(config, root: Path | None = None) -> CombinedPdfPlan
     project_root = (root or config.root).resolve()
     outputs = getattr(config, "output_settings", {}) or {}
     enabled = _as_bool(outputs.get("combined_review_pdf", False))
-    name = str(outputs.get("combined_pdf_name") or "Manufacturing/boardwright-combined.pdf").strip()
-    if not name.lower().endswith(".pdf"):
-        name += ".pdf"
-    output_path = project_root / name
+    output_path = project_root / "Manufacturing" / "boardwright-combined.pdf"
 
     return CombinedPdfPlan(
         enabled=enabled,
         output_path=output_path,
         inputs=tuple(_discover_inputs(project_root, output_path)),
-        toc_enabled=_as_bool(outputs.get("combined_pdf_toc", True)),
-        page_numbers_enabled=_as_bool(outputs.get("combined_pdf_page_numbers", True)),
+        toc_enabled=True,
+        page_numbers_enabled=True,
     )
 
 
 def build_combined_sheet_manifest(config, root: Path | None = None) -> CombinedSheetManifest:
     project_root = (root or config.root).resolve()
     outputs = getattr(config, "output_settings", {}) or {}
-    enabled = _as_bool(outputs.get("combined_review_pdf", False)) and (
-        _as_bool(outputs.get("combined_pdf_toc", True))
-        or _as_bool(outputs.get("combined_pdf_page_numbers", True))
-    )
+    enabled = _as_bool(outputs.get("combined_review_pdf", False))
     sheets = tuple(_combined_sheets(project_root)) if enabled else ()
     return CombinedSheetManifest(enabled=enabled, sheets=sheets, path=project_root / COMBINED_SHEET_TITLES)
 
@@ -258,6 +252,7 @@ def _write_native_pcb_outputs(root: Path, manifest: CombinedSheetManifest) -> tu
             source_worksheets[sheet.source_kind],
             worksheet,
             f"SHEET {sheet.number} OF {len(manifest.sheets)}",
+            _document_text_variables(root, sheet.source_kind, definitions),
         )
         worksheets.append(worksheet)
         output_names.append(name)
@@ -375,12 +370,19 @@ def _resolve_project_path(root: Path, value: str) -> Path:
     return path if path.is_absolute() else root / path
 
 
-def _write_numbered_worksheet(source: Path, target: Path, number_text: str) -> None:
+def _write_numbered_worksheet(
+    source: Path,
+    target: Path,
+    number_text: str,
+    text_variables: dict[str, str] | None = None,
+) -> None:
     text = source.read_text(encoding="utf-8")
     text = text.replace("SHEET ${#} OF ${##}", number_text)
     text = text.replace("${#} OF ${##}", number_text.removeprefix("SHEET "))
     text = text.replace("SHEET ${#} OF ${COMBINED_SHEET_TOTAL}", number_text)
     text = text.replace("${#} OF ${COMBINED_SHEET_TOTAL}", number_text.removeprefix("SHEET "))
+    for key, value in (text_variables or {}).items():
+        text = text.replace("${" + key + "}", value)
     target.write_text(text, encoding="utf-8", newline="\n")
 
 
@@ -392,6 +394,41 @@ def _main_definitions(root: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     if index == -1:
         return values
+    for raw in text[index + len(marker):].splitlines():
+        match = re.match(r"\s{2}([A-Z0-9_]+):\s*(.*)$", raw)
+        if match:
+            values[match.group(1)] = match.group(2).strip().strip("'")
+    return values
+
+
+def _document_text_variables(root: Path, kind: str, definitions: dict[str, str]) -> dict[str, str]:
+    generated = {
+        "assembly": root / "boardwright_resources" / "kibot" / "yaml" / "kibot_document_assembly.generated.yaml",
+        "fabrication": root / "boardwright_resources" / "kibot" / "yaml" / "kibot_document_fabrication.generated.yaml",
+    }.get(kind)
+    values = _definitions_from_yaml(generated) if generated is not None and generated.is_file() else {}
+    if values:
+        return values
+    if kind == "assembly":
+        return {
+            "DOCUMENT_TYPE": "ASSEMBLY",
+            "DRAWING_TITLE": "ASSEMBLY DRAWING",
+            "DRAWING_NUMBER": definitions.get("PCBA_NAME", definitions.get("DRAWING_NUMBER", "")),
+        }
+    return {
+        "DOCUMENT_TYPE": "FABRICATION",
+        "DRAWING_TITLE": "FABRICATION DRAWING",
+        "DRAWING_NUMBER": definitions.get("PCB_NAME", definitions.get("DRAWING_NUMBER", "")),
+    }
+
+
+def _definitions_from_yaml(path: Path) -> dict[str, str]:
+    text = path.read_text(encoding="utf-8")
+    marker = "\ndefinitions:\n"
+    index = text.rfind(marker)
+    if index == -1:
+        return {}
+    values: dict[str, str] = {}
     for raw in text[index + len(marker):].splitlines():
         match = re.match(r"\s{2}([A-Z0-9_]+):\s*(.*)$", raw)
         if match:
