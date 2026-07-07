@@ -37,6 +37,8 @@ DOCUMENT_KIBOT_CONFIGS = {
     "assembly": Path("boardwright_resources/kibot/yaml/kibot_document_assembly.generated.yaml"),
     "fabrication": Path("boardwright_resources/kibot/yaml/kibot_document_fabrication.generated.yaml"),
 }
+GENERATED_WORKSHEETS = Path(".boardwright/generated_worksheets")
+PCB_PAGE_TITLE_WORKSHEET = GENERATED_WORKSHEETS / "pcb_page_title.kicad_wks"
 GENERATED_TABLE_NAMESPACE = uuid.UUID("23d77107-9438-4a74-a20c-c4df6c5126dd")
 
 
@@ -117,6 +119,9 @@ def _write_document_kibot_configs(root: Path, main_text: str, config, base_repla
     for document_key, relative_path in DOCUMENT_KIBOT_CONFIGS.items():
         replacements = dict(base_replacements)
         replacements.update(config.drawing_variables(document_key))
+        page_title_worksheet = _pcb_page_title_worksheet_definition(root, replacements.get("SHEET_WKS", ""))
+        if page_title_worksheet:
+            replacements["SHEET_WKS"] = page_title_worksheet
         updated = main_text
         for key, value in replacements.items():
             replacement_line = f"  {key}: {_yaml_quote(value)}"
@@ -127,6 +132,28 @@ def _write_document_kibot_configs(root: Path, main_text: str, config, base_repla
                 updated = _insert_kibot_definition(updated, key, replacement_line)
         path = root / relative_path
         path.write_text(updated, encoding="utf-8", newline="\n")
+
+
+def _pcb_page_title_worksheet_definition(root: Path, source_value: str) -> str:
+    source = _resolve_worksheet_source(root, source_value)
+    if not source.is_file():
+        return ""
+    target = root / PCB_PAGE_TITLE_WORKSHEET
+    target.parent.mkdir(parents=True, exist_ok=True)
+    text = source.read_text(encoding="utf-8")
+    text = text.replace("${DRAWING_TITLE}", "${TITLE}")
+    target.write_text(text, encoding="utf-8", newline="\n")
+    return "${KIPRJMOD}/" + target.relative_to(root).as_posix()
+
+
+def _resolve_worksheet_source(root: Path, value: str) -> Path:
+    normalized = str(value or "").strip().strip("'").strip('"').replace("\\", "/")
+    if normalized.startswith("${KIPRJMOD}/"):
+        normalized = normalized.removeprefix("${KIPRJMOD}/")
+    elif normalized.startswith("kicad-embed://"):
+        normalized = (Path("Templates") / normalized.removeprefix("kicad-embed://").lstrip("/")).as_posix()
+    path = Path(normalized)
+    return path if path.is_absolute() else root / path
 
 
 def _insert_kibot_definition(text: str, key: str, line: str) -> str:

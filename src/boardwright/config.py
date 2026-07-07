@@ -302,6 +302,7 @@ class BoardwrightConfig:
     def drawing_variables(self, document_key: str = "schematic") -> dict[str, str]:
         project = self.project.get("project", {})
         document = self.document_settings(document_key)
+        schematic = self.document_settings("schematic")
         number_source = str(document.get("number_source") or "pcba_name").strip()
         number = str(project.get(number_source) or "")
         if not number:
@@ -319,8 +320,8 @@ class BoardwrightConfig:
             "DRAWING_REVISION": str(document.get("revision") or "").strip(),
             "RELEASE_VERSION": self.release_version,
             "RELEASE_DATE": self.release_date,
-            "DRAWN_BY": str(document.get("drawn_by") or "").strip(),
-            "DRAWN_DATE": str(document.get("drawn_date") or "").strip(),
+            "DRAWN_BY": str(document.get("drawn_by") or schematic.get("drawn_by") or "").strip(),
+            "DRAWN_DATE": str(document.get("drawn_date") or schematic.get("drawn_date") or "").strip(),
         }
 
 

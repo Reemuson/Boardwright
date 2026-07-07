@@ -55,6 +55,12 @@ class KiCadTablesTests(unittest.TestCase):
 """,
                 encoding="utf-8",
             )
+            templates = root / "Templates"
+            templates.mkdir()
+            (templates / "Boardwright_Template_PCB_A3.kicad_wks").write_text(
+                '(kicad_wks\n\t(tbtext "${DRAWING_TITLE}"\n)\n\t(tbtext "${DRAWING_NUMBER}"\n)\n\t(tbtext "${DRAWN_BY}"\n)\n\t(tbtext "${DRAWN_DATE}"\n)\n)',
+                encoding="utf-8",
+            )
             (root / "boardwright.kicad_pcb").write_text(
                 """
 (kicad_pcb
@@ -300,9 +306,19 @@ manufacturing:
             self.assertIn("DOCUMENT_TYPE: 'FABRICATION'", fabrication_config)
             self.assertIn("DRAWING_TITLE: 'FABRICATION DRAWING'", fabrication_config)
             self.assertIn("DRAWING_NUMBER: 'Demo PCB'", fabrication_config)
+            self.assertIn("DRAWN_BY: 'RH'", fabrication_config)
+            self.assertIn("DRAWN_DATE: '2026-07-01'", fabrication_config)
             self.assertIn("DOCUMENT_TYPE: 'ASSEMBLY'", assembly_config)
             self.assertIn("DRAWING_TITLE: 'ASSEMBLY DRAWING'", assembly_config)
             self.assertIn("DRAWING_NUMBER: 'Demo PCBA'", assembly_config)
+            self.assertIn("DRAWN_BY: 'RH'", assembly_config)
+            self.assertIn("DRAWN_DATE: '2026-07-01'", assembly_config)
+            self.assertIn("SHEET_WKS: '${KIPRJMOD}/.boardwright/generated_worksheets/pcb_page_title.kicad_wks'", fabrication_config)
+            generated_worksheet = root / ".boardwright" / "generated_worksheets" / "pcb_page_title.kicad_wks"
+            generated_worksheet_text = generated_worksheet.read_text(encoding="utf-8")
+            self.assertIn("${TITLE}", generated_worksheet_text)
+            self.assertNotIn("${DRAWING_TITLE}", generated_worksheet_text)
+            self.assertIn("${DRAWN_BY}", generated_worksheet_text)
             badges = (root / ".boardwright" / "readme_badges.txt").read_text(encoding="utf-8")
             self.assertIn("badge.svg?branch=dev", badges)
             self.assertIn("actions/workflows/dev-preview.yaml", badges)

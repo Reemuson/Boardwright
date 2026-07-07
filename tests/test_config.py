@@ -293,6 +293,8 @@ downstream_project_defaults:
                         "type": "SCHEMATIC",
                         "number_source": "pcba_name",
                         "revision": "A",
+                        "drawn_by": "RH",
+                        "drawn_date": "2026-07-01",
                     },
                     "assembly": {
                         "title": "Assembly Drawing",
@@ -330,6 +332,8 @@ downstream_project_defaults:
         self.assertEqual("D", fabrication["DRAWING_REVISION"])
         self.assertEqual("C", fabrication["BOARD_REVISION"])
         self.assertEqual("v9.9.9", fabrication["RELEASE_VERSION"])
+        self.assertEqual("RH", assembly["DRAWN_BY"])
+        self.assertEqual("2026-07-01", fabrication["DRAWN_DATE"])
         self.assertNotIn("CHECKED_BY", schematic)
         self.assertNotIn("CHECKED_DATE", schematic)
         self.assertNotEqual(fabrication["DRAWING_REVISION"], fabrication["BOARD_REVISION"])
