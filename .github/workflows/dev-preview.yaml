@@ -156,6 +156,25 @@ jobs:
           variant: ${{ env.KIBOT_VARIANT }}
           config: ${{ env.KIBOT_CONFIG }}
           cache3D: YES
+
+      - name: Regenerate fabrication PDF metadata
+        if: env.KIBOT_VARIANT != 'DRAFT'
+        uses: INTI-CMNB/KiBot@v2_dk9
+        with:
+          additional_args: --log kibot_preview_fabrication_document.log pdf_fabrication zip_compress_fab
+          variant: ${{ env.KIBOT_VARIANT }}
+          config: boardwright_resources/kibot/yaml/kibot_document_fabrication.generated.yaml
+          cache3D: YES
+
+      - name: Regenerate assembly PDF metadata
+        if: env.KIBOT_VARIANT != 'DRAFT'
+        uses: INTI-CMNB/KiBot@v2_dk9
+        with:
+          additional_args: --log kibot_preview_assembly_document.log pdf_assembly
+          variant: ${{ env.KIBOT_VARIANT }}
+          config: boardwright_resources/kibot/yaml/kibot_document_assembly.generated.yaml
+          cache3D: YES
+
       - name: Normalize generated output ownership
         shell: bash
         run: sudo chown -R "$USER:$USER" Schematic Manufacturing assets HTML KiRI Testing Reports README.md 2>/dev/null || true

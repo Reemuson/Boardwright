@@ -314,7 +314,7 @@ class BoardwrightConfig:
             "PCB_NAME": self.pcb_name,
             "BOARD_REVISION": self.board_revision,
             "DOCUMENT_TYPE": str(document.get("type") or "").strip(),
-            "DRAWING_TITLE": str(document.get("title") or "").strip(),
+            "DRAWING_TITLE": str(document.get("title") or "").strip().upper(),
             "DRAWING_NUMBER": number,
             "DRAWING_REVISION": str(document.get("revision") or "").strip(),
             "RELEASE_VERSION": self.release_version,

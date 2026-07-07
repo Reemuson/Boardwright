@@ -68,6 +68,18 @@ class WorkflowTests(unittest.TestCase):
             self.assertIn("Prune empty conditional PDF pages", text)
             self.assertIn("prune_pdf_pages.py", text)
 
+
+    def test_workflows_regenerate_document_pdfs_with_document_metadata(self) -> None:
+        for workflow in Path(".github/workflows").glob("*.yaml"):
+            text = workflow.read_text(encoding="utf-8")
+
+            self.assertIn("Regenerate fabrication PDF metadata", text)
+            self.assertIn("kibot_document_fabrication.generated.yaml", text)
+            self.assertIn("pdf_fabrication zip_compress_fab", text)
+            self.assertIn("Regenerate assembly PDF metadata", text)
+            self.assertIn("kibot_document_assembly.generated.yaml", text)
+            self.assertIn("pdf_assembly", text)
+
     def test_workflows_install_bundled_fonts_before_kibot(self) -> None:
         for workflow in Path(".github/workflows").glob("*.yaml"):
             text = workflow.read_text(encoding="utf-8")
@@ -178,6 +190,7 @@ class WorkflowTests(unittest.TestCase):
             "git add -f .boardwright/revision_history_variables.env .boardwright/release.env",
             text,
         )
+        self.assertIn("git add CHANGELOG.md .boardwright/project.yaml .boardwright/document_revisions.yaml", text)
 
     def test_release_notes_do_not_duplicate_tag_heading(self) -> None:
         text = Path(".github/workflows/release.yaml").read_text(encoding="utf-8")
@@ -192,6 +205,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("- draft", prepare)
         self.assertIn("default: prerelease", prepare)
         self.assertIn("release_kind", prepare)
+        self.assertIn("drawing_revision", prepare)
+        self.assertIn("revision_description", prepare)
+        self.assertIn("--drawing-revision", prepare)
+        self.assertIn("--revision-description", prepare)
         self.assertIn("draft: ${{ env.RELEASE_KIND == 'draft' }}", release)
         self.assertIn("RELEASE_KIND: release", release)
 

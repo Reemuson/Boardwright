@@ -32,6 +32,10 @@ ASSEMBLY_NOTES_TEMPLATE = Path(
     "boardwright_resources/kibot/resources/templates/assembly_notes.txt"
 )
 KIBOT_MAIN_YAML = Path("boardwright_resources/kibot/yaml/kibot_main.yaml")
+DOCUMENT_KIBOT_CONFIGS = {
+    "assembly": Path("boardwright_resources/kibot/yaml/kibot_document_assembly.generated.yaml"),
+    "fabrication": Path("boardwright_resources/kibot/yaml/kibot_document_fabrication.generated.yaml"),
+}
 GENERATED_TABLE_NAMESPACE = uuid.UUID("23d77107-9438-4a74-a20c-c4df6c5126dd")
 
 
@@ -104,6 +108,23 @@ def _sync_kibot_project_metadata(root: Path, config=None) -> None:
         else:
             updated = _insert_kibot_definition(updated, key, replacement_line)
     if updated != text:
+        path.write_text(updated, encoding="utf-8", newline="\n")
+    _write_document_kibot_configs(root, updated, config, replacements)
+
+
+def _write_document_kibot_configs(root: Path, main_text: str, config, base_replacements: dict[str, str]) -> None:
+    for document_key, relative_path in DOCUMENT_KIBOT_CONFIGS.items():
+        replacements = dict(base_replacements)
+        replacements.update(config.drawing_variables(document_key))
+        updated = main_text
+        for key, value in replacements.items():
+            replacement_line = f"  {key}: {_yaml_quote(value)}"
+            pattern = rf"(?m)^  {re.escape(key)}:\s*.*$"
+            if re.search(pattern, updated):
+                updated = re.sub(pattern, replacement_line, updated, count=1)
+            else:
+                updated = _insert_kibot_definition(updated, key, replacement_line)
+        path = root / relative_path
         path.write_text(updated, encoding="utf-8", newline="\n")
 
 
