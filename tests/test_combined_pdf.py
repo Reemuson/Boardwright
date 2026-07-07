@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import unittest
 import uuid
@@ -153,12 +154,15 @@ import:
         worksheet_dir.mkdir(parents=True)
         worksheet = worksheet_dir / "combined_sheet_001.kicad_wks"
         worksheet.write_text("worksheet", encoding="utf-8")
+        schematic_worksheet = worksheet_dir / "combined_schematic.kicad_wks"
+        schematic_worksheet.write_text("worksheet", encoding="utf-8")
 
         result = prepare_native_combined_outputs(self.config(root, combined_review_pdf=False))
 
         self.assertFalse(result.manifest.enabled)
         self.assertFalse(native_yaml.exists())
         self.assertFalse(worksheet.exists())
+        self.assertFalse(schematic_worksheet.exists())
         main = (yaml_dir / "kibot_main.yaml").read_text(encoding="utf-8")
         self.assertNotIn("Boardwright generated combined native", main)
         self.assertNotIn("combined_native", main)
@@ -226,6 +230,14 @@ import:
         templates.mkdir()
         (templates / "Boardwright_Template_PCB_GIT_A4.kicad_wks").write_text(
             '(kicad_wks\n\t(tbtext "${DRAWING_TITLE}"\n)\n\t(tbtext "${DRAWING_NUMBER}"\n)\n\t(tbtext "${#} OF ${##}"\n)\n)',
+            encoding="utf-8",
+        )
+        (templates / "Schematic.kicad_wks").write_text(
+            '(kicad_wks\n\t(tbtext "SHEET ${#} OF ${##}"\n)\n)',
+            encoding="utf-8",
+        )
+        (root / "demo.kicad_pro").write_text(
+            json.dumps({"schematic": {"page_layout_descr_file": "Templates/Schematic.kicad_wks"}}),
             encoding="utf-8",
         )
         yaml_dir = root / "boardwright_resources" / "kibot" / "yaml"
@@ -320,6 +332,16 @@ definitions:
         self.assertIn("Demo PCBA", assembly_worksheet)
         self.assertIn("L1 COPPER", fabrication_worksheet)
         self.assertIn("Demo PCB", fabrication_worksheet)
+        generated_schematic = root / ".boardwright" / "generated_worksheets" / "combined_schematic.kicad_wks"
+        self.assertIn(
+            "SHEET ${#} OF ${COMBINED_SHEET_TOTAL}",
+            generated_schematic.read_text(encoding="utf-8"),
+        )
+        project = json.loads((root / "demo.kicad_pro").read_text(encoding="utf-8"))
+        self.assertEqual(
+            "${KIPRJMOD}/.boardwright/generated_worksheets/combined_schematic.kicad_wks",
+            project["schematic"]["page_layout_descr_file"],
+        )
         generated = result.yaml_path.read_text(encoding="utf-8")
         self.assertIn("pdf_combined_native_002", generated)
         self.assertIn("combined-002-top-assembly", generated)

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 import re
 from typing import Any
@@ -19,6 +20,7 @@ MAX_COMBINED_TOC_ENTRIES = 40
 
 COMBINED_NATIVE_YAML = Path("boardwright_resources") / "kibot" / "yaml" / "kibot_out_pdf_combined_native.yaml"
 GENERATED_WORKSHEETS = Path(".boardwright") / "generated_worksheets"
+COMBINED_SCHEMATIC_WORKSHEET = GENERATED_WORKSHEETS / "combined_schematic.kicad_wks"
 MAIN_COMBINED_GROUP_START = "  # Boardwright generated combined native outputs -- start"
 MAIN_COMBINED_GROUP_END = "  # Boardwright generated combined native outputs -- end"
 MAIN_COMBINED_IMPORT_START = "  # Boardwright generated combined native import -- start"
@@ -195,6 +197,7 @@ def prepare_native_combined_outputs(config, root: Path | None = None) -> NativeC
         _clean_native_combined_outputs(project_root)
         return NativeCombinedOutputResult(manifest, (), (), project_root / COMBINED_NATIVE_YAML)
 
+    _prepare_schematic_combined_worksheet(project_root)
     output_names, worksheets = _write_native_pcb_outputs(project_root, manifest)
     _patch_kibot_main_for_native_outputs(project_root, output_names)
     return NativeCombinedOutputResult(
@@ -295,6 +298,71 @@ def _clean_native_combined_outputs(root: Path) -> None:
     if worksheet_dir.is_dir():
         for path in worksheet_dir.glob("combined_sheet_*.kicad_wks"):
             path.unlink()
+        schematic_worksheet = root / COMBINED_SCHEMATIC_WORKSHEET
+        if schematic_worksheet.exists():
+            schematic_worksheet.unlink()
+
+
+def _prepare_schematic_combined_worksheet(root: Path) -> Path | None:
+    source = _schematic_worksheet_path(root)
+    if source is None or not source.is_file():
+        return None
+    target = root / COMBINED_SCHEMATIC_WORKSHEET
+    target.parent.mkdir(parents=True, exist_ok=True)
+    text = source.read_text(encoding="utf-8")
+    text = text.replace("SHEET ${#} OF ${##}", "SHEET ${#} OF ${COMBINED_SHEET_TOTAL}")
+    text = text.replace("${#} OF ${##}", "${#} OF ${COMBINED_SHEET_TOTAL}")
+    target.write_text(text, encoding="utf-8", newline="\n")
+    _patch_schematic_project_worksheet(root, target)
+    return target
+
+
+def _schematic_worksheet_path(root: Path) -> Path | None:
+    for path in sorted(root.glob("*.kicad_pro")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        schematic = data.get("schematic")
+        if not isinstance(schematic, dict):
+            continue
+        value = str(schematic.get("page_layout_descr_file") or "").strip()
+        if value:
+            return _resolve_project_path(root, _normalize_project_worksheet(value))
+    definitions = _main_definitions(root)
+    return _resolve_project_path(
+        root,
+        definitions.get("SHEET_WKS", "${KIPRJMOD}/Templates/Boardwright_Template_PCB_GIT_A4.kicad_wks"),
+    )
+
+
+def _normalize_project_worksheet(value: str) -> str:
+    normalized = value.replace("\\", "/").strip()
+    embed_prefix = "kicad-embed://"
+    if normalized.startswith(embed_prefix):
+        return (Path("Templates") / normalized.removeprefix(embed_prefix).lstrip("/")).as_posix()
+    if normalized.startswith("${KIPRJMOD}/"):
+        return normalized.removeprefix("${KIPRJMOD}/")
+    return normalized
+
+
+def _patch_schematic_project_worksheet(root: Path, worksheet: Path) -> None:
+    worksheet_ref = "${KIPRJMOD}/" + _posix_path(worksheet.relative_to(root))
+    for path in sorted(root.glob("*.kicad_pro")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        schematic = data.setdefault("schematic", {})
+        if not isinstance(schematic, dict):
+            continue
+        schematic["page_layout_descr_file"] = worksheet_ref
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+        return
 
 
 def _patch_kibot_main_for_native_outputs(root: Path, output_names: list[str]) -> None:
