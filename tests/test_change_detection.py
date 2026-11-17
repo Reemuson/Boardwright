@@ -203,6 +203,19 @@ class ChangeDetectionTests(unittest.TestCase):
         orphan = replace(old, source_commit="")
         self.assertEqual("stale", comparable_fingerprint(self.tmp, orphan).pcb_geometry)
 
+    def test_unrecorded_baseline_revisions_are_flagged_for_review(self) -> None:
+        import yaml
+
+        path = self.tmp / ".boardwright" / "project.yaml"
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data.pop("documents")
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
+        self.project.commit("legacy metadata")
+        _git(self.tmp, "tag", "0.9.0")
+        assessment = self.project.assess("1.0.0", "documentation", "A.0", "First ledgered release")
+        self.assertTrue(assessment.baseline_legacy)
+        self.assertTrue(any("no recorded schematic" in r for r in assessment.reviews))
+
     def test_documentation_only_release_still_reuses_baseline(self) -> None:
         self._release_initial()
         self.project.write(note="CORRECTED NOTE")
