@@ -242,6 +242,12 @@ class RenderedNotesTests(unittest.TestCase):
         self.assertTrue(lines[index + 1].startswith("\t\t"), repr(lines[index + 1]))
         self.assertFalse(re.search(r"[A-Z]\. {2,}", notes))
 
+    def test_controlled_notes_are_written_with_lf_on_every_host(self) -> None:
+        self._render(DECLARED)
+        for relative in ("Manufacturing/Fabrication/demo-fabrication_notes.txt",
+                         "Manufacturing/Assembly/demo-assembly_notes.txt"):
+            self.assertNotIn(b"\r", (self.root / relative).read_bytes(), relative)
+
     def test_undeclared_requirements_stop_rendering(self) -> None:
         without_standard = "\n".join(
             line for line in DECLARED.splitlines() if "manufacturing_standard" not in line
