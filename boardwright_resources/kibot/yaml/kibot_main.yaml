@@ -76,6 +76,12 @@ groups:
       - @HTML_KIRI_OUTPUT@
       - @HTML_NAV_RES_OUTPUT@
 
+  # KiCad 10 produces the same output set as KiCad 9 (both support ODB++).
+  # Kept as a distinct name so launchers select groups explicitly per version.
+  - name: all_group_k10
+    outputs:
+      - all_group_k9
+
   - name: draft_group
     outputs:
       - @NETLIST_OUTPUT@

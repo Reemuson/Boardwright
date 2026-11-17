@@ -5,6 +5,17 @@ import unittest
 from pathlib import Path
 
 
+
+# Diagnostic workflows build a reduced output set and never commit or publish;
+# the output-pipeline parity rules below do not apply to them.
+DIAGNOSTIC_WORKFLOWS = {"kicad-compat.yaml"}
+
+
+def _pipeline_workflows() -> list[Path]:
+    return sorted(
+        path for path in Path(".github/workflows").glob("*.yaml") if path.name not in DIAGNOSTIC_WORKFLOWS
+    )
+
 class WorkflowTests(unittest.TestCase):
     def test_split_workflows_exist(self) -> None:
         expected = {
@@ -22,14 +33,14 @@ class WorkflowTests(unittest.TestCase):
                 self.assertIn(marker, text)
 
     def test_workflows_expose_src_to_kibot_python_helpers(self) -> None:
-        for workflow in Path(".github/workflows").glob("*.yaml"):
+        for workflow in _pipeline_workflows():
             text = workflow.read_text(encoding="utf-8")
 
             self.assertIn("PYTHONPATH: ${{ github.workspace }}/src", text)
             self.assertNotIn("\n  PYTHONPATH: ${{ github.workspace }}/src\n          GH_TOKEN", text)
 
     def test_workflows_do_not_run_notes_as_standalone_target(self) -> None:
-        for workflow in Path(".github/workflows").glob("*.yaml"):
+        for workflow in _pipeline_workflows():
             text = workflow.read_text(encoding="utf-8")
 
             self.assertNotIn("additional_args: --log kibot_preview_notes.log notes", text)
@@ -38,7 +49,7 @@ class WorkflowTests(unittest.TestCase):
             self.assertNotIn("additional_args: --log kibot_release_notes.log notes", text)
 
     def test_workflows_clean_generated_outputs_after_kibot(self) -> None:
-        for workflow in Path(".github/workflows").glob("*.yaml"):
+        for workflow in _pipeline_workflows():
             text = workflow.read_text(encoding="utf-8")
 
             self.assertIn("Normalize generated output ownership", text)
@@ -57,7 +68,7 @@ class WorkflowTests(unittest.TestCase):
             )
 
     def test_workflows_prepare_tables_before_full_outputs(self) -> None:
-        for workflow in Path(".github/workflows").glob("*.yaml"):
+        for workflow in _pipeline_workflows():
             text = workflow.read_text(encoding="utf-8")
 
             self.assertIn("Prepare Boardwright PDF table placeholders", text)
@@ -75,7 +86,7 @@ class WorkflowTests(unittest.TestCase):
 
 
     def test_workflows_regenerate_document_pdfs_with_document_metadata(self) -> None:
-        for workflow in Path(".github/workflows").glob("*.yaml"):
+        for workflow in _pipeline_workflows():
             text = workflow.read_text(encoding="utf-8")
 
             self.assertIn("Regenerate fabrication PDF metadata", text)
@@ -87,7 +98,7 @@ class WorkflowTests(unittest.TestCase):
             self.assertIn("pdf_assembly", text)
 
     def test_workflows_install_bundled_fonts_before_kibot(self) -> None:
-        for workflow in Path(".github/workflows").glob("*.yaml"):
+        for workflow in _pipeline_workflows():
             text = workflow.read_text(encoding="utf-8")
 
             self.assertIn("Install bundled KiCad/PDF fonts", text)
@@ -95,7 +106,7 @@ class WorkflowTests(unittest.TestCase):
             self.assertIn("fc-cache -f ~/.local/share/fonts", text)
 
     def test_workflows_use_pinned_official_cache_action(self) -> None:
-        for workflow in Path(".github/workflows").glob("*.yaml"):
+        for workflow in _pipeline_workflows():
             text = workflow.read_text(encoding="utf-8")
 
             self.assertIn("actions/cache@v4", text)
@@ -184,7 +195,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("GITHUB_STEP_SUMMARY", accepted)
 
     def test_draft_workflows_skip_heavy_preflights(self) -> None:
-        for workflow in Path(".github/workflows").glob("*.yaml"):
+        for workflow in _pipeline_workflows():
             text = workflow.read_text(encoding="utf-8")
 
             self.assertIn("--skip-pre draw_fancy_stackup,erc,drc", text)
