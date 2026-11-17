@@ -59,14 +59,30 @@ fingerprints (`src/boardwright/fingerprint.py`):
 
 | Domain | Includes | Excludes |
 | --- | --- | --- |
-| `pcb_geometry` | Copper, mask, paste, silk, edge cuts, drills, zones, stackup, plot parameters. Nets are identified by the pads they connect. | Net names, UUIDs, timestamps, title block, `*.Fab`/`*.CrtYd`/`User.*` layers, hidden or Fab-layer footprint fields, 3D models, footprint library names, formatting. |
-| `pcb_netnames` | Net names. These appear in IPC-D-356, ODB++ and Gerber X2 attributes. | — |
+| `pcb_geometry` | Copper, mask, paste, silk, edge cuts, drills, zones, stackup, board thickness, plot parameters. Nets are identified by the pads they connect. Text variables in text on fabrication layers are resolved first (project, board, title-block and footprint fields). | Net names, UUIDs, timestamps, title block, `*.Fab`/`*.CrtYd`/`User.*` layers, hidden or Fab-layer footprint fields, 3D models, footprint library names, formatting. |
+| `pcb_netnames` | Net names and pad pin functions. These appear in IPC-D-356, ODB++ and Gerber X2 attributes. | — |
 | `fabrication_spec` | `manufacturing.*` settings except assembly and test-point notes. | — |
 | `assembly` | Footprint reference, value, library, side, position, attributes and fields; schematic symbol BOM fields and DNP/BOM/board flags; assembly notes. | Datasheet, description, simulation fields. |
+| `pcb_drawings` | Content on `*.Fab`, `Dwgs.User`, `Cmts.User` and `User.*` layers, which the fabrication and assembly drawings plot. | Courtyard, margin, Eco layers; hidden text. |
 | `schematic` | All root `.kicad_sch` content. | Title blocks, UUIDs, generator/version. |
 
-The KiCad file format version is tracked separately. A format change alone
-requires the `tooling` class.
+Tracked separately (not design domains):
+
+- **KiCad file format version.** A format change alone requires the `tooling`
+  class.
+- **Tooling.** Boardwright's KiBot output configuration and notes templates
+  (line endings normalised). A change requires the `tooling` class. Its effect
+  on rendered notes and output options is checked by the output manifest.
+- **Release-dependent marking.** `${RELEASE_VERSION}`, `${RELEASE_DATE}`,
+  `${RELEASE_DATE_NUM}`, `${GIT_HASH_*}`, `${CURRENT_DATE}` or `${VARIANT}` in
+  text on a fabrication layer. The silkscreen differs for every release, so it
+  is detected as `release_marking`.
+
+Fingerprint schema 2 (November 2026) added board thickness, variable
+resolution, pin functions, `pcb_drawings`, `tooling` and release marking. When
+the baseline was recorded with an older schema, Boardwright recomputes it
+read-only from the release tag, or from the recorded source commit, using the
+current rules. It only reports a schema mismatch when neither is available.
 
 Before any release, the schematic and PCB must agree on populated references,
 values and footprints. A schematic value correction that has not been synced to
@@ -78,13 +94,16 @@ the PCB blocks the release.
 | --- | --- |
 | `pcb_geometry` changed | `fabrication` class **and** a new PCB revision. The fabrication baseline is `new`. |
 | PCB revision changed, geometry unchanged | Rejected unless `fabrication` is declared (deliberate re-spin; flagged for review). |
-| `pcb_netnames` or `fabrication_spec` changed only | `fabrication` class and a new fabrication drawing revision. The PCB revision is retained and the fabrication baseline is `reissued` (`A/2`). |
+| `pcb_netnames`, `fabrication_spec` or `release_marking` only | `fabrication` class and a new fabrication drawing revision. The PCB revision is retained and the fabrication baseline is `reissued` (`A/2`). |
 | No fabrication input changed | Fabrication baseline `reused`; declaring `fabrication` is rejected. |
 | `assembly` changed | `assembly` class and a new assembly drawing revision. |
 | `schematic` changed | `documentation` or `electrical` class and a new schematic revision. |
 | Schematic revision changed, schematic unchanged | `documentation` required (for example, title-block-only corrections). |
 | `electrical` declared, PCB and BOM unchanged | Allowed, with a review item to confirm the as-built PCB still implements the schematic. |
+| `pcb_drawings` changed | `documentation` (or `fabrication`/`assembly`) class and a new fabrication or assembly drawing revision. The bare-board baseline is unaffected; a review item asks whether a fabrication requirement changed. |
 | KiCad format changed | `tooling` class, with a review item that regenerated outputs may not be byte-identical. |
+| Tooling changed | `tooling` class, with a review item that rendered notes and output options may differ. |
+| Baseline has no recorded document revision (legacy) | Review item: revision changes cannot be enforced against that baseline. |
 | PCB revision previously released with different geometry | Rejected: a revision identifier is never reused. |
 
 Ambiguous situations produce review items in the checklist. They do not
@@ -102,8 +121,30 @@ since been modified or removed, or when the version is already recorded.
 
 `prepare-release.yaml` writes `.boardwright/accepted_manifest.json` (raw and
 normalised SHA-256 for every generated file) and commits it with the release
-state. Normalisation removes creation dates, generator banners and Gerber
-`TF.ProjectId` only. Then:
+state.
+
+**Controlled outputs** are the ones that decide pass or fail:
+
+- Gerber, Excellon, Gerber job and IPC-D-356 files under
+  `Manufacturing/Fabrication/Gerbers/`, and the same files inside the
+  fabrication zip, verified member by member;
+- the rendered fabrication and assembly notes;
+- the assembly CSV and position files.
+
+Drawings and drill maps (PDF), renders, reports and ODB++ are informational:
+their hashes are recorded but don't block. They embed dates and release text,
+and KiCad 9 writes ODB++ symbol tables in non-deterministic order.
+
+**Normalisation** is format-specific. It removes only `TF.CreationDate`,
+`TF.GenerationSoftware`, the `G04 Created by KiCad … date` banner, the Excellon
+`DRILL file … date` line, and the revision field of `TF.ProjectId`. The project
+name and GUID are kept, and so is `TF.FileFunction`, along with every other
+attribute and all geometry. Each manifest records its normaliser version.
+Manifests from different normaliser versions are compared by byte identity only,
+and a difference is reported as `incomparable`. A path counts as controlled when
+either manifest classifies it so.
+
+Then:
 
 1. When the ledger says a baseline is `reused`, the fabrication (and/or
    assembly) outputs are compared with the previous release's committed
@@ -119,6 +160,13 @@ release is never re-published.
 
 Releases prepared before manifests existed have source-fingerprint evidence
 only. The workflows report this as a warning instead of a pass.
+
+Evidence (November 2026): the boardwright-ci-test releases 0.1.2 and 0.1.3 have
+identical design sources and were built by CI 11 hours apart. Every Gerber and
+drill file differed in raw bytes, only by creation date and the `TF.ProjectId`
+revision. Under the current normaliser all 22 controlled fabrication entries
+are `regenerated` and none block. The earlier normaliser failed the pair on two
+drill-map PDFs.
 
 ## Worked example: documentation-only correction
 

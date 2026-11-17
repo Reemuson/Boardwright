@@ -117,6 +117,31 @@ Boardwright emits these for title blocks and drawing-facing reports.
 | `${DRAWN_BY}` | Current document drawn-by value. |
 | `${DRAWN_DATE}` | Current document drawn date. |
 
+### Revision identities on drawings
+
+Every Boardwright worksheet except `Boardwright_Template_AS1100.kicad_wks`
+shows two kinds of revision:
+
+- The **REVISION** cell shows `${DRAWING_REVISION}`, the revision of the drawing
+  you are reading. On the fabrication drawing this is the fabrication drawing
+  revision.
+- The drawing-number cell carries one identity line:
+
+  ```text
+  PCB REV ${PCB_REVISION} | SCH REV ${SCHEMATIC_REVISION} | RELEASE ${RELEASE_VERSION}
+  ```
+
+The template PCB title block uses `(rev "${PCB_REVISION}")`. Gerber X2
+`TF.ProjectId` therefore carries the physical board revision, which stays the
+same across documentation-only releases. The KiBot preflight sets
+`PCB_REVISION` and `SCHEMATIC_REVISION`, so CI renders the same values as
+KiCad desktop.
+
+Do not put `${RELEASE_VERSION}`, `${RELEASE_DATE}` or `${GIT_HASH_*}` on copper
+or silkscreen. These change with every release, so release preparation treats
+them as a fabrication re-issue (see [`RELEASE_MODEL.md`](RELEASE_MODEL.md)).
+Use `${PCB_REVISION}` for board markings.
+
 ## Revision Table Variables
 
 `.boardwright/document_revisions.yaml` is the only formal revision-history source
@@ -229,7 +254,7 @@ A standard title block should conceptually consume the variables like this:
 TITLE:      ${DRAWING_TITLE}
 DWG NO:     ${DRAWING_NUMBER}
 DWG REV:    ${DRAWING_REVISION}
-BOARD REV:  ${BOARD_REVISION}
+BOARD REV:  ${BOARD_REVISION}   (alias ${PCB_REVISION})
 TYPE:       ${DOCUMENT_TYPE}
 COMPANY:    ${COMPANY}
 DRAWN:      ${DRAWN_BY}       DATE: ${DRAWN_DATE}

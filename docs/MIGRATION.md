@@ -35,9 +35,27 @@ Required behaviour changes:
 Optional: set `documents.schematic.revision_scheme: board_minor` to use
 `A.0`, `A.1`, `B.0` schematic revisions tied to the PCB revision.
 
-Optional worksheet change: the PCB worksheets show `${DRAWING_REVISION}` (the
-fabrication drawing revision). To print the physical board revision as well,
-add a field for `${PCB_REVISION}`. Boardwright does not edit worksheets for you.
+Worksheets and title blocks:
+
+- The Boardwright worksheets now print
+  `PCB REV ${PCB_REVISION} | SCH REV ${SCHEMATIC_REVISION} | RELEASE ${RELEASE_VERSION}`
+  in the drawing-number cell. Projects that use their own worksheet can copy
+  the `boardwright_revision_identity` text item from a Boardwright worksheet.
+- Replace a legacy PCB title-block `(rev "${REVISION}")` with
+  `(rev "${PCB_REVISION}")`. `boardwright validate` warns about it, and
+  `boardwright migrate` rewrites it. Replace schematic `${REVISION}` with
+  `${DRAWING_REVISION}`; `boardwright validate` reports this as an error.
+  Because the visible schematic text changes, release this with the
+  `documentation` class and a new schematic revision.
+- Keep `${RELEASE_VERSION}` and other per-release variables off copper and
+  silkscreen; use `${PCB_REVISION}` for board markings.
+
+The first release after updating the Boardwright payload needs the `tooling`
+class, because the KiBot output configuration and notes templates changed.
+
+Projects created before `.boardwright/state.yaml` existed cannot use
+`boardwright update` yet. The payload can be installed from
+`managed_project.collect_payload()`; the TODO tracks proper support.
 
 ## KiCad 9 to KiCad 10
 

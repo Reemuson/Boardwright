@@ -191,7 +191,7 @@ Migration replaces recognised legacy KiBot resources, KDT worksheets, launchers,
 
 Migration does not create a commit. It also does not change remote branches, tags, or GitHub releases.
 
-The migration replaces legacy `${REVISION}` schematic references with `${DRAWING_REVISION}`. Boardwright keeps drawing revisions separate from board revisions and release versions.
+The migration replaces legacy `${REVISION}` schematic references with `${DRAWING_REVISION}`, and the PCB title-block revision with `${PCB_REVISION}`. Boardwright keeps drawing revisions separate from board revisions and release versions.
 
 ## Update a Boardwright Project
 

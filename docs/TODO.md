@@ -233,17 +233,27 @@ Goal: make the generated README a useful hardware project front page.
       in title blocks, generated README, release metadata, and revision-history
       generation. Release identities are recorded in `.boardwright/releases.yaml`
       (see `RELEASE_MODEL.md`).
-- [ ] Decide whether PCB worksheets should print `${PCB_REVISION}` next to the
-      fabrication drawing revision, and replace the legacy `${REVISION}` in the
-      template PCB title block (audit M5/M6).
+- [x] Print PCB, schematic and release identities on every Boardwright
+      worksheet and use `${PCB_REVISION}` in the template PCB title block
+      (audit M5/M6).
 - [ ] Add `${SCHEMATIC_REVISION}`/`${PCB_REVISION}` rows to the generated README
-      template once the KiBot preflight variable list carries them.
+      template (the KiBot preflight now sets both variables).
+- [ ] Add a revision identity line to `Boardwright_Template_AS1100.kicad_wks`
+      (different layout; not covered by the generic worksheet change).
+- [ ] Let `boardwright update` adopt projects that predate `.boardwright/state.yaml`
+      (today it fails with a circular "run update plan" message).
+- [ ] Add an ODB++ feature-file canonicaliser so ODB++ can become a controlled
+      output (symbol tables are written in non-deterministic order).
+- [ ] Decide whether title-block `(date ...)` should follow `${RELEASE_DATE}`;
+      template sheets carry fixed 2024/2025 dates.
 - [ ] Move remaining test modules off `Path.cwd()` workspaces (audit M3).
 - [ ] Run `kicad-compat.yaml` on a representative project and record the KiCad 9
       vs 10 differences before switching pipelines to `v2_dk10` (MIGRATION.md).
 - [ ] Decide whether to pin `INTI-CMNB/KiBot` actions to commit SHAs (audit M8).
 - [ ] Review `docker_kibot_linux.sh` `/etc/shadow` mount and KiCad 8 default (audit M7).
-- [ ] Live-test the ledger/manifest release path on the testbench repository.
+- [ ] Live-test the ledger/manifest release path on boardwright-ci-test. The branch
+      and runbook are prepared locally (`AUDIT-2026-11.md`, follow-up); awaiting
+      authorisation to push/dispatch.
 - [x] Add board dimensions.
 - [x] Keep board images side by side in README and release markdown.
 - [x] Add latest release/package links.

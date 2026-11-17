@@ -124,7 +124,8 @@ Delivered:
 
 Remaining:
 
-- live retest of the ledger/manifest release path on the testbench
+- live retest of the ledger/manifest release path on boardwright-ci-test
+  (prepared locally; see `AUDIT-2026-11.md` follow-up)
 - live retest draft release
 - measure whether CI runtime needs further optimization
 
