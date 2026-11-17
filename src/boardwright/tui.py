@@ -110,6 +110,7 @@ class ReleaseChecklist:
     accepted_summary: str
     items: tuple[ReleaseChecklistItem, ...]
     action: WorkflowAction | None = None
+    impact_lines: tuple[str, ...] = ()
 
     @property
     def can_dispatch(self) -> bool:
@@ -1022,7 +1023,7 @@ def _build_textual_app():
             message = self.query_one("#commit_message", Input).value
             self.dismiss(message)
 
-    class ReleaseScreen(ModalScreen[tuple[str, str, str, str, str] | None]):
+    class ReleaseScreen(ModalScreen[tuple[str, ...] | None]):
         CSS = ChangelogEntryScreen.CSS
 
         def compose(self) -> ComposeResult:
@@ -1032,6 +1033,11 @@ def _build_textual_app():
                 yield Input(placeholder="0.1.2", id="release_version")
                 yield Input(placeholder="Drawing revision, e.g. A", id="release_drawing_revision")
                 yield Input(placeholder="Revision table note, 60 chars max", id="release_revision_description")
+                yield Input(
+                    placeholder="Change classes: documentation, electrical, fabrication, assembly, tooling",
+                    id="release_change_classes",
+                )
+                yield Input(placeholder="Justification (recorded in release ledger)", id="release_justification")
                 yield Select(
                     [(variant, variant) for variant in ("DRAFT", "PRELIMINARY", "CHECKED", "RELEASED")],
                     value="RELEASED",
@@ -1054,7 +1060,11 @@ def _build_textual_app():
             revision_description = self.query_one("#release_revision_description", Input).value
             variant = self.query_one("#release_variant", Select).value
             kind = self.query_one("#release_kind", Select).value
-            self.dismiss((version, str(variant), str(kind), drawing_revision, revision_description))
+            change_classes = self.query_one("#release_change_classes", Input).value
+            justification = self.query_one("#release_justification", Input).value
+            self.dismiss(
+                (version, str(variant), str(kind), drawing_revision, revision_description, change_classes, justification)
+            )
 
     class ReleaseChecklistScreen(ModalScreen[ReleaseChecklist | None]):
         CSS = ChangelogEntryScreen.CSS
@@ -1774,9 +1784,21 @@ def _build_textual_app():
                     release_status,
                 )
             except BoardwrightError as exc:
-                self.call_from_thread(self._finish_ci_poll, None, str(exc), notify)
+                self._call_from_worker(self._finish_ci_poll, None, str(exc), notify)
                 return
-            self.call_from_thread(self._finish_ci_poll, state, ci_status, notify)
+            self._call_from_worker(self._finish_ci_poll, state, ci_status, notify)
+
+        def _call_from_worker(self, callback, *args) -> None:
+            """Deliver a worker result unless the app has already shut down.
+
+            Background polls can outlive the event loop (quit during a poll);
+            dropping the result then is correct, crashing the thread is not.
+            """
+            try:
+                self.call_from_thread(callback, *args)
+            except RuntimeError as exc:
+                if "closed" not in str(exc) and "not running" not in str(exc):
+                    raise
 
         def _finish_ci_poll(
             self,
@@ -2200,10 +2222,12 @@ def _build_textual_app():
             self.notify(f"Accept {variant} dispatched.")
             self._poll_ci_status()
 
-        def _release_ci(self, result: tuple[str, str, str, str, str] | None) -> None:
+        def _release_ci(self, result: tuple[str, ...] | None) -> None:
             if result is None:
                 return
-            version, variant, kind, drawing_revision, revision_description = result
+            version, variant, kind, drawing_revision, revision_description, *extra = result
+            change_classes = extra[0] if extra else ""
+            justification = extra[1] if len(extra) > 1 else ""
             try:
                 config = load_config()
                 accepted_state = build_accepted_main_state(config)
@@ -2215,6 +2239,8 @@ def _build_textual_app():
                     drawing_revision,
                     revision_description,
                     accepted_state,
+                    change_classes=change_classes,
+                    justification=justification,
                 )
             except BoardwrightError as exc:
                 self.notify(str(exc), severity="error")
@@ -2850,7 +2876,12 @@ def build_release_checklist(
     drawing_revision: str,
     revision_description: str,
     accepted_state: "AcceptedMainState",
+    *,
+    change_classes: str = "",
+    justification: str = "",
 ) -> ReleaseChecklist:
+    from .impact import assess_release_impact, format_impact
+
     selected_version = version.strip()
     selected_variant = variant.strip()
     selected_kind = kind.strip()
@@ -2870,9 +2901,25 @@ def build_release_checklist(
             selected_kind,
             selected_drawing_revision,
             selected_revision_description,
+            change_classes=change_classes,
+            justification=justification,
+            source_sha=accepted_state.expected_sha if accepted_state.ready else "",
         )
     except BoardwrightError as exc:
         action_error = str(exc)
+
+    impact = None
+    impact_error = ""
+    try:
+        impact = assess_release_impact(
+            config,
+            selected_version,
+            change_classes=change_classes,
+            justification=justification or selected_revision_description,
+            schematic_revision=selected_drawing_revision,
+        )
+    except BoardwrightError as exc:
+        impact_error = str(exc)
 
     try:
         release_plan = build_release_plan(config, selected_version, check_remote=False)
@@ -2921,6 +2968,15 @@ def build_release_checklist(
             ),
         ),
         ReleaseChecklistItem(
+            "Impact",
+            impact is not None and impact.ok,
+            (
+                impact_error
+                if impact is None
+                else ("Revision identities consistent with detected changes." if impact.ok else "; ".join(impact.problems))
+            ),
+        ),
+        ReleaseChecklistItem(
             "Dispatch",
             action is not None,
             (
@@ -2939,6 +2995,7 @@ def build_release_checklist(
         accepted_summary,
         tuple(items),
         action,
+        tuple(format_impact(impact)) if impact is not None else (),
     )
 
 
@@ -2946,9 +3003,11 @@ def _format_release_checklist(checklist: ReleaseChecklist) -> str:
     lines = [
         f"Release {checklist.version or '(blank)'} | {checklist.variant} | {checklist.kind}",
         f"Drawing rev {checklist.drawing_revision or '(blank)'} | {checklist.revision_description or '(blank)'}",
-        "",
-        "Readiness:",
     ]
+    impact_rows = [line for line in checklist.impact_lines if not line.startswith("Problem: ")]
+    if impact_rows:
+        lines.extend(["", "Identities and impact:", *impact_rows])
+    lines.extend(["", "Readiness:"])
     blockers: list[str] = []
     for item in checklist.items:
         marker = "[x]" if item.passed else "[ ]"

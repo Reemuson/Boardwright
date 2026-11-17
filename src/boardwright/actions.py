@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import re
+
 import json
 import shutil
 import subprocess
@@ -122,8 +124,19 @@ def build_prepare_release_action(
     release_kind: str,
     drawing_revision: str = "",
     revision_description: str = "",
+    *,
+    change_classes: tuple[str, ...] | list[str] | str | None = None,
+    justification: str = "",
+    source_sha: str = "",
 ) -> WorkflowAction:
+    from .impact import parse_change_classes
+
     _validate_version(version)
+    classes = parse_change_classes(change_classes)
+    clean_justification = " ".join(str(justification or "").split())
+    clean_source_sha = str(source_sha or "").strip()
+    if clean_source_sha and not re.fullmatch(r"[0-9a-f]{7,40}", clean_source_sha):
+        raise BoardwrightError(f"Source commit {clean_source_sha!r} is not a Git commit SHA.")
     selected_variant = normalize_variant(variant)
     selected_kind = release_kind.lower().strip()
     if selected_kind not in RELEASE_KINDS:
@@ -148,6 +161,9 @@ def build_prepare_release_action(
             ("release_kind", selected_kind),
             ("drawing_revision", clean_drawing_revision),
             ("revision_description", clean_revision_description),
+            ("change_classes", ",".join(classes)),
+            ("justification", clean_justification or clean_revision_description),
+            ("source_sha", clean_source_sha),
         ),
         gh_available=_gh_command() is not None,
         repo=config.github_repo,

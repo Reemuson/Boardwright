@@ -40,7 +40,8 @@ from .migration import (
 from .preview import build_preview_plan, dispatch_preview, preview_manual_fallback
 from .preview import build_preview_state, fetch_latest_preview_artifact, format_preview_state
 from .project_setup import setup_project_repository
-from .release import build_release_plan, prepare_release, validate_release_plan
+from .impact import format_impact
+from .release import assess_plan_impact, build_release_plan, prepare_release, validate_release_plan
 from .revision_history import write_revision_variables
 from .schematic_generation import (
     add_hierarchical_sheet,
@@ -259,6 +260,23 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dispatch",
         action="store_true",
         help="Dispatch the CI-owned prepare-release workflow.",
+    )
+    release.add_argument(
+        "--change-class",
+        action="append",
+        default=[],
+        metavar="CLASS",
+        help="Change class (repeatable or comma-separated): documentation, electrical, fabrication, assembly, tooling.",
+    )
+    release.add_argument(
+        "--justification",
+        default="",
+        help="Why this release is needed; recorded in .boardwright/releases.yaml.",
+    )
+    release.add_argument(
+        "--source-sha",
+        default="",
+        help="Reviewed commit the prepare-release workflow must build (default: pushed release branch head).",
     )
 
     subparsers.add_parser(
@@ -1096,7 +1114,22 @@ def _release(args: argparse.Namespace) -> int:
             args.kind,
             args.drawing_revision or "",
             args.revision_description or "",
+            change_classes=args.change_class,
+            justification=args.justification,
+            source_sha=args.source_sha or _pushed_release_sha(config),
         )
+        impact = assess_plan_impact(
+            config,
+            args.version,
+            change_classes=args.change_class,
+            justification=args.justification or args.revision_description or "",
+            drawing_revision=args.drawing_revision or "",
+        )
+        for line in format_impact(impact):
+            print(line)
+        if impact.problems:
+            print("Release impact has blocking problems; not dispatching.")
+            return 1
         print(f"Workflow: {action.workflow}")
         print(f"Ref: {action.ref}")
         print(f"GitHub CLI: {'available' if action.gh_available else 'not found'}")
@@ -1120,8 +1153,12 @@ def _release(args: argparse.Namespace) -> int:
             dry_run=False,
             drawing_revision=args.drawing_revision or "",
             revision_description=args.revision_description or "",
+            change_classes=args.change_class,
+            justification=args.justification,
+            variant=args.variant,
         )
         print(f"Prepared release {plan.version}.")
+        print("Recorded release identities in .boardwright/releases.yaml.")
         print("Updated CHANGELOG.md, .boardwright/document_revisions.yaml, and revision-history variables.")
         print(f"Suggested commit: release: prepare {plan.version}")
         print("Next steps: review changes and prefer boardwright release --dispatch for CI-owned tagging.")
@@ -1134,8 +1171,19 @@ def _release(args: argparse.Namespace) -> int:
     print(f"Release branch: {plan.release_branch}")
     print(f"Working tree changes: {plan.dirty_count}")
     print(f"Local tag exists: {'yes' if plan.local_tag_exists else 'no'}")
-    print(f"Remote tag exists: {'yes' if plan.remote_tag_exists else 'no'}")
+    print(f"Remote tag: {plan.remote_tag_state}" + (f" ({plan.remote_error})" if plan.remote_error else ""))
     print(f"Unreleased changes: {'yes' if plan.has_unreleased_changes else 'no'}")
+    impact = assess_plan_impact(
+        config,
+        args.version,
+        change_classes=args.change_class,
+        justification=args.justification or args.revision_description or "",
+        drawing_revision=args.drawing_revision or "",
+    )
+    print()
+    for line in format_impact(impact):
+        print(line)
+    problems = [*problems, *impact.problems]
     if problems:
         print("Problems:")
         for problem in problems:
@@ -1144,6 +1192,15 @@ def _release(args: argparse.Namespace) -> int:
     print("Dry run passed. Use --prepare with --drawing-revision and --revision-description to update release files.")
     print(f"Suggested commit after prepare: release: prepare {plan.version}")
     return 0
+
+
+def _pushed_release_sha(config) -> str:
+    try:
+        from .accepted import latest_pushed_main_sha
+
+        return latest_pushed_main_sha(config)
+    except BoardwrightError:
+        return ""
 
 
 def _revision_history() -> int:

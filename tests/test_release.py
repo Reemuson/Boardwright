@@ -3,6 +3,7 @@
 
 import unittest
 import shutil
+import tempfile
 import subprocess
 from pathlib import Path
 
@@ -12,6 +13,19 @@ from boardwright.config import load_config
 from boardwright.release import _validate_version, prepare_release, validate_release_plan, build_release_plan
 
 
+
+def _rmtree(path: Path) -> None:
+    """Remove a test workspace, including Git's read-only object files on Windows."""
+    import os
+    import stat
+
+    def _retry(function, target, _exc):
+        os.chmod(target, stat.S_IWRITE)
+        function(target)
+
+    if path.exists():
+        shutil.rmtree(path, onexc=_retry)
+
 class ReleaseTests(unittest.TestCase):
     def test_validates_semver(self) -> None:
         _validate_version("0.1.0")
@@ -19,8 +33,8 @@ class ReleaseTests(unittest.TestCase):
             _validate_version("v0.1.0")
 
     def test_release_plan_allows_empty_unreleased_changelog(self) -> None:
-        root = Path.cwd() / ".test_release_prepare_workspace"
-        shutil.rmtree(root, ignore_errors=True)
+        root = Path(tempfile.gettempdir()) / "bw.test_release_prepare_workspace"
+        _rmtree(root)
         try:
             root.mkdir()
             subprocess.run(["git", "init", "-b", "main"], cwd=root, check=True, capture_output=True)
@@ -42,12 +56,12 @@ class ReleaseTests(unittest.TestCase):
             self.assertFalse(plan.has_unreleased_changes)
             self.assertNotIn("CHANGELOG.md has no unreleased changes.", problems)
         finally:
-            shutil.rmtree(root, ignore_errors=True)
+            _rmtree(root)
 
     def test_prepare_release_writes_no_change_note_when_changelog_is_empty(self) -> None:
-        root = Path.cwd() / ".test_release_workspace"
+        root = Path(tempfile.gettempdir()) / "bw.test_release_workspace"
         if root.exists():
-            shutil.rmtree(root, ignore_errors=True)
+            _rmtree(root)
         try:
             root.mkdir()
             subprocess.run(["git", "init", "-b", "main"], cwd=root, check=True, capture_output=True)
@@ -64,6 +78,11 @@ class ReleaseTests(unittest.TestCase):
             (root / ".boardwright" / "legal.yaml").write_text("boardwright: {}\n", encoding="utf-8")
             (root / ".boardwright" / "revision_history.yaml").write_text("revision_history:\n  slots: 1\n", encoding="utf-8")
             (root / ".boardwright" / "document_revisions.yaml").write_text("document_revisions:\n  schematic:\n    rows: []\n", encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-m", "init"],
+                cwd=root, check=True, capture_output=True,
+            )
             config = load_config(root)
 
             prepare_release(
@@ -88,11 +107,11 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn('REVTABLE_1_REV="B"', revision_vars)
             self.assertIn('REVTABLE_1_DESC="Initial controlled release"', revision_vars)
         finally:
-            shutil.rmtree(root, ignore_errors=True)
+            _rmtree(root)
 
     def test_prepare_release_requires_controlled_revision_row(self) -> None:
-        root = Path.cwd() / ".test_release_requires_revision_workspace"
-        shutil.rmtree(root, ignore_errors=True)
+        root = Path(tempfile.gettempdir()) / "bw.test_release_requires_revision_workspace"
+        _rmtree(root)
         try:
             root.mkdir()
             subprocess.run(["git", "init", "-b", "main"], cwd=root, check=True, capture_output=True)
@@ -109,7 +128,7 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(BoardwrightError):
                 prepare_release(config, "0.1.0", allow_dirty=True, dry_run=False)
         finally:
-            shutil.rmtree(root, ignore_errors=True)
+            _rmtree(root)
 
 
 if __name__ == "__main__":

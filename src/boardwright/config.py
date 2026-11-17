@@ -313,6 +313,8 @@ class BoardwrightConfig:
             "PCBA_NAME": self.pcba_name,
             "PCB_NAME": self.pcb_name,
             "BOARD_REVISION": self.board_revision,
+            "PCB_REVISION": self.board_revision,
+            "SCHEMATIC_REVISION": str(schematic.get("revision") or "").strip(),
             "DOCUMENT_TYPE": str(document.get("type") or "").strip(),
             "DRAWING_TITLE": str(document.get("title") or "").strip().upper(),
             "DRAWING_NUMBER": number,
