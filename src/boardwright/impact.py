@@ -369,8 +369,9 @@ def assess_release_impact(
             )
         reviews.append(
             "Output tooling changed: rendered fabrication/assembly notes and output options may differ. "
-            "The prepare workflow compares controlled outputs (including rendered notes) with the "
-            "previous release where a manifest exists."
+            "For a reused baseline, the prepare workflow compares controlled outputs (including rendered "
+            "notes) with the previous release: its committed manifest, or for a legacy release its "
+            "authenticated published package."
         )
     unrecorded = [
         label
