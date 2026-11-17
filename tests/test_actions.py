@@ -78,12 +78,16 @@ class ActionTests(unittest.TestCase):
             "0.1.2",
             "preliminary",
             "prerelease",
+            "B",
+            "Release connector update",
         )
 
         self.assertEqual("prepare-release.yaml", action.workflow)
         self.assertIn(("version", "0.1.2"), action.fields)
         self.assertIn(("variant", "PRELIMINARY"), action.fields)
         self.assertIn(("release_kind", "prerelease"), action.fields)
+        self.assertIn(("drawing_revision", "B"), action.fields)
+        self.assertIn(("revision_description", "Release connector update"), action.fields)
 
     def test_build_prepare_release_action_supports_draft(self) -> None:
         action = build_prepare_release_action(
@@ -91,6 +95,8 @@ class ActionTests(unittest.TestCase):
             "0.1.2",
             "checked",
             "draft",
+            "A",
+            "Initial controlled release",
         )
 
         self.assertIn(("release_kind", "draft"), action.fields)
@@ -98,8 +104,18 @@ class ActionTests(unittest.TestCase):
 
     def test_rejects_bad_release_kind(self) -> None:
         with self.assertRaises(BoardwrightError):
-            build_prepare_release_action(_config(), "0.1.2", "CHECKED", "weird")
+            build_prepare_release_action(_config(), "0.1.2", "CHECKED", "weird", "A", "Initial")
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PrepareReleaseRevisionInputTests(unittest.TestCase):
+    def test_requires_drawing_revision_inputs(self) -> None:
+        with self.assertRaises(BoardwrightError):
+            build_prepare_release_action(_config(), "0.1.2", "CHECKED", "release", "", "Initial")
+        with self.assertRaises(BoardwrightError):
+            build_prepare_release_action(_config(), "0.1.2", "CHECKED", "release", "A", "")
+        with self.assertRaises(BoardwrightError):
+            build_prepare_release_action(_config(), "0.1.2", "CHECKED", "release", "A", "x" * 61)

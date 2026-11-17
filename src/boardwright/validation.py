@@ -39,6 +39,7 @@ def validate_project(config: BoardwrightConfig) -> list[ValidationIssue]:
     _validate_repository_metadata(config, issues)
     _validate_readme_template(root, issues)
     _validate_known_local_branding(root, issues)
+    _validate_deprecated_schematic_variables(root, issues)
 
     return issues
 
@@ -266,6 +267,27 @@ def _validate_known_local_branding(root: Path, issues: list[ValidationIssue]) ->
             ValidationIssue(
                 "warning",
                 f"Known local branding marker '{marker}' found in {path}",
+            )
+        )
+
+
+def _validate_deprecated_schematic_variables(
+    root: Path,
+    issues: list[ValidationIssue],
+) -> None:
+    for path in sorted(root.glob("*.kicad_sch")):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        count = text.count("${REVISION}")
+        if not count:
+            continue
+        issues.append(
+            ValidationIssue(
+                "error",
+                f"Deprecated text variable '${{REVISION}}' found {count} time(s) in "
+                f"{path.name}; use '${{DRAWING_REVISION}}' instead.",
             )
         )
 

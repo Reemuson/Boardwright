@@ -31,7 +31,10 @@ venv/
 # Boardwright local scratch/output
 .archive/
 .old-kibot-yaml/
+/.agents/
+[Aa][Gg][Ee][Nn][Tt][Ss].[Mm][Dd]
 .boardwright/revision_history_variables.env
+.boardwright/revision_history_*.csv
 .boardwright/sheet_titles.env
 .boardwright-sandbox/
 boardwright-preview/

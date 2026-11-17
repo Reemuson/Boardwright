@@ -119,7 +119,7 @@
 		)
 		(justify top)
 	)
-	(tbtext "${TITLE}"
+	(tbtext "${DRAWING_TITLE}"
 		(name "")
 		(pos 26 11)
 		(font
@@ -571,7 +571,7 @@
 		)
 		(justify top)
 	)
-	(tbtext "${BOARD_NAME}"
+	(tbtext "${PCBA_NAME}"
 		(name "")
 		(pos 75 35)
 		(font
@@ -591,7 +591,7 @@
 		(start 185 25)
 		(end 145 25)
 	)
-	(tbtext "${PROJECT_NAME}"
+	(tbtext "${PCBA_NAME}"
 		(name "")
 		(pos 146 62)
 		(font
@@ -640,7 +640,7 @@
 		)
 		(justify right)
 	)
-	(tbtext "${REVISION}"
+	(tbtext "${DRAWING_REVISION}"
 		(name "")
 		(pos 66 7.5)
 		(font

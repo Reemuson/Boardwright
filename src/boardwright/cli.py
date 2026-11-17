@@ -25,6 +25,18 @@ from .errors import BoardwrightError
 from .generated_outputs import clean_generated_outputs, format_cleanup_summary
 from .git_ops import commit_all, dirty_files
 from .legal import generate_legal_files
+from .managed_project import (
+    apply_update_plan,
+    build_update_plan,
+    update_status,
+    write_plan,
+)
+from .migration import (
+    apply_migration_plan,
+    build_migration_plan,
+    looks_like_nguyen_project,
+    migration_summary,
+)
 from .preview import build_preview_plan, dispatch_preview, preview_manual_fallback
 from .preview import build_preview_state, fetch_latest_preview_artifact, format_preview_state
 from .project_setup import setup_project_repository
@@ -94,6 +106,10 @@ def main(argv: list[str] | None = None) -> int:
             return _testbench(args)
         if args.command == "adopt":
             return _adopt(args)
+        if args.command == "migrate":
+            return _migrate(args)
+        if args.command == "update":
+            return _update(args)
         if args.command == "generate":
             return _generate(args)
         if args.command == "outputs":
@@ -230,6 +246,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="GitHub Release state for CI-owned release preparation.",
     )
     release.add_argument(
+        "--drawing-revision",
+        required=False,
+        help="Controlled drawing revision to add to document_revisions.yaml.",
+    )
+    release.add_argument(
+        "--revision-description",
+        required=False,
+        help="Short revision-table description, 60 characters or fewer.",
+    )
+    release.add_argument(
         "--dispatch",
         action="store_true",
         help="Dispatch the CI-owned prepare-release workflow.",
@@ -237,7 +263,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser(
         "revision-history",
-        help="Write fixed REVHIST_* variables from CHANGELOG.md.",
+        help="Write fixed REVTABLE_* variables from document_revisions.yaml.",
     )
 
     subparsers.add_parser("git-status", help="List changed files.")
@@ -314,6 +340,50 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Do not install Boardwright GitHub workflow files.",
     )
 
+    migrate = subparsers.add_parser(
+        "migrate",
+        help="Migrate a Nguyen hierarchical template project to Boardwright.",
+    )
+    migrate_subparsers = migrate.add_subparsers(dest="migrate_command")
+    migrate_plan = migrate_subparsers.add_parser(
+        "plan",
+        help="Inspect a legacy project and write a reviewable migration plan.",
+    )
+    migrate_plan.add_argument(
+        "--project",
+        type=Path,
+        help="Primary root KiCad project when more than one .kicad_pro exists.",
+    )
+    migrate_plan.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="YAML migration plan to write.",
+    )
+    migrate_apply = migrate_subparsers.add_parser(
+        "apply",
+        help="Apply a reviewed migration plan on a clean migration branch.",
+    )
+    migrate_apply.add_argument("plan", type=Path, help="Reviewed migration plan YAML.")
+
+    update = subparsers.add_parser(
+        "update",
+        help="Inspect or update Boardwright-managed project infrastructure.",
+    )
+    update_subparsers = update.add_subparsers(dest="update_command")
+    update_subparsers.add_parser("status", help="Show installed payload state and local modifications.")
+    update_plan = update_subparsers.add_parser(
+        "plan",
+        help="Write a reviewable Boardwright update plan.",
+    )
+    update_plan.add_argument("--to", default="", help="Target payload version.")
+    update_plan.add_argument("--output", type=Path, required=True, help="YAML update plan to write.")
+    update_apply = update_subparsers.add_parser(
+        "apply",
+        help="Apply a conflict-free Boardwright update plan.",
+    )
+    update_apply.add_argument("plan", type=Path, help="Reviewed update plan YAML.")
+
     generate = subparsers.add_parser(
         "generate",
         help="Generate schematic skeletons and extra sheet files.",
@@ -351,7 +421,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     generate_one_sheet.add_argument(
         "--title",
-        help="Schematic title. Defaults to the configured board name.",
+        help="Schematic title. Defaults to the configured PCBA name.",
     )
     generate_one_sheet.add_argument(
         "--company",
@@ -378,7 +448,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     generate_hierarchy.add_argument(
         "--project-name",
-        help="Project title. Defaults to the configured project name.",
+        help="Project title. Defaults to the configured PCBA name.",
     )
     generate_hierarchy.add_argument(
         "--company",
@@ -639,13 +709,18 @@ def _outputs(args: argparse.Namespace) -> int:
 
 def _adopt(args: argparse.Namespace) -> int:
     project_root = find_project_root(Path.cwd())
+    if not (project_root / ".boardwright").is_dir() and looks_like_nguyen_project(project_root):
+        raise BoardwrightError(
+            "Detected a Nguyen hierarchical template project. "
+            "Use `boardwright migrate plan --output migration.yaml`."
+        )
     written = init_config(root=project_root, force=args.force, workflows=not args.no_workflows)
     config = load_config(project_root)
     repo = (args.github_repo or _github_repo_from_remote(config.root)).strip()
     updates = {}
-    if repo and repo != config.github_repo:
-        updates["github_repo"] = repo
     git_url = remote_url(config.root)
+    if not git_url and repo:
+        git_url = f"https://github.com/{repo}.git"
     if git_url:
         current_git_url = str(config.project.get("project", {}).get("git_url", "")).strip()
         if git_url != current_git_url:
@@ -659,6 +734,51 @@ def _adopt(args: argparse.Namespace) -> int:
     for path in written:
         print(f"wrote {path}")
     print("Adopted existing project into Boardwright.")
+    return 0
+
+
+def _migrate(args: argparse.Namespace) -> int:
+    if args.migrate_command == "plan":
+        root = find_project_root(Path.cwd())
+        plan = build_migration_plan(root, args.project)
+        target = write_plan(args.output, plan)
+        print(migration_summary(plan))
+        print(f"Wrote migration plan: {target}")
+        return 1 if plan.get("blockers") else 0
+    if args.migrate_command == "apply":
+        written = apply_migration_plan(args.plan)
+        for path in written:
+            print(f"wrote {path}")
+        print("Migration applied. Review and commit the changes; no commit was created.")
+        return 0
+    print("usage: boardwright migrate {plan,apply}")
+    return 0
+
+
+def _update(args: argparse.Namespace) -> int:
+    root = find_project_root(Path.cwd())
+    if args.update_command in {None, "status"}:
+        status = update_status(root)
+        print(f"Schema version: {status['schema_version']}")
+        print(f"Installed template: {status['installed_version']}")
+        print(f"Available template: {status['available_version']}")
+        print(f"Modified managed files: {len(status['modified'])}")
+        print(f"Missing managed files: {len(status['missing'])}")
+        print(f"Update blockers: {len(status['blockers'])}")
+        return 0
+    if args.update_command == "plan":
+        plan = build_update_plan(root, to_version=args.to)
+        target = write_plan(args.output, plan)
+        print(f"Wrote update plan: {target}")
+        print(f"Blockers: {len(plan.get('blockers', []))}")
+        return 1 if plan.get("blockers") else 0
+    if args.update_command == "apply":
+        written = apply_update_plan(args.plan)
+        for path in written:
+            print(f"updated {path}")
+        print("Boardwright update applied; no commit was created.")
+        return 0
+    print("usage: boardwright update {status,plan,apply}")
     return 0
 
 
@@ -677,7 +797,7 @@ def _generate(args: argparse.Namespace) -> int:
         output = args.output if args.output.is_absolute() else config.root / args.output
         result = generate_one_sheet_schematic(
             output,
-            title=args.title or config.board_name,
+            title=args.title or config.pcba_name,
             company=args.company or str(config.project.get("project", {}).get("company", "")),
             revision=args.revision or config.board_revision,
             force=args.force,
@@ -687,7 +807,7 @@ def _generate(args: argparse.Namespace) -> int:
     if args.generate_command == "hierarchy":
         result = generate_hierarchical_project(
             args.output_dir if args.output_dir.is_absolute() else config.root / args.output_dir,
-            project_name=args.project_name or config.project_name,
+            project_name=args.project_name or config.pcba_name,
             company=args.company or str(config.project.get("project", {}).get("company", "")),
             revision=args.revision or config.board_revision,
             sheet_name=args.sheet_name,
@@ -974,6 +1094,8 @@ def _release(args: argparse.Namespace) -> int:
             args.version,
             args.variant,
             args.kind,
+            args.drawing_revision or "",
+            args.revision_description or "",
         )
         print(f"Workflow: {action.workflow}")
         print(f"Ref: {action.ref}")
@@ -996,9 +1118,11 @@ def _release(args: argparse.Namespace) -> int:
             args.version,
             allow_dirty=args.allow_dirty,
             dry_run=False,
+            drawing_revision=args.drawing_revision or "",
+            revision_description=args.revision_description or "",
         )
         print(f"Prepared release {plan.version}.")
-        print("Updated CHANGELOG.md and .boardwright/revision_history_variables.env.")
+        print("Updated CHANGELOG.md, .boardwright/document_revisions.yaml, and revision-history variables.")
         print(f"Suggested commit: release: prepare {plan.version}")
         print("Next steps: review changes and prefer boardwright release --dispatch for CI-owned tagging.")
         return 0
@@ -1017,7 +1141,7 @@ def _release(args: argparse.Namespace) -> int:
         for problem in problems:
             print(f"- {problem}")
         return 1
-    print("Dry run passed. Use --prepare to update release files.")
+    print("Dry run passed. Use --prepare with --drawing-revision and --revision-description to update release files.")
     print(f"Suggested commit after prepare: release: prepare {plan.version}")
     return 0
 

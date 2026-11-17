@@ -33,6 +33,8 @@ class CliTests(unittest.TestCase):
         self.assertIn("usage: boardwright", completed.stdout)
         self.assertIn("accepted", completed.stdout)
         self.assertIn("adopt", completed.stdout)
+        self.assertIn("migrate", completed.stdout)
+        self.assertIn("update", completed.stdout)
         self.assertIn("doctor", completed.stdout)
         self.assertIn("review", completed.stdout)
         self.assertIn("testbench", completed.stdout)

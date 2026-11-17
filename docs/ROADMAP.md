@@ -12,8 +12,8 @@ Boardwright has a working local tooling foundation, a usable TUI workflow
 cockpit, and split GitHub Actions workflows for preview, accepted outputs,
 release preparation, and tag publishing. A full live run through preview,
 review, accept to main, and release has succeeded. The critical path is now
-productization: the root project README, legal/provenance clarity, configurable
-KiCad title-block/worksheet branding, and deeper project metadata editing.
+productization: external legal review, worksheet consolidation, richer project
+metadata editing, and generated README/output polish.
 
 The current branch is expected to be `main` for accepted template work. Normal
 Boardwright project usage still expects design changes on `dev`.
@@ -22,26 +22,20 @@ Boardwright project usage still expects design changes on `dev`.
 
 Do these before treating Boardwright as a clean public/template release:
 
-1. Root project README: replace the inherited/root README with a
-   Boardwright-native README that explains what this repository is, how to use
-   it, and how the generated project README differs from the template README.
-2. Legal and provenance review: maintain the implemented source-available
+1. Legal and provenance review: maintain the implemented source-available
    Boardwright license stack, identify Nguyen-derived files, confirm bundled
-   third-party assets/fonts/scripts, and keep NOTICE/THIRD_PARTY_NOTICES
-   accurate.
-3. Configurable KiCad sheets/title blocks: worksheet selection follows the
-   KiCad project file, while legal text and embedded worksheet logo replacement
-   come from project config/tooling; continue refining the TUI and validation
-   around these fields.
-4. Project Info 2.0: the TUI now exposes project, template, sheet, variant, and
-   asset sections; continue expanding it to cover legal/provenance, fabrication metadata,
-   assembly notes, controlled impedance, and output/readme policy through the
-   TUI/config model.
-5. Generated README polish: make project READMEs useful hardware front pages
+   third-party assets/fonts/scripts, keep notices accurate, and obtain qualified
+   legal review.
+2. Worksheet consolidation: retain configurable identity and legal text while
+   reducing transitional worksheet variants after combined-PDF behavior is
+   stable.
+3. Project Info 2.0: expand the existing project, template, sheet, variant, and
+   asset sections to cover fabrication metadata, assembly notes, controlled
+   impedance, and output/README policy.
+4. Generated README polish: make project READMEs useful hardware front pages
    without broken badges or stale placeholders.
-6. Project generation: add tools for revision-history sheet generation,
-   one-sheet project setup, hierarchical schematic skeletons, and TUI-assisted
-   hierarchical sheet creation.
+5. Project generation polish: refine the implemented revision-history,
+   one-sheet, hierarchy, and TUI-assisted sheet-generation helpers.
 
 ## Milestone 1: Local Project Control
 
@@ -58,12 +52,8 @@ Delivered:
 - optional Textual TUI with console fallback
 - safe git status, commit, and push helpers
 - user/global and project-local install helper
+- developer/test extra via `pip install -e ".[dev]"`
 - unit tests for core local behavior
-
-Remaining polish:
-
-- consider a developer/test extra for smoother local test setup
-- developer/test extra is now available via `pip install -e ".[dev]"`
 
 ## Milestone 2: Preview Loop
 
@@ -252,23 +242,37 @@ Success criteria:
 
 ## Later
 
-- richer legal/licence profiles
-- curated source package support if needed
-- local KiBot/Docker runner after the CI-first flow is solid
+- first-class local Docker output generation matching the CI pipeline
 - multi-board or assembly variants once KiCad/KiBot variant support is stable
 - richer artifact browser if the small cockpit proves insufficient
+
 ## Planned Local Docker Output Engine
 
-Boardwright should grow a first-class local Docker output engine alongside the current GitHub Actions flow. The target user experience is a non-interactive local command such as `boardwright preview --local` or `boardwright outputs generate --engine docker --variant PRELIMINARY` that mirrors the CI pipeline without requiring the user to remember KiBot groups or helper scripts.
+Boardwright should grow a first-class local Docker output engine alongside the
+current GitHub Actions flow. The target user experience is a non-interactive
+local command such as `boardwright preview --local` or
+`boardwright outputs generate --engine docker --variant PRELIMINARY` that
+mirrors the CI pipeline without requiring the user to remember KiBot groups or
+helper scripts.
 
 The local engine should:
 
-- detect Docker and report a clear doctor/setup action when it is missing or not running
-- use the KiCad 9 KiBot image, currently `ghcr.io/inti-cmnb/kicad9_auto_full:dev`
+- detect Docker and report a clear doctor/setup action when it is missing or
+  not running
+- use the KiCad 9 KiBot image, currently
+  `ghcr.io/inti-cmnb/kicad9_auto_full:dev`
 - mount the project directory read/write and keep generated files project-local
 - install bundled fonts inside the container before generation
-- run `prepare_pcb_tables.py`, KiBot `table_sources`, `prune_pdf_pages.py`, the selected KiBot output group, and `clean_generated_outputs.py` in the same order as CI
-- write reviewable preview files to `boardwright-preview/` for local review workflows
-- support a project setting such as `outputs.preview_engine: docker` while keeping GitHub Actions available for shared/release workflows
+- run `prepare_pcb_tables.py`, KiBot `table_sources`, `prune_pdf_pages.py`, the
+  selected KiBot output group, and `clean_generated_outputs.py` in the same
+  order as CI
+- write reviewable preview files to `boardwright-preview/` for local review
+  workflows
+- support a project setting such as `outputs.preview_engine: docker` while
+  keeping GitHub Actions available for shared/release workflows
 
-Installing Docker Desktop itself should remain guided rather than silent: Windows/macOS installs may need admin approval, WSL2 setup, service startup, license prompts, or reboot. Boardwright can offer `boardwright local setup` to validate Docker and pull the image, but it should not make hidden system-level changes.
+Installing Docker Desktop itself should remain guided rather than silent:
+Windows/macOS installs may need admin approval, WSL2 setup, service startup,
+license prompts, or reboot. Boardwright can offer `boardwright local setup` to
+validate Docker and pull the image, but it should not make hidden system-level
+changes.

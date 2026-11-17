@@ -14,6 +14,8 @@ from .errors import BoardwrightError
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 DEFAULT_CHUNK_SIZE = 76
+DEFAULT_DATA_INDENT = "\t\t"
+MAX_DATA_INDENT_CHARS = 32
 
 
 @dataclass(frozen=True)
@@ -56,9 +58,9 @@ def embed_logo_in_worksheet(
     start, end = _nth_bitmap_block(text, bitmap_index)
     block = text[start : end + 1]
     data_start, data_end = _data_block_bounds(block)
-    indent = _line_indent(block, data_start)
+    data_line_start, indent = _data_line_start_and_indent(block, data_start)
     updated_data = format_bitmap_data(png, indent=indent, chunk_size=chunk_size)
-    updated_block = block[:data_start] + updated_data + block[data_end + 1 :]
+    updated_block = block[:data_line_start] + updated_data + block[data_end + 1 :]
 
     worksheet.write_text(text[:start] + updated_block + text[end + 1 :], encoding="utf-8", newline="\n")
     return WorksheetLogoResult(
@@ -139,14 +141,15 @@ def _data_block_bounds(block: str) -> tuple[int, int]:
     return start, _find_matching_paren(block, start)
 
 
-def _line_indent(text: str, index: int) -> str:
+def _data_line_start_and_indent(text: str, index: int) -> tuple[int, str]:
     line_start = text.rfind("\n", 0, index)
     line_start = 0 if line_start == -1 else line_start + 1
-    indent = []
-    while line_start < len(text) and text[line_start] in {" ", "\t"}:
-        indent.append(text[line_start])
-        line_start += 1
-    return "".join(indent) or "\t\t"
+    raw_indent = text[line_start:index]
+    if raw_indent.strip():
+        return index, DEFAULT_DATA_INDENT
+    if 0 < len(raw_indent) <= MAX_DATA_INDENT_CHARS:
+        return line_start, raw_indent
+    return line_start, DEFAULT_DATA_INDENT
 
 
 def _find_matching_paren(text: str, start: int) -> int:

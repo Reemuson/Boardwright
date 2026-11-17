@@ -57,8 +57,6 @@ def setup_project_repository(
         current_git_url = str(config.project.get("project", {}).get("git_url", "")).strip()
         if current_git_url != normalized_remote:
             updates["git_url"] = normalized_remote
-    if github_repo and github_repo != config.github_repo:
-        updates["github_repo"] = github_repo
     if updates:
         update_project_config(config, project_fields=updates)
         messages.append("Updated Boardwright repository metadata.")

@@ -69,6 +69,37 @@ class WorksheetLogoTests(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
+    def test_embed_logo_normalizes_excessive_data_indent(self) -> None:
+        root = Path("tests/.tmp_worksheet_logo")
+        if root.exists():
+            shutil.rmtree(root)
+        root.mkdir()
+        try:
+            logo = root / "logo.png"
+            logo.write_bytes(PNG_1X1)
+            worksheet = root / "test.kicad_wks"
+            excessive_indent = "\t" * 2000
+            worksheet.write_text(
+                f"""(kicad_wks
+    (bitmap
+        (name "")
+        (pos 10 20)
+        (scale 0.5)
+{excessive_indent}(data "old")
+    )
+)""",
+                encoding="utf-8",
+            )
+
+            embed_logo_in_worksheet(worksheet, logo)
+
+            text = worksheet.read_text(encoding="utf-8")
+            self.assertLess(worksheet.stat().st_size, 5000)
+            self.assertIn('\n\t\t(data "', text)
+            self.assertNotIn(excessive_indent, text)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

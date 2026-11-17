@@ -579,6 +579,8 @@ boardwright accepted
 boardwright review
 boardwright release
 boardwright doctor
+boardwright migrate
+boardwright update
 boardwright testbench
 boardwright generate
 boardwright source-package
@@ -603,6 +605,27 @@ Implemented onboarding helper:
 
 - `boardwright adopt`: adopts an existing KiCad project by initializing the
   Boardwright config files and filling repository URL metadata when possible.
+  Recognized Nguyen hierarchical-template descendants are directed to the
+  migration workflow instead of being adopted as generic projects.
+
+Implemented migration and managed-update support:
+
+- `boardwright migrate plan`: recognizes the Nguyen hierarchical KiCad/KiBot
+  template family, selects one root KiCad project, collects metadata candidates,
+  fingerprints migration inputs, and writes a reviewable YAML plan.
+- `boardwright migrate apply`: requires a clean non-release branch and resolved
+  metadata, rechecks fingerprints, preserves KiCad design sources and repository
+  history, replaces legacy infrastructure, rewrites worksheet references,
+  validates, and leaves the result uncommitted.
+- `boardwright update status`: compares managed files with the installed
+  `.boardwright/state.yaml` payload record.
+- `boardwright update plan` and `boardwright update apply`: update untouched
+  managed files, three-way merge non-overlapping text customizations, block on
+  conflicting or binary changes, migrate missing configuration keys without
+  replacing user values, and roll back when validation fails.
+- `.boardwright/state.yaml` records schema/template versions, migration origin,
+  managed-file hashes, strategies, and managed text bases. KiCad design files,
+  project metadata, changelog history, licences, and user assets are user-owned.
 
 Implemented schematic generation support:
 

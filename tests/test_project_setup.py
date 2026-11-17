@@ -38,6 +38,7 @@ class ProjectSetupTests(unittest.TestCase):
         self.assertTrue((self.root / ".git").exists())
         self.assertEqual("https://github.com/owner/repo.git", remote_url(self.root))
         self.assertEqual("https://github.com/owner/repo.git", updated.project["project"]["git_url"])
+        self.assertNotIn("github_repo", updated.project["project"])
         self.assertEqual("owner/repo", updated.github_repo)
         self.assertTrue(result.initialized_git)
         self.assertTrue(result.configured_origin)
@@ -50,6 +51,7 @@ class ProjectSetupTests(unittest.TestCase):
 
         self.assertFalse((self.root / ".git").exists())
         self.assertEqual("https://github.com/owner/repo.git", updated.project["project"]["git_url"])
+        self.assertNotIn("github_repo", updated.project["project"])
         self.assertEqual("owner/repo", updated.github_repo)
         self.assertFalse(result.initialized_git)
         self.assertFalse(result.configured_origin)

@@ -20,6 +20,32 @@ class TuiTests(unittest.TestCase):
         self.assertIsInstance(tui.textual_available(), bool)
         self.assertIn("pip install", tui.INSTALL_HINT)
 
+    def test_legal_profile_options_include_unknown_selected_profile(self) -> None:
+        options = tui._legal_profile_options(
+            {"public-hardware": {}},
+            "migrated-project",
+        )
+
+        self.assertIn(("migrated-project", "migrated-project"), options)
+        self.assertIn(("public-hardware", "public-hardware"), options)
+
+    @patch("boardwright.tui.write_revision_variables")
+    @patch("boardwright.tui.load_config")
+    def test_refresh_project_text_variables_syncs_schematic_metadata(
+        self,
+        mock_load_config,
+        mock_write_revision_variables,
+    ) -> None:
+        config = object()
+        expected = Path(".boardwright/revision_history_variables.env")
+        mock_load_config.return_value = config
+        mock_write_revision_variables.return_value = expected
+
+        result = tui._refresh_project_text_variables()
+
+        self.assertEqual(expected, result)
+        mock_write_revision_variables.assert_called_once_with(config, "schematic")
+
     def test_responsive_layout_mode_switches_for_short_terminals(self) -> None:
         self.assertEqual("compact", tui._responsive_layout_mode(120, 40))
         self.assertEqual("tiny", tui._responsive_layout_mode(195, 32))

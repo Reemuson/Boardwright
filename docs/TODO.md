@@ -6,12 +6,17 @@
 This is the actionable tracker. Product rules live in `SPEC.md`; sequencing
 lives in `ROADMAP.md`.
 
-## Current Focus: Productization Critical Path
+## Recently Completed: Productization Foundation
 
-Goal: turn the now-working workflow into a clean template product: clear README,
-clear legal/provenance, neutral configurable KiCad sheets, and project metadata
-editing.
+This section records the completed foundation for a clean template product.
+Current open work starts in the next section.
 
+- [x] Add plan/apply migration for Nguyen hierarchical-template descendants,
+      preserving KiCad design sources, Git/release history, changelog, and
+      project licensing while replacing recognized legacy infrastructure.
+- [x] Add manifest-backed Boardwright project updates with configuration schema
+      additions, three-way text merges, conflict blocking, validation, and
+      rollback.
 - [x] Replace compact CI abbreviations with readable phase names in the TUI
       status strip and evidence panel.
 - [x] Make the dashboard tag display use the latest semantic release tag, with
@@ -36,9 +41,9 @@ editing.
       `template.sheet_image` paths with `boardwright worksheet-logo`.
 - [x] Capture known live CI/release findings in this tracker.
 
-## Next: Root README, Legal, And Template Branding
+## Next: Worksheets, Legal Review, And Template Polish
 
-- [ ] Table full worksheet consolidation until combined PDF output stabilizes:
+- [ ] Defer full worksheet consolidation until combined PDF output stabilizes:
       keep the normal GIT worksheet as the intended single Boardwright template,
       keep the CME worksheet as the worked branded example, and retire permanent
       `_PCB` templates once standalone assembly/fabrication numbering no longer
@@ -46,13 +51,13 @@ editing.
 - [ ] Design Boardwright-native standardized worksheet families after the
       consolidation decision: AS 1100, ISO, and ANSI-style layouts, all driven
       by project config/text variables rather than hardcoded business fields.
-- [ ] Keep the simplified drawing identity model aligned: project name, PCBA name, PCB
-      number, board revision/spin, document revision, and configurable document
-      revision scheme. Keep Git release/package version separate.
-- [ ] Add drawing signoff metadata and text variables for drawn, checked, and their dates.
+- [ ] Keep the simplified drawing identity model aligned: project name, PCBA
+      name, PCB name, board revision/spin, drawing revision, and configurable
+      drawing revision scheme. Keep Git release/package version separate.
+- [ ] Keep drawn-by/date as generated document metadata and checked/approved as
+      post-generation signature areas.
 - [ ] Extend revision-history variables/sheets to support controlled-document
-      rows with revision, description, drawn/date, checked/date, and optional
-      date columns.
+      rows with revision, date, description, and drawn-by fields.
 - [x] Audit root README draft notes and decide what moves into
       the real root README.
 - [x] Add a clear section explaining the difference between the Boardwright

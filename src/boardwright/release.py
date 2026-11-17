@@ -12,7 +12,7 @@ from .changelog import promote_unreleased_file, read_changelog, unreleased_has_c
 from .config import BoardwrightConfig
 from .errors import BoardwrightError
 from .git_ops import current_branch, dirty_files
-from .revision_history import write_revision_variables
+from .revision_history import record_document_revision_release, write_revision_variables
 
 
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
@@ -67,6 +67,10 @@ def prepare_release(
     version: str,
     allow_dirty: bool = False,
     dry_run: bool = True,
+    *,
+    drawing_revision: str = "",
+    revision_description: str = "",
+    document_key: str = "schematic",
 ) -> ReleasePlan:
     plan = build_release_plan(config, version)
     problems = validate_release_plan(plan, allow_dirty=allow_dirty)
@@ -74,8 +78,18 @@ def prepare_release(
         raise BoardwrightError("; ".join(problems))
 
     if not dry_run:
-        promote_unreleased_file(config.root, version, date.today(), allow_empty=True)
-        write_revision_variables(config)
+        release_date = date.today()
+        promote_unreleased_file(config.root, version, release_date, allow_empty=True)
+        record_document_revision_release(
+            config,
+            revision=drawing_revision,
+            description=revision_description,
+            date=release_date.isoformat(),
+            document_key=document_key,
+        )
+        from .config import load_config
+
+        write_revision_variables(load_config(config.root), document_key)
 
     return plan
 

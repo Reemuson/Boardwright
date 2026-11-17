@@ -64,6 +64,22 @@ STATUS_UNSET = "#80919a"
 STATUS_INFO = "#6fa5c8"
 
 
+def _legal_profile_options(
+    profiles: dict[str, object],
+    selected: str,
+) -> list[tuple[str, str]]:
+    names = {str(name) for name in profiles if str(name).strip()}
+    if selected.strip():
+        names.add(selected.strip())
+    if not names:
+        names.add("public-hardware")
+    return [(name, name) for name in sorted(names)]
+
+
+def _refresh_project_text_variables() -> Path:
+    return write_revision_variables(load_config(), "schematic")
+
+
 @dataclass(frozen=True)
 class DashboardState:
     status: ProjectStatus
@@ -809,7 +825,7 @@ def _build_textual_app():
                             yield from field_input("Render image", str(assets.get("product_image", "")), placeholder="Render image path", widget_id="asset_product_image", hint="Hero render or product image used in docs.")
                         with VerticalScroll(id="info_section_legal", classes="project-info-pane info-section"):
                             yield from section_intro("Legal profile", "Defaults for notices, worksheets, and release packaging.")
-                            yield from field_select("Profile", config.legal_profile, widget_id="legal_profile", hint="Select the baseline legal profile for this project.", options=[(name, name) for name in sorted(legal_profiles) or [config.legal_profile]])
+                            yield from field_select("Profile", config.legal_profile, widget_id="legal_profile", hint="Select the baseline legal profile for this project.", options=_legal_profile_options(legal_profiles, config.legal_profile))
                             yield from field_input("Hardware design license", str(legal_project.get("hardware_design_license", "")), placeholder="CERN-OHL-S-2.0", widget_id="legal_hardware_design_license", hint="Primary hardware design license identifier.")
                             yield from field_input("Copyright holder", str(legal_project.get("copyright_holder", "")), placeholder="Acme Labs", widget_id="legal_copyright_holder", hint="Entity or person named in copyright notices.")
                             yield from field_input("Notice file", str(legal_project.get("notice_file", "NOTICE.md")), placeholder="NOTICE.md", widget_id="legal_notice_file", hint="Repository file that contains attribution and legal notice text.")
@@ -1690,10 +1706,22 @@ def _build_textual_app():
                 self.action_view_validation()
 
         def action_refresh(self) -> None:
+            variable_sync_error = ""
+            try:
+                _refresh_project_text_variables()
+            except (BoardwrightError, OSError) as exc:
+                variable_sync_error = str(exc)
             self.state = collect_dashboard_state()
             self.ci_status = "Polling CI..."
             self._render_state()
-            self.notify("Refreshed.")
+            if variable_sync_error:
+                self.notify(
+                    f"Dashboard refreshed, but project text variables could not be synchronized: "
+                    f"{variable_sync_error}",
+                    severity="error",
+                )
+            else:
+                self.notify("Refreshed project metadata and dashboard.")
             self._poll_ci_status(notify=True)
 
         def _poll_ci_status(self, notify: bool = False) -> None:

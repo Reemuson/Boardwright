@@ -181,16 +181,19 @@ class KiBotCiTests(unittest.TestCase):
         self.assertIn("Drawing revision", template)
         self.assertIn("Board revision", template)
         self.assertIn("Release version", template)
-        self.assertIn("## OUTPUTS", template)
-        self.assertIn("Generated manufacturing, schematic, test, and release packages", template)
+        self.assertIn("## Project Outputs", template)
+        self.assertIn(
+            "GitHub Actions generates the manufacturing, schematic, test, and release packages.",
+            template,
+        )
         self.assertIn("Latest release", template)
         self.assertIn("Release package", template)
         self.assertIn("Preview workflow", template)
         self.assertIn("Accepted outputs workflow", template)
         self.assertIn("Prepare release workflow", template)
         self.assertIn("Publish release workflow", template)
-        self.assertIn("FABRICATION SNAPSHOT", template)
-        self.assertIn("COMPONENT SNAPSHOT", template)
+        self.assertIn("## Fabrication Summary", template)
+        self.assertIn("## Component Summary", template)
 
     def test_text_variables_separate_board_revision_release_version_and_source_hashes(self) -> None:
         preflight = Path(
@@ -220,6 +223,7 @@ class KiBotCiTests(unittest.TestCase):
         self.assertIn("variable: 'DRAWING_REVISION'", preflight)
         self.assertNotIn("variable: 'DOCUMENT_REVISION'", preflight)
         self.assertNotIn("variable: 'DOCUMENT_REVISION_SCHEME'", preflight)
+        self.assertIn("DRAWN_DATE: '@DRAWN_DATE@'", main)
         self.assertIn("variable: 'DRAWN_BY'", preflight)
         self.assertNotIn("CHECKED_BY", preflight)
         self.assertNotIn("CHECKED_DATE", preflight)

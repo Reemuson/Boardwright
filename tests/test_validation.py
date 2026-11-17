@@ -8,6 +8,7 @@ from boardwright.config import BoardwrightConfig
 from boardwright.validation import (
     _find_known_local_branding,
     _has_edge_cuts_geometry,
+    _validate_deprecated_schematic_variables,
     validate_project,
 )
 
@@ -77,8 +78,30 @@ class ValidationTests(unittest.TestCase):
             if root.exists():
                 root.rmdir()
 
+    def test_rejects_legacy_revision_variable_in_schematic(self) -> None:
+        root = Path("tests/.tmp_deprecated_schematic_variable")
+        path = root / "example.kicad_sch"
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                '(kicad_sch (title_block (rev "${REVISION}")))',
+                encoding="utf-8",
+            )
+            issues = []
 
-    def test_validates_document_revision_scheme_and_signoff_dates(self) -> None:
+            _validate_deprecated_schematic_variables(root, issues)
+
+            self.assertEqual(1, len(issues))
+            self.assertEqual("error", issues[0].level)
+            self.assertIn("DRAWING_REVISION", issues[0].message)
+        finally:
+            if path.exists():
+                path.unlink()
+            if root.exists():
+                root.rmdir()
+
+
+    def test_validates_document_scheme_and_signoff_dates(self) -> None:
         config = BoardwrightConfig(
             root=Path("."),
             project={
@@ -87,9 +110,12 @@ class ValidationTests(unittest.TestCase):
                     "name": "Test",
                     "company": "Company",
                     "designer": "Designer",
-                    "document_revision_scheme": "roman",
-                    "drawn_date": "05/07/2026",
-                    "checked_date": "2026-07-05",
+                },
+                "documents": {
+                    "schematic": {
+                        "revision_scheme": "roman",
+                        "drawn_date": "05/07/2026",
+                    }
                 },
                 "variants": {
                     "dev_default": "DRAFT",
@@ -106,8 +132,8 @@ class ValidationTests(unittest.TestCase):
 
         issues = validate_project(config)
 
-        self.assertTrue(any("Unsupported project.document_revision_scheme" in issue.message for issue in issues))
-        self.assertTrue(any(issue.level == "warning" and "project.drawn_date" in issue.message for issue in issues))
+        self.assertTrue(any("Unsupported documents.schematic.revision_scheme" in issue.message for issue in issues))
+        self.assertTrue(any(issue.level == "warning" and "documents.schematic.drawn_date" in issue.message for issue in issues))
 
 
 if __name__ == "__main__":

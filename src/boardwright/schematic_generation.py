@@ -272,7 +272,7 @@ def _render_child_schematic(*, child_title: str) -> str:
 \t(title_block
 \t\t(title "{title}")
 \t\t(date "{date.today().isoformat()}")
-\t\t(rev "${{REVISION}}")
+\t\t(rev "${{DRAWING_REVISION}}")
 \t\t(company "${{COMPANY}}")
 \t)
 \t(lib_symbols)

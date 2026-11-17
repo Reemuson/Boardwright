@@ -11,18 +11,20 @@ class KiBotRevisionHistoryTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("REVHIST_1_TITLE", text)
-        self.assertIn("REVHIST_1_REVISION", text)
-        self.assertIn("REVHIST_1_APPROVED_DATE", text)
-        self.assertIn("REVHIST_12_BODY", text)
-        self.assertIn("REVHIST_12_CHECKED_BY", text)
+        self.assertIn("REVTABLE_1_REV", text)
+        self.assertIn("REVTABLE_1_DATE", text)
+        self.assertIn("REVTABLE_1_DESC", text)
+        self.assertNotIn("REVTABLE_6_CHECKED", text)
+        self.assertIn("REVTABLE_NOTE", text)
+        self.assertNotIn("REVHIST_", text)
         self.assertNotIn("RELEASE_BODY_VAR", text)
 
     def test_revision_sheet_uses_title_body_slots(self) -> None:
         text = Path("revision-history.kicad_sch").read_text(encoding="utf-8")
 
-        self.assertIn("${REVHIST_1_TITLE}", text)
-        self.assertIn("${REVHIST_4_BODY}", text)
+        self.assertIn("${REVTABLE_1_REV}", text)
+        self.assertIn("${REVTABLE_4_DESC}", text)
+        self.assertNotIn("${REVHIST_", text)
         self.assertNotIn("RELEASE_BODY_", text)
 
 

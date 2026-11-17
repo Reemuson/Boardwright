@@ -120,6 +120,8 @@ def build_prepare_release_action(
     version: str,
     variant: str,
     release_kind: str,
+    drawing_revision: str = "",
+    revision_description: str = "",
 ) -> WorkflowAction:
     _validate_version(version)
     selected_variant = normalize_variant(variant)
@@ -127,6 +129,14 @@ def build_prepare_release_action(
     if selected_kind not in RELEASE_KINDS:
         allowed = ", ".join(RELEASE_KINDS)
         raise BoardwrightError(f"Unsupported release kind '{release_kind}'. Use one of: {allowed}.")
+    clean_drawing_revision = str(drawing_revision or "").strip()
+    clean_revision_description = " ".join(str(revision_description or "").split())
+    if not clean_drawing_revision:
+        raise BoardwrightError("Drawing revision is required for release preparation.")
+    if not clean_revision_description:
+        raise BoardwrightError("Revision table description is required for release preparation.")
+    if len(clean_revision_description) > 60:
+        raise BoardwrightError("Revision table description must be 60 characters or fewer.")
 
     return WorkflowAction(
         name="prepare-release",
@@ -136,6 +146,8 @@ def build_prepare_release_action(
             ("version", version),
             ("variant", selected_variant),
             ("release_kind", selected_kind),
+            ("drawing_revision", clean_drawing_revision),
+            ("revision_description", clean_revision_description),
         ),
         gh_available=_gh_command() is not None,
         repo=config.github_repo,

@@ -10,7 +10,6 @@ from typing import Any
 
 from .errors import BoardwrightError
 from .variants import normalize_variant
-from .workflows import install_workflows
 
 
 CONFIG_DIR = ".boardwright"
@@ -565,8 +564,16 @@ def init_config(
         changelog.write_text("# Changelog\n\n## [Unreleased]\n", encoding="utf-8", newline="\n")
         written.append(changelog)
 
-    if workflows:
-        written.extend(install_workflows(project_root, force=force))
+    from .managed_project import install_initial_payload
+
+    written.extend(
+        install_initial_payload(
+            project_root,
+            workflows=workflows,
+            force=force,
+            origin="boardwright",
+        )
+    )
 
     return written
 

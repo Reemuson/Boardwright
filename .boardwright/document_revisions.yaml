@@ -1,2 +1,7 @@
 document_revisions:
-  rows: []
+  schematic:
+    rows: []
+  assembly:
+    rows: []
+  fabrication:
+    rows: []

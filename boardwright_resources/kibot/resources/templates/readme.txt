@@ -12,11 +12,11 @@ ${README_BADGES}
   <img alt="3D Bottom Angled" src="${png_3d_viewer_angled_bottom_outpath}" width="45%">
 </p>
 
-***
+---
 
-## SPECIFICATIONS
+## Project Details
 
-| Parameter | Value | 
+| Item | Value |
 | --- | --- |
 | Project name | ${PROJECT_NUMBER} |
 | PCBA name | ${PCBA_NAME} |
@@ -29,15 +29,15 @@ ${README_BADGES}
 | Variant | ${VARIANT} |
 | Dimensions | ${bb_w_mm} x ${bb_h_mm} mm |
 
-***
+---
 
-## OUTPUTS
+## Project Outputs
 
-Generated manufacturing, schematic, test, and release packages are published
-as CI artifacts and GitHub Release assets. The repository source tree remains
-the KiCad project and Boardwright workflow configuration.
+GitHub Actions generates the manufacturing, schematic, test, and release packages.
 
-Release links:
+The source branch contains the KiCad project and the Boardwright configuration.
+
+Use these links to get outputs or inspect a workflow:
 
 - [Latest release](${GIT_URL}/releases/latest)
 - [Release package](${GIT_URL}/releases/latest/download/boardwright-${RELEASE_VERSION}-release.zip)
@@ -46,23 +46,20 @@ Release links:
 - [Prepare release workflow](${GIT_URL}/actions/workflows/prepare-release.yaml)
 - [Publish release workflow](${GIT_URL}/actions/workflows/release.yaml)
 
-## FABRICATION SNAPSHOT
+## Fabrication Summary
 
 ${FABRICATION_SUMMARY}
 
-## COMPONENT SNAPSHOT
+## Component Summary
 
 ${COMPONENT_COUNT_SUMMARY}
 
-***
+---
 
-## LEGAL
+## Legal Information
 
-This repository contains open hardware design files, protected project branding,
-and third-party workflow content.
+This repository can contain hardware design files, protected project branding, and third-party workflow content.
 
-- The primary hardware licence is listed in `LICENSE`.
-- Project-specific scope notes, branding exclusions, compatibility wording,
-  non-affiliation wording, and safety notes are in `NOTICE.md`.
-- Third-party copyright and licence notices are preserved in
-  `THIRD_PARTY_NOTICES.md`.
+- Read `LICENSE` for the primary hardware licence.
+- Read `NOTICE.md` for project scope, branding, compatibility, non-affiliation, and safety information.
+- Read `THIRD_PARTY_NOTICES.md` for third-party copyright and licence notices.

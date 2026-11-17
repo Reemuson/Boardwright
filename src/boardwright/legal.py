@@ -29,7 +29,7 @@ def render_notice(config: BoardwrightConfig) -> str:
     project = config.project.get("project", {})
     legal = _downstream_legal(config)
     compatibility = legal.get("compatibility", {})
-    project_name = project.get("name", config.project_name)
+    project_name = project.get("pcba_name", config.pcba_name)
     license_name = legal.get("hardware_design_license", legal.get("hardware_license", "See LICENSE"))
     safety_notice = legal.get("safety_notice", "").strip()
     third_party_notice_file = legal.get("third_party_notice_file", "THIRD_PARTY_NOTICES.md")
@@ -114,7 +114,7 @@ def render_third_party_notices(config: BoardwrightConfig) -> str:
         # Third-Party Notices
 
         This file records third-party notices for template, workflow, script,
-        font, and generated-output support material used by {config.project_name}.
+        font, and generated-output support material used by {config.pcba_name}.
 
         ## Boardwright Template Material
 
