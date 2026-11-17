@@ -139,6 +139,11 @@ class NguyenMigrationTests(unittest.TestCase):
                 "LOGO": "kibot_resources/custom-logo.png",
             },
             "meta": {"filename": "KDT_Hierarchical_KiBot.kicad_pro"},
+            "board": {"design_settings": {"rules": {
+                "min_clearance": 0.2, "min_track_width": 0.2, "min_hole_clearance": 0.254,
+                "min_copper_edge_clearance": 0.25, "min_hole_to_hole": 0.254,
+            }}},
+            "net_settings": {"classes": [{"name": "Default", "clearance": 0.2}]},
             "cvpcb": {"netlist": "KDT_Hierarchical_KiBot.net"},
         }
         (self.root / "legacy.kicad_pro").write_text(
@@ -155,7 +160,7 @@ class NguyenMigrationTests(unittest.TestCase):
             encoding="utf-8",
         )
         (self.root / "legacy.kicad_pcb").write_text(
-            '(kicad_pcb (gr_rect (start 0 0) (end 1 1) (layer "Edge.Cuts")))',
+            '(kicad_pcb (general (thickness 1.6)) (gr_rect (start 0 0) (end 1 1) (layer "Edge.Cuts")))',
             encoding="utf-8",
         )
         (self.root / "Templates/KDT_Template_GIT.kicad_wks").write_text(

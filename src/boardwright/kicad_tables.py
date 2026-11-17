@@ -16,6 +16,12 @@ from pathlib import Path
 
 from .config import _worksheet_from_kicad_project, load_config
 from .errors import BoardwrightError
+from .fabrication_requirements import (
+    FabricationRequirementError,
+    derive_project_requirements,
+    undeclared_manufacturing_keys,
+    undeclared_message,
+)
 from .git_ops import remote_url
 from .kicad_variables import sync_kicad_project_text_variables
 
@@ -590,9 +596,23 @@ def _resource_text(root: Path, relative_path: Path) -> str:
 
 
 def _fabrication_note_values(root: Path, config=None) -> dict[str, str]:
-    pcb = _pcb_path(root).read_text(encoding="utf-8")
+    pcb_path = _pcb_path(root)
+    pcb = pcb_path.read_text(encoding="utf-8")
     width, height = _board_size_mm(pcb)
-    pth, npth = _min_drill_sizes(pcb)
+    if width <= 0 or height <= 0:
+        raise FabricationRequirementError("The PCB has no Edge.Cuts outline to size the board from.")
+    if config is None:
+        try:
+            config = load_config(root)
+        except BoardwrightError as error:
+            raise FabricationRequirementError(
+                f"Cannot render fabrication notes without a readable project configuration: {error}"
+            ) from error
+    missing = undeclared_manufacturing_keys(config.project.get("manufacturing"))
+    if missing:
+        raise FabricationRequirementError(undeclared_message(missing))
+    # Fail-closed: raises if any minimum feature size cannot be derived.
+    requirements = derive_project_requirements(root, pcb_path)
     manufacturing = config.manufacturing if config is not None else {}
     company = _first_match(pcb, r'\(property\s+"([^"]*)"\s+"([^"]*)"\)', "")
     company = str(config.project.get("project", {}).get("company") or company or "COMPANY") if config is not None else company or "COMPANY"
@@ -630,15 +650,15 @@ def _fabrication_note_values(root: Path, config=None) -> dict[str, str]:
         "COMPANY_cap": _cap(company),
         "bb_w_mm": _mm(width),
         "bb_h_mm": _mm(height),
-        "thickness_mm": _mm(float(_first_match(pcb, r"\(thickness\s+([-0-9.]+)\)", "0"))),
-        "track_mm": _mm(_min_track_width(pcb, 0.2)),
-        "clearance_mm": _mm(_min_positive_float(re.findall(r"\(clearance\s+([-0-9.]+)\)", pcb), 0.2)),
-        "drill_pth_real_mm": _mm(pth),
-        "drill_npth_real_mm": _mm(npth),
-        "oar_mm": _mm(_min_annular_ring(pcb, 0.15)),
-        "c2h_mm": _mm(0.254),
-        "c2e_mm": _mm(0.250),
-        "h2h_mm": _mm(0.254),
+        "thickness_mm": requirements.thickness.text(),
+        "track_mm": requirements.trace_width.text(),
+        "clearance_mm": requirements.trace_to_trace.text(),
+        "drill_pth_real_mm": requirements.min_pth.text(),
+        "drill_npth_real_mm": requirements.min_npth.text(),
+        "oar_mm": requirements.annular_ring.text(),
+        "c2h_mm": requirements.copper_to_hole.text(),
+        "c2e_mm": requirements.copper_to_edge.text(),
+        "h2h_mm": requirements.hole_to_hole.text(),
     }
 
 
@@ -876,6 +896,13 @@ def _wrap_fabrication_note_lines(text: str, width: int = 80) -> str:
             prefix, body = numbered.groups()
             wrapped.extend(_wrap_numbered_note_line(prefix, body, width))
             continue
+        lettered = re.match(r"^(\t[A-Z]\.\t)(.*)$", line)
+        if lettered:
+            # Sub-items keep their tab layout; continuation lines align under
+            # the item text, not under the letter.
+            prefix, body = lettered.groups()
+            wrapped.extend(_wrap_numbered_note_line(prefix, body, width, continuation="\t\t"))
+            continue
         indent = re.match(r"^\s*", line).group(0)
         wrapped.extend(
             textwrap.wrap(
@@ -890,7 +917,7 @@ def _wrap_fabrication_note_lines(text: str, width: int = 80) -> str:
     return "\n".join(wrapped).rstrip() + "\n"
 
 
-def _wrap_numbered_note_line(prefix: str, body: str, width: int) -> list[str]:
+def _wrap_numbered_note_line(prefix: str, body: str, width: int, continuation: str = "\t") -> list[str]:
     body_width = max(20, width - len(prefix.expandtabs(4)))
     parts = textwrap.wrap(
         body.strip(),
@@ -901,12 +928,12 @@ def _wrap_numbered_note_line(prefix: str, body: str, width: int) -> list[str]:
     if not parts:
         return [prefix.rstrip()]
     lines = [prefix + parts[0]]
-    continuation_width = max(20, width - len("\t".expandtabs(4)))
+    continuation_width = max(20, width - len(continuation.expandtabs(4)))
     for part in parts[1:]:
         if len(part.expandtabs(4)) <= continuation_width:
-            lines.append("\t" + part)
+            lines.append(continuation + part)
         else:
-            lines.extend("\t" + chunk for chunk in textwrap.wrap(
+            lines.extend(continuation + chunk for chunk in textwrap.wrap(
                 part,
                 width=continuation_width,
                 break_long_words=False,
@@ -957,53 +984,8 @@ def _board_size_mm(pcb: str) -> tuple[float, float]:
     return max(xs) - min(xs), max(ys) - min(ys)
 
 
-def _min_drill_sizes(pcb: str) -> tuple[float, float]:
-    pth: list[float] = []
-    npth: list[float] = []
-    for block in _iter_sexpr_blocks(pcb, "pad"):
-        drill = _pad_drill(block)
-        if drill is None:
-            continue
-        if "np_thru_hole" in block:
-            npth.append(drill)
-        elif "thru_hole" in block:
-            pth.append(drill)
-    return min(pth) if pth else 0.0, min(npth) if npth else 0.0
 
 
-def _pad_drill(block: str) -> float | None:
-    match = re.search(r"\(drill\s+(?:oval\s+)?([-0-9.]+)(?:\s+([-0-9.]+))?", block)
-    if not match:
-        return None
-    values = [float(value) for value in match.groups() if value is not None]
-    return min(values) if values else None
-
-
-def _min_annular_ring(pcb: str, default: float) -> float:
-    rings: list[float] = []
-    for block in _iter_sexpr_blocks(pcb, "pad"):
-        if "thru_hole" not in block or "np_thru_hole" in block:
-            continue
-        drill = _pad_drill(block)
-        size = re.search(r"\(size\s+([-0-9.]+)\s+([-0-9.]+)\)", block)
-        if drill is None or not size:
-            continue
-        rings.append((min(float(size.group(1)), float(size.group(2))) - drill) / 2)
-    positives = [ring for ring in rings if ring > 0]
-    return min(positives) if positives else default
-
-
-def _min_track_width(pcb: str, default: float) -> float:
-    widths: list[float] = []
-    for head in ("segment", "arc"):
-        for block in _iter_sexpr_blocks(pcb, head):
-            match = re.search(r"\(width\s+([-0-9.]+)\)", block)
-            if match:
-                widths.append(float(match.group(1)))
-    if widths:
-        return min(widths)
-    last_width = re.search(r"\(last_track_width\s+([-0-9.]+)\)", pcb)
-    return float(last_width.group(1)) if last_width else default
 
 
 def _stackup_layer_value(pcb: str, layer_name: str, field: str, default: str) -> str:
@@ -1023,10 +1005,6 @@ def _min_float(values: list[str], default: float) -> float:
     numbers = [float(value) for value in values]
     return min(numbers) if numbers else default
 
-
-def _min_positive_float(values: list[str], default: float) -> float:
-    numbers = [float(value) for value in values if float(value) > 0]
-    return min(numbers) if numbers else default
 
 
 def _mm(value: float) -> str:

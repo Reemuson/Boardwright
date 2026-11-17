@@ -48,6 +48,11 @@ class KiCadTablesTests(unittest.TestCase):
         try:
             (root / "boardwright.kicad_pro").write_text(
                 """{
+  "board": {"design_settings": {"rules": {
+    "min_clearance": 0.2, "min_track_width": 0.2, "min_hole_clearance": 0.254,
+    "min_copper_edge_clearance": 0.25, "min_hole_to_hole": 0.254
+  }}},
+  "net_settings": {"classes": [{"name": "Default", "clearance": 0.2}]},
   "pcbnew": {
     "page_layout_descr_file": "Templates/Boardwright_Template_PCB_A3.kicad_wks"
   }
@@ -64,6 +69,8 @@ class KiCadTablesTests(unittest.TestCase):
             (root / "boardwright.kicad_pcb").write_text(
                 """
 (kicad_pcb
+  (general (thickness 1.6))
+  (gr_rect (start 0 0) (end 40 25) (layer "Edge.Cuts"))
   (footprint "Resistor_SMD:R_0603" (layer "F.Cu")
     (attr smd)
     (fp_text reference "R1" (at 0 0 0) (layer "F.SilkS")
@@ -169,6 +176,8 @@ template:
 sheet:
   legal_notice: "PROPERTY OF ${COMPANY}\\nDO NOT COPY."
 manufacturing:
+  rohs_pb_free: true
+  tented_vias: true
   conformal_coating: false
   silkscreen_enabled: false
   manufacturing_standard: IPC-6012 Class 2
@@ -388,6 +397,11 @@ manufacturing:
         try:
             (root / "boardwright.kicad_pro").write_text(
                 """{
+  "board": {"design_settings": {"rules": {
+    "min_clearance": 0.2, "min_track_width": 0.2, "min_hole_clearance": 0.254,
+    "min_copper_edge_clearance": 0.25, "min_hole_to_hole": 0.254
+  }}},
+  "net_settings": {"classes": [{"name": "Default", "clearance": 0.2}]},
   "pcbnew": {
     "page_layout_descr_file": "Templates/Boardwright_Template_PCB_A3.kicad_wks"
   }
@@ -398,6 +412,8 @@ manufacturing:
             (root / "boardwright.kicad_pcb").write_text(
                 """
 (kicad_pcb
+  (general (thickness 1.6))
+  (gr_rect (start 0 0) (end 40 25) (layer "Edge.Cuts"))
   (gr_text_box ""
     (start 0 0)
     (end 10 10)
@@ -474,6 +490,15 @@ template:
 sheet:
   legal_notice: "PROPERTY OF ${COMPANY}\\nDO NOT COPY."
 manufacturing:
+  manufacturing_standard: IPC-6012 Class 2
+  core_material: FR-4
+  flammability_rating: UL94V-0
+  tg_rating: 170 C
+  rohs_pb_free: true
+  halogen_free: true
+  tented_vias: true
+  silkscreen_enabled: true
+  conformal_coating: false
   impedance_enabled: true
   impedance_table:
     - transmission_line: Diff Pair A
