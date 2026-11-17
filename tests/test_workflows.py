@@ -62,10 +62,9 @@ class WorkflowTests(unittest.TestCase):
             text = (Path(".github/workflows") / filename).read_text(encoding="utf-8")
 
             self.assertIn("Discard generated source side effects", text)
-            self.assertIn(
-                "git checkout HEAD -- boardwright_resources/kibot/yaml/kibot_main.yaml",
-                text,
-            )
+            # kibot_main.yaml and every other tracked side effect are restored,
+            # fail-closed, by the shared helper (see test_ci_cleanup).
+            self.assertIn("python -m boardwright.ci_cleanup", text)
 
     def test_workflows_prepare_tables_before_full_outputs(self) -> None:
         for workflow in _pipeline_workflows():
