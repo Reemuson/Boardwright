@@ -278,5 +278,50 @@ class ReferenceBoardTests(unittest.TestCase):
             self.assertEqual(value, actual[name], f"{name}: {result.as_dict()[name].source}")
 
 
+
+class UpdateMergeTests(unittest.TestCase):
+    """`boardwright update` must not fill undeclared requirements from defaults (F18)."""
+
+    def test_update_leaves_undeclared_requirements_missing(self) -> None:
+        import yaml
+
+        from boardwright.managed_project import _migrated_config_bytes
+
+        root = Path(tempfile.mkdtemp(prefix="bw-update-merge-"))
+        try:
+            (root / ".boardwright").mkdir()
+            (root / ".boardwright" / "project.yaml").write_text(
+                "project:\n  name: Demo\nmanufacturing:\n  manufacturing_standard: IPC-6012A Class 2\n"
+                "  conformal_coating: null\n",
+                encoding="utf-8",
+            )
+            merged = yaml.safe_load(_migrated_config_bytes(root, ".boardwright/project.yaml"))
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+        manufacturing = merged["manufacturing"]
+        self.assertEqual("IPC-6012A Class 2", manufacturing["manufacturing_standard"])
+        self.assertIsNone(manufacturing["conformal_coating"])  # deliberate omission kept
+        for key in set(DECLARED_MANUFACTURING_KEYS) - {"manufacturing_standard", "conformal_coating"}:
+            self.assertNotIn(key, manufacturing)  # reported by validate, not defaulted
+        self.assertIn("impedance_table", manufacturing)  # non-requirement defaults still merge
+
+
+
+class SingleWriterTests(unittest.TestCase):
+    """Fabrication notes have one writer: boardwright.kicad_tables (F17)."""
+
+    def test_kibot_configuration_defines_no_notes_output(self) -> None:
+        kibot_dir = Path(__file__).resolve().parents[1] / "boardwright_resources" / "kibot" / "yaml"
+        main = (kibot_dir / "kibot_main.yaml").read_text(encoding="utf-8")
+        self.assertNotIn("kibot_out_txt_report.yaml", main)
+        self.assertNotIn("NOTES_OUTPUT", main)
+        self.assertNotRegex(main, r"(?m)^\s*OUTPUT_ID:\s*(fabrication|assembly)_notes")
+        for path in kibot_dir.glob("*.yaml"):
+            if path.name == "kibot_out_txt_report.yaml":
+                continue  # unreferenced (asserted above); kept for provenance
+            text = path.read_text(encoding="utf-8")
+            self.assertNotRegex(text, r"(?m)^\s*output_id:\s*_?notes", path.name)
+
+
 if __name__ == "__main__":
     unittest.main()

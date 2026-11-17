@@ -21,6 +21,7 @@ from .fabrication_requirements import (
     derive_project_requirements,
     undeclared_manufacturing_keys,
     undeclared_message,
+    unstated_requirements,
 )
 from .git_ops import remote_url
 from .kicad_variables import sync_kicad_project_text_variables
@@ -35,6 +36,9 @@ IMPEDANCE_TABLE_TEMPLATE = Path(
 FABRICATION_NOTES_TEMPLATE = Path(
     "boardwright_resources/kibot/resources/templates/fabrication_notes.txt"
 )
+# Project-owned approved wording. Outside the Boardwright payload
+# (boardwright_resources/, src/boardwright/), so updates never replace it.
+PROJECT_FABRICATION_NOTES_TEMPLATE = Path(".boardwright/templates/fabrication_notes.txt")
 ASSEMBLY_NOTES_TEMPLATE = Path(
     "boardwright_resources/kibot/resources/templates/assembly_notes.txt"
 )
@@ -486,18 +490,22 @@ def _write_manufacturing_notes(root: Path, config=None) -> None:
     values = _fabrication_note_values(root, config)
     project_stem = _project_stem(root)
 
-    fabrication = _resource_text(root, FABRICATION_NOTES_TEMPLATE)
-    impedance_rows = _impedance_entries(config)
-    if not impedance_rows:
-        fabrication = _strip_impedance_controlled_note(fabrication)
-    else:
-        fabrication = _strip_note_condition_markers(fabrication)
-    fabrication = _render_note_template(fabrication, values)
+    template, source = fabrication_notes_template(root)
+    unstated = unstated_requirements(template, config.manufacturing)
+    if unstated:
+        raise FabricationRequirementError(
+            f"{source} does not state declared requirement(s): "
+            + ", ".join(f"manufacturing.{key}" for key in unstated)
+            + ". Reference them in the template, or declare them empty/null to omit them."
+        )
+    fabrication = _render_note_template(template, values, _note_conditions(root, config))
     fabrication_dir = root / "Manufacturing" / "Fabrication"
     fabrication_dir.mkdir(parents=True, exist_ok=True)
+    # The only writer of this controlled output (KiBot has no notes output).
     (fabrication_dir / f"{project_stem}-fabrication_notes.txt").write_text(
         fabrication,
         encoding="utf-8",
+        newline="\n",
     )
 
     assembly = _resource_text(root, ASSEMBLY_NOTES_TEMPLATE)
@@ -587,6 +595,26 @@ def _github_repo_from_url(url: str) -> str:
     return ""
 
 
+def fabrication_notes_template(root: Path) -> tuple[str, str]:
+    """Return (template text, source path): the project's approved wording if present."""
+    project_template = root / PROJECT_FABRICATION_NOTES_TEMPLATE
+    if project_template.is_file():
+        return project_template.read_text(encoding="utf-8"), PROJECT_FABRICATION_NOTES_TEMPLATE.as_posix()
+    return _resource_text(root, FABRICATION_NOTES_TEMPLATE), FABRICATION_NOTES_TEMPLATE.as_posix()
+
+
+def _note_conditions(root: Path, config) -> dict[str, bool]:
+    """Names usable in template ``#?`` condition lines."""
+    manufacturing = config.manufacturing if config is not None else {}
+    conditions = {
+        "stackup": "(stackup" in _pcb_path(root).read_text(encoding="utf-8"),
+        "impedance_controlled": bool(_impedance_entries(config)),
+    }
+    for key in ("rohs_pb_free", "halogen_free", "tented_vias", "silkscreen_enabled", "conformal_coating"):
+        conditions[key] = bool(_optional_bool(manufacturing.get(key)))
+    return conditions
+
+
 def _resource_text(root: Path, relative_path: Path) -> str:
     project_path = root / relative_path
     if project_path.is_file():
@@ -631,6 +659,7 @@ def _fabrication_note_values(root: Path, config=None) -> dict[str, str]:
         "solder_mask_color_text_cap": _cap(_stackup_layer_value(pcb, "F.Mask", "color", "GREEN")),
         "silk_screen_color_text_cap": _cap(silk_color),
         "manufacturing_standard_note": _manufacturing_standard_note(manufacturing_standard),
+        "manufacturing_standard_cap": _cap(manufacturing_standard),
         "core_material_cap": _cap(core_material),
         "flammability_rating_cap": _cap(flammability_rating),
         "tg_rating_cap": _cap(tg_rating),
@@ -837,8 +866,8 @@ def _component_summary_text(rows: tuple[tuple[str, int, int, int], ...]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_note_template(template: str, values: dict[str, str]) -> str:
-    rendered = template
+def _render_note_template(template: str, values: dict[str, str], conditions: dict[str, bool]) -> str:
+    rendered = _apply_note_conditions(template, conditions)
     for key, value in values.items():
         rendered = rendered.replace("${" + key + "}", value)
     rendered = _strip_empty_note_markers(rendered)
@@ -870,8 +899,50 @@ def _number_fabrication_notes(text: str) -> str:
     return "\n".join(lines)
 
 
+def _apply_note_conditions(text: str, conditions: dict[str, bool]) -> str:
+    """KiBot report semantics: a ``#?EXPR`` line keeps the next line only if EXPR is true."""
+    lines: list[str] = []
+    keep_next = True
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#?"):
+            keep_next = keep_next and _evaluate_note_condition(stripped[2:].strip(), conditions)
+            continue
+        if keep_next:
+            lines.append(line)
+        keep_next = True
+    return "\n".join(lines)
+
+
+def _evaluate_note_condition(expression: str, conditions: dict[str, bool]) -> bool:
+    import ast
+
+    def evaluate(node) -> bool:
+        if isinstance(node, ast.BoolOp):
+            results = [evaluate(value) for value in node.values]
+            return all(results) if isinstance(node.op, ast.And) else any(results)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            return not evaluate(node.operand)
+        if isinstance(node, ast.Name) and node.id in conditions:
+            return conditions[node.id]
+        if isinstance(node, ast.Constant) and isinstance(node.value, bool):
+            return node.value
+        raise FabricationRequirementError(
+            f"Unsupported fabrication-note condition {expression!r}; use and/or/not over: "
+            + ", ".join(sorted(conditions))
+        )
+
+    try:
+        tree = ast.parse(expression, mode="eval")
+    except SyntaxError as error:
+        raise FabricationRequirementError(f"Invalid fabrication-note condition {expression!r}.") from error
+    return evaluate(tree.body)
+
+
 def _collapse_blank_note_lines(text: str) -> str:
-    lines = [line.rstrip() for line in text.splitlines()]
+    # Whitespace-only lines become blank; content lines keep the template's
+    # exact spacing (approved wording is reproduced byte for byte).
+    lines = [line if line.strip() else "" for line in text.splitlines()]
     collapsed: list[str] = []
     blank_count = 0
     for line in lines:
@@ -889,7 +960,7 @@ def _wrap_fabrication_note_lines(text: str, width: int = 80) -> str:
     wrapped: list[str] = []
     for line in text.splitlines():
         if len(line.expandtabs(4)) <= width or not line.strip():
-            wrapped.append(line.rstrip())
+            wrapped.append(line if line.strip() else "")
             continue
         numbered = re.match(r"^(\d+\)\t)(.*)$", line)
         if numbered:
@@ -941,28 +1012,6 @@ def _wrap_numbered_note_line(prefix: str, body: str, width: int, continuation: s
             ))
     return lines
 
-
-def _strip_impedance_controlled_note(text: str) -> str:
-    lines = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("#?stackup and impedance_controlled"):
-            continue
-        if "REFER TO IMPEDANCE TABLE" in line:
-            continue
-        if "CONFIRM TRACE WIDTHS AND SPACINGS" in line:
-            continue
-        lines.append(line)
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def _strip_note_condition_markers(text: str) -> str:
-    lines = [
-        line
-        for line in text.splitlines()
-        if not line.strip().startswith("#?")
-    ]
-    return _collapse_blank_note_lines("\n".join(lines))
 
 
 def _board_size_mm(pcb: str) -> tuple[float, float]:

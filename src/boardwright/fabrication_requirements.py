@@ -75,6 +75,45 @@ def undeclared_manufacturing_keys(manufacturing: object) -> list[str]:
     return [key for key in DECLARED_MANUFACTURING_KEYS if key not in declared]
 
 
+# Template references that state each requirement: ${placeholder} names, or the
+# key itself in a `#?` condition line.
+_REQUIREMENT_PLACEHOLDERS = {
+    "manufacturing_standard": ("manufacturing_standard_note", "manufacturing_standard_cap"),
+    "core_material": ("material_requirements_block", "core_material_cap"),
+    "flammability_rating": ("material_requirements_block", "flammability_rating_cap"),
+    "tg_rating": ("material_requirements_block", "tg_rating_cap"),
+    "rohs_pb_free": ("rohs_note", "material_requirements_block"),
+    "halogen_free": ("material_requirements_block",),
+    "tented_vias": ("tented_vias_note",),
+    "silkscreen_enabled": ("silkscreen_note",),
+    "conformal_coating": ("conformal_coating_note",),
+}
+
+
+def unstated_requirements(template: str, manufacturing: object) -> list[str]:
+    """Declared requirements that make a statement but the template never states.
+
+    A requirement declared empty (text) or null (boolean) makes no statement and
+    needs no reference. Guards against a project-owned template silently
+    dropping a declared requirement.
+    """
+    declared = manufacturing if isinstance(manufacturing, dict) else {}
+    conditions = " ".join(
+        line.strip()[2:] for line in template.splitlines() if line.strip().startswith("#?")
+    )
+    unstated: list[str] = []
+    for key, placeholders in _REQUIREMENT_PLACEHOLDERS.items():
+        value = declared.get(key)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            continue
+        if any("${" + name + "}" in template for name in placeholders):
+            continue
+        if re.search(rf"\b{key}\b", conditions):
+            continue
+        unstated.append(key)
+    return unstated
+
+
 def undeclared_message(missing: list[str]) -> str:
     return (
         "project.yaml does not declare these fabrication-note requirements: "

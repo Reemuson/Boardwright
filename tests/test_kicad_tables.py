@@ -373,7 +373,7 @@ manufacturing:
             "fabrication_extra_notes": kicad_tables._extra_note_block(long_note),
         }
 
-        notes = kicad_tables._render_note_template(template, values)
+        notes = kicad_tables._render_note_template(template, values, {"stackup": False, "impedance_controlled": False})
         numbers = [int(match.group(1)) for match in re.finditer(r"^(\d+)\)", notes, re.MULTILINE)]
 
         self.assertEqual(list(range(1, len(numbers) + 1)), numbers)
@@ -413,6 +413,7 @@ manufacturing:
                 """
 (kicad_pcb
   (general (thickness 1.6))
+  (setup (stackup (layer "F.Cu" (type "copper"))))
   (gr_rect (start 0 0) (end 40 25) (layer "Edge.Cuts"))
   (gr_text_box ""
     (start 0 0)

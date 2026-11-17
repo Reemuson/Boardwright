@@ -54,9 +54,26 @@ def _validate_fabrication_requirements(config: BoardwrightConfig, issues: list[V
         undeclared_message,
     )
 
+    from .fabrication_requirements import unstated_requirements
+    from .kicad_tables import fabrication_notes_template
+
     missing = undeclared_manufacturing_keys(config.project.get("manufacturing"))
     if missing:
         issues.append(ValidationIssue("error", undeclared_message(missing)))
+    try:
+        template, source = fabrication_notes_template(config.root)
+    except OSError as error:
+        issues.append(ValidationIssue("error", f"Fabrication notes template is unreadable: {error}"))
+    else:
+        unstated = unstated_requirements(template, config.project.get("manufacturing"))
+        if unstated:
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    f"{source} does not state declared requirement(s): "
+                    + ", ".join(f"manufacturing.{key}" for key in unstated),
+                )
+            )
     pcbs = sorted(config.root.glob("*.kicad_pcb"))
     if len(pcbs) != 1:
         return  # _validate_kicad_and_kibot reports missing or ambiguous boards.
