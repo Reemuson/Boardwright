@@ -229,9 +229,21 @@ Goal: make the generated README a useful hardware project front page.
       generated README links will not be broken.
 - [x] Keep `${RELEASE_VERSION}` as package metadata and add `${BOARD_REVISION}` for
       A/B/C board spins.
-- [ ] Keep controlled drawing revision separate from semantic release/package version
+- [x] Keep controlled drawing revision separate from semantic release/package version
       in title blocks, generated README, release metadata, and revision-history
-      generation.
+      generation. Release identities are recorded in `.boardwright/releases.yaml`
+      (see `RELEASE_MODEL.md`).
+- [ ] Decide whether PCB worksheets should print `${PCB_REVISION}` next to the
+      fabrication drawing revision, and replace the legacy `${REVISION}` in the
+      template PCB title block (audit M5/M6).
+- [ ] Add `${SCHEMATIC_REVISION}`/`${PCB_REVISION}` rows to the generated README
+      template once the KiBot preflight variable list carries them.
+- [ ] Move remaining test modules off `Path.cwd()` workspaces (audit M3).
+- [ ] Run `kicad-compat.yaml` on a representative project and record the KiCad 9
+      vs 10 differences before switching pipelines to `v2_dk10` (MIGRATION.md).
+- [ ] Decide whether to pin `INTI-CMNB/KiBot` actions to commit SHAs (audit M8).
+- [ ] Review `docker_kibot_linux.sh` `/etc/shadow` mount and KiCad 8 default (audit M7).
+- [ ] Live-test the ledger/manifest release path on the testbench repository.
 - [x] Add board dimensions.
 - [x] Keep board images side by side in README and release markdown.
 - [x] Add latest release/package links.

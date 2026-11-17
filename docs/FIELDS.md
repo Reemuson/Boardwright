@@ -106,6 +106,8 @@ Boardwright emits these for title blocks and drawing-facing reports.
 | `${DESIGNER}` | Primary designer/engineer. |
 | `${PROJECT_NUMBER}` | Project name from `project.name`. |
 | `${BOARD_REVISION}` | Hardware board spin/design revision. |
+| `${PCB_REVISION}` | Same value as `${BOARD_REVISION}`; explicit name for the physical PCB revision. |
+| `${SCHEMATIC_REVISION}` | Schematic document revision, available on every document (for example, PCB drawings). |
 | `${DOCUMENT_TYPE}` | Current document type. |
 | `${DRAWING_TITLE}` | Current document title. |
 | `${DRAWING_NUMBER}` | Current document drawing number resolved from `number_source`. |

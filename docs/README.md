@@ -9,6 +9,9 @@ Use this index to find the correct document for each task.
 | --- | --- |
 | [`../README.md`](../README.md) | Product overview, installation, migration, updates, and normal use. |
 | [`SPEC.md`](SPEC.md) | Product contract and design rules. |
+| [`RELEASE_MODEL.md`](RELEASE_MODEL.md) | Release identities, change classes, baselines, ledger, output evidence, recovery. |
+| [`MIGRATION.md`](MIGRATION.md) | Upgrading existing projects and the KiCad 9 to 10 path. |
+| [`AUDIT-2026-11.md`](AUDIT-2026-11.md) | November 2026 engineering audit findings and status. |
 | [`FIELDS.md`](FIELDS.md) | Project fields and KiCad or KiBot variable meanings. |
 | [`ROADMAP.md`](ROADMAP.md) | Product milestones and planned sequence. |
 | [`TODO.md`](TODO.md) | Open work and completed tasks. |

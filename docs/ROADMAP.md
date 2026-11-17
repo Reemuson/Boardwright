@@ -115,8 +115,16 @@ Delivered:
 - tag workflow that publishes artifacts without branch mutation
 - release notes with side-by-side board renders when available
 
+- change-impact classification and append-only release ledger
+  (`RELEASE_MODEL.md`): documentation-only releases reuse the approved PCB
+  fabrication baseline without a new PCB revision
+- accepted-output manifest committed at prepare and verified at publish
+- reviewed `source_sha` pinning, pre-push tag checks, per-tag publish
+  serialisation
+
 Remaining:
 
+- live retest of the ledger/manifest release path on the testbench
 - live retest draft release
 - measure whether CI runtime needs further optimization
 
@@ -239,6 +247,17 @@ Success criteria:
 - a new board repo can be initialized and configured mostly through Boardwright
 - users can keep working in KiCad and Boardwright without memorizing config
   file paths
+
+## Milestone 7: KiCad 10
+
+Status: groundwork implemented (`MIGRATION.md`). Pipelines remain on KiCad 9.
+
+Remaining:
+
+- run `kicad-compat.yaml` on representative projects and explain every
+  difference
+- switch the pipelines to `v2_dk10` / `all_group_k10` once differences are
+  understood. KiBot images currently ship KiCad 10.0.5.
 
 ## Later
 

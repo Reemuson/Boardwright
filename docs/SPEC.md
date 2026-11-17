@@ -409,6 +409,15 @@ The legal tooling should remain practical rather than pretending to be legal
 advice. It should generate/check notice files, highlight missing provenance,
 and make review work visible in the TUI/CLI.
 
+## Release Identities And Change Impact
+
+Release identities, change classes, baseline reuse, the append-only release
+ledger (`.boardwright/releases.yaml`), and output-manifest verification are
+defined in [`RELEASE_MODEL.md`](RELEASE_MODEL.md). `boardwright release VERSION`
+prints the identity/impact checklist. `--change-class` and `--justification`
+are required for every release after the first. Publishing never changes
+`project.board_revision`.
+
 ## Changelog And Revision History
 
 `CHANGELOG.md` remains the human/Git release narrative. Commit messages and

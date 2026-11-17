@@ -252,6 +252,14 @@ Release preparation updates the changelog and release metadata. It then creates 
 
 The tag workflow publishes release files. It does not push branch commits.
 
+Every release records its identities in `.boardwright/releases.yaml`: release version, PCB revision, schematic, assembly and fabrication drawing revisions, change classes, justification, and fabrication/assembly baselines. A documentation-only correction can be published as a new release on the same PCB revision; Boardwright checks that the approved fabrication baseline is unchanged. Preview the checklist with:
+
+```sh
+boardwright release 1.0.1 --drawing-revision A.1 --change-class documentation --justification "Correct schematic note"
+```
+
+See [`docs/RELEASE_MODEL.md`](docs/RELEASE_MODEL.md) for the rules and recovery steps, and [`docs/MIGRATION.md`](docs/MIGRATION.md) for upgrading existing projects and KiCad 10.
+
 ## Variants
 
 Boardwright uses these KiBot variants:
