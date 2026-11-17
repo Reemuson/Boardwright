@@ -168,6 +168,25 @@ revision. Under the current normaliser all 22 controlled fabrication entries
 are `regenerated` and none block. The earlier normaliser failed the pair on two
 drill-map PDFs.
 
+## Review gate (optional)
+
+`prepare-release.yaml` can pause for human review before anything is pushed:
+
+1. Dispatch with `review_hold=true`. The run builds the release candidate,
+   records `.boardwright/review_candidate.json`, and uploads the
+   `boardwright-release-candidate-<version>` artifact: outputs, manifest, ledger
+   and metadata. It skips the commit, push, tag and publish steps.
+2. Inspect the candidate's PDFs and revision identities.
+3. Dispatch again with identical inputs and `approved_review_run=<held run id>`.
+   The run fails before committing unless:
+   - the held run is a successful prepare run on `main` at the same commit;
+   - the source commit, every release input, the new ledger entry and all
+     controlled outputs (`python -m boardwright.review_gate verify`) match the
+     reviewed candidate.
+
+The CLI `--dispatch` and the TUI do not pass these inputs yet. Use
+`gh workflow run` directly.
+
 ## Worked example: documentation-only correction
 
 PCB revision `A` is released as `1.0.0` with schematic `A.0`. A DFM review finds
