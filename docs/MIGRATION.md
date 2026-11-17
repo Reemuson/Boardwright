@@ -49,6 +49,12 @@ Worksheets and title blocks:
   `documentation` class and a new schematic revision.
 - Keep `${RELEASE_VERSION}` and other per-release variables off copper and
   silkscreen; use `${PCB_REVISION}` for board markings.
+- Run `boardwright validate` before the first CI build. It reports every
+  deprecated variable in schematics, PCB files and the active worksheets.
+  `BOARD_NAME` and `PROJECT_NAME` need a manual choice (see `FIELDS.md`).
+  Legacy KDT worksheets use both, so switch the project to the Boardwright
+  worksheets. A legacy `project.board_name` must be moved to `pcba_name` and/or
+  `pcb_name`.
 
 The first release after updating the Boardwright payload needs the `tooling`
 class, because the KiBot output configuration and notes templates changed.

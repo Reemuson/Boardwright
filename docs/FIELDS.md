@@ -34,13 +34,32 @@ Fields live under `.boardwright/project.yaml` `project:`.
 | Field | Meaning | Worksheet variable |
 | --- | --- | --- |
 | `id` | Short Boardwright project identifier. | `${PROJECT_ID}` |
-| `name` | Project name. Printed through the KiCad `${PROJECT_NUMBER}` field. | `${PROJECT_NUMBER}` |
-| `pcba_name` | Populated assembly display name. | `${PCBA_NAME}` |
-| `pcb_name` | Bare PCB display name. | `${PCB_NAME}` |
+| `name` | Descriptive project name (for example `FLUKE IR`). Printed through the KiCad `${PROJECT_NUMBER}` field. | `${PROJECT_NUMBER}` |
+| `pcba_name` | Assembled PCB identifier, typically its part number (for example `FIC-100A`). | `${PCBA_NAME}` |
+| `pcb_name` | Bare PCB identifier, typically its part number. Falls back to `pcba_name`, then `name`. | `${PCB_NAME}` |
 | `company` | Owning company or organisation. | `${COMPANY}` |
 | `designer` | Primary designer/engineer. | `${DESIGNER}` |
 | `board_revision` | Hardware spin/design revision. | `${BOARD_REVISION}` |
 | `git_url` | Canonical repository URL. | `${GIT_URL}` |
+
+### PCB and PCBA identifiers
+
+The three name fields are intentionally distinct; there are no separate
+"number" fields.
+
+| Use | Variable |
+| --- | --- |
+| Schematic, assembly drawing, BOM, README: the assembled board | `${PCBA_NAME}` |
+| Fabrication drawing, bare-board marking: the bare PCB | `${PCB_NAME}` |
+| Descriptive project title | `${PROJECT_NUMBER}` (from `project.name`) |
+
+`pcba_name` falls back to `project.name`, and `pcb_name` falls back to
+`pcba_name` and then `project.name`. Set both identifiers explicitly so a
+drawing never shows the descriptive project name where a part number belongs.
+
+The legacy `project.board_name` key is not read. `boardwright validate` warns
+about it. Move its value to `pcba_name` and/or `pcb_name`, according to what it
+identified.
 
 ## Release Metadata
 
@@ -245,6 +264,22 @@ ${REVHIST_N_*}
 
 `${REVISION}` should not be used as Boardwright's controlled drawing revision.
 Use `${DRAWING_REVISION}` instead.
+
+Boardwright's project sync removes these legacy KiCad text variables from
+`*.kicad_pro`. Any remaining reference then renders as literal text: in a
+schematic, ERC fails with `unresolved_variable`, and worksheet text is not
+checked by ERC at all. `boardwright validate` reports every reference in
+schematics, PCB files and the active worksheets, with its location and
+replacement. `boardwright migrate` rewrites only the unambiguous ones.
+
+| Legacy | Replacement | Automatic |
+| --- | --- | --- |
+| `${REVISION}` | `${DRAWING_REVISION}` in schematics, `${PCB_REVISION}` in PCB files. In worksheets it is KiCad's built-in title-block field and is allowed. | Yes |
+| `${DOCUMENT_REVISION}` | `${DRAWING_REVISION}` | Yes |
+| `${PCB_NUMBER}` / `${PCBA_NUMBER}` | `${PCB_NAME}` / `${PCBA_NAME}` | Yes |
+| `${BOARD_NAME}` | `${PCBA_NAME}` or `${PCB_NAME}`, depending on what the text describes | No: manual review |
+| `${PROJECT_NAME}` | `${PROJECT_NUMBER}`, or KiCad's built-in `${PROJECTNAME}` | No: manual review |
+| `${PROJECT_ID}`, `${DOCUMENT_REVISION_SCHEME}` | No equivalent | No: manual review |
 
 ## Worksheet Intent
 
