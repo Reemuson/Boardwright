@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from .errors import BoardwrightError
-from .fingerprint import DesignFingerprint, GitRefReader, compute_fingerprint
+from .fingerprint import FINGERPRINT_SCHEMA, DesignFingerprint, GitRefReader, compute_fingerprint
 
 LEDGER_RELATIVE_PATH = Path(".boardwright") / "releases.yaml"
 LEDGER_SCHEMA = 1
@@ -244,7 +244,7 @@ def latest_baseline(root: Path, records: list[ReleaseRecord] | None = None) -> B
                 schematic_revision=record.schematic_revision,
                 assembly_revision=record.assembly_revision,
                 fabrication_revision=record.fabrication_revision,
-                fingerprint=record.fingerprint,
+                fingerprint=comparable_fingerprint(root, record),
                 fabrication_baseline=record.fabrication_baseline,
                 assembly_baseline=record.assembly_baseline,
                 legacy=False,
@@ -252,6 +252,33 @@ def latest_baseline(root: Path, records: list[ReleaseRecord] | None = None) -> B
     if not newest_tag:
         return None
     return legacy_baseline_from_tag(root, newest_tag)
+
+
+def comparable_fingerprint(root: Path, record: ReleaseRecord) -> DesignFingerprint:
+    """Return the record's fingerprint in the current schema.
+
+    Fingerprints are only comparable within one schema. When the stored one is
+    older, it is recomputed read-only from the release tag (or, failing that,
+    the recorded source commit) with the current rules. If neither source is
+    available the stored fingerprint is returned and the caller reports the
+    schema mismatch.
+    """
+
+    stored = record.fingerprint
+    if stored.schema == FINGERPRINT_SCHEMA or not _is_git_repo(root):
+        return stored
+    for ref, label in (
+        (f"refs/tags/{record.version}", f"tag {record.version} (recomputed)"),
+        (record.source_commit, f"commit {record.source_commit[:12]} (recomputed)"),
+    ):
+        if not ref:
+            continue
+        try:
+            _run_git(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+        except BoardwrightError:
+            continue
+        return compute_fingerprint(GitRefReader(root, ref, label=label))
+    return stored
 
 
 def legacy_baseline_from_tag(root: Path, tag: str) -> Baseline:

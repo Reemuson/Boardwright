@@ -26,7 +26,14 @@ from .fingerprint import (
     compute_fingerprint,
     schematic_pcb_parity,
 )
-from .release_ledger import Baseline, BaselineRef, ReleaseRecord, latest_baseline, load_ledger
+from .release_ledger import (
+    Baseline,
+    BaselineRef,
+    ReleaseRecord,
+    comparable_fingerprint,
+    latest_baseline,
+    load_ledger,
+)
 
 CHANGE_CLASSES = ("documentation", "electrical", "fabrication", "assembly", "tooling")
 CHANGE_CLASS_HELP = {
@@ -39,11 +46,14 @@ CHANGE_CLASS_HELP = {
 
 DOMAIN_LABELS = {
     "pcb_geometry": "PCB physical design (copper, mask, silk, edge, drills, stackup)",
-    "pcb_netnames": "PCB net names (IPC netlist, ODB++, Gerber attributes)",
+    "pcb_netnames": "PCB net names and pin functions (IPC netlist, ODB++, Gerber attributes)",
     "fabrication_spec": "Fabrication requirements (materials, finish, fab notes)",
     "assembly": "Assembly/BOM (parts, values, placement, DNP, BOM fields, notes)",
+    "pcb_drawings": "PCB drawing layers (fabrication/assembly drawing content)",
+    "release_marking": "Release-dependent text on fabrication layers",
     "schematic": "Schematic content",
 }
+FABRICATION_DATA_DOMAINS = {"pcb_netnames", "fabrication_spec", "release_marking"}
 
 
 @dataclass(frozen=True)
@@ -183,6 +193,10 @@ def assess_release_impact(
             f"current schema {current.schema}; re-baseline explicitly."
         )
     detected = changed_domains(base.fingerprint, current)
+    if current.fab_volatile_variables:
+        # ${RELEASE_VERSION} etc. on silk/copper render differently for every
+        # release, so the fabrication data can never be reused unchanged.
+        detected = detected + ("release_marking",)
     format_changed = (
         base.fingerprint.pcb_format != current.pcb_format
         or base.fingerprint.schematic_format != current.schematic_format
@@ -202,7 +216,7 @@ def assess_release_impact(
     sch_rev_changed = proposed.schematic_revision != previous.schematic_revision
 
     # --- Fabrication -------------------------------------------------------
-    fab_data_changed = "pcb_netnames" in detected or "fabrication_spec" in detected
+    fab_data_changed = bool(FABRICATION_DATA_DOMAINS & set(detected))
     if "pcb_geometry" in detected:
         if "fabrication" not in declared:
             problems.append("The physical PCB design changed; declare the `fabrication` change class.")
@@ -225,7 +239,7 @@ def assess_release_impact(
         if "fabrication" not in declared:
             problems.append(
                 "Fabrication data changed ("
-                + ", ".join(DOMAIN_LABELS[d] for d in detected if d in {"pcb_netnames", "fabrication_spec"})
+                + ", ".join(DOMAIN_LABELS[d] for d in detected if d in FABRICATION_DATA_DOMAINS)
                 + "); declare the `fabrication` change class."
             )
         if proposed.fabrication_revision == previous.fabrication_revision:
@@ -237,6 +251,13 @@ def assess_release_impact(
             f"PCB revision {proposed.pcb_revision} is retained with identical geometry; the fabrication "
             "package is re-issued. Confirm the fabricator does not need a new PCB revision."
         )
+        if "release_marking" in detected:
+            reviews.append(
+                "Fabrication layers use release-dependent text ("
+                + ", ".join(f"${{{name}}}" for name in current.fab_volatile_variables)
+                + "): every release re-issues the fabrication package. Use ${PCB_REVISION} on the "
+                "board if the marking should stay stable."
+            )
         fab_status = "reissued"
     else:
         if "fabrication" in declared:
@@ -248,7 +269,7 @@ def assess_release_impact(
 
     # A PCB revision letter must never be reused for different geometry.
     for record in ledger_records_for_pcb(records, proposed.pcb_revision):
-        if record.fingerprint.pcb_geometry != current.pcb_geometry:
+        if comparable_fingerprint(config.root, record).pcb_geometry != current.pcb_geometry:
             problems.append(
                 f"PCB revision {proposed.pcb_revision} was released in {record.version} with different "
                 "geometry; a revision identifier cannot be reused."
@@ -274,6 +295,27 @@ def assess_release_impact(
     asm_baseline = (
         BaselineRef(base.assembly_baseline.id, "reused") if asm_status == "reused" else BaselineRef(_assembly_id(proposed), "new")
     )
+
+    # --- PCB drawing layers ------------------------------------------------
+    if "pcb_drawings" in detected:
+        if not ({"documentation", "fabrication", "assembly"} & set(declared)):
+            problems.append(
+                "PCB drawing-layer content changed (fabrication/assembly drawings); declare "
+                "`documentation`, or `fabrication`/`assembly` if a requirement changed."
+            )
+        drawing_revision_changed = (
+            proposed.fabrication_revision != previous.fabrication_revision
+            or proposed.assembly_revision != previous.assembly_revision
+        )
+        if not drawing_revision_changed and not pcb_changed:
+            problems.append(
+                "PCB drawing-layer content changed; the fabrication and/or assembly drawing revision "
+                "must change."
+            )
+        reviews.append(
+            "PCB drawing-layer content changed. If notes, dimensions or tolerances on the fabrication "
+            "drawing changed a requirement, declare `fabrication` so the package is re-issued."
+        )
 
     # --- Schematic ---------------------------------------------------------
     if "schematic" in detected:

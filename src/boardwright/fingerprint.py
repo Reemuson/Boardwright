@@ -7,22 +7,32 @@ A fingerprint is a SHA-256 over a *normalised* view of the KiCad sources. Each
 domain answers one engineering question:
 
 ``pcb_geometry``
-    Is the physical board (copper, mask, paste, silk, edge, drills, stackup)
-    the same? Net *names*, UUIDs, timestamps, title blocks, assembly/fab
+    Is the physical board (copper, mask, paste, silk, edge, drills, stackup,
+    board thickness) the same? Net *names*, UUIDs, timestamps, title blocks,
     documentation layers, 3D models and formatting are excluded. Nets are
     identified by the pads they connect, so a net rename alone does not change
-    this hash.
+    this hash. Text variables (``${...}``) in text on fabrication layers are
+    resolved first, so a variable whose value changes is a silkscreen change.
 ``pcb_netnames``
-    Do net names differ? Net names appear in IPC-D-356/ODB++ and Gerber X2
-    attributes, so a rename changes fabrication *data* but not copper.
+    Do net names or pad pin functions differ? Both appear in IPC-D-356/ODB++
+    and Gerber X2 attributes, so a rename changes fabrication *data* but not
+    copper.
 ``fabrication_spec``
-    Do the fabrication requirements in ``project.yaml`` differ (material,
-    finish, fab notes, impedance)?
+    Do the fabrication requirements differ (``project.yaml`` manufacturing
+    settings and the fabrication notes template)?
 ``assembly``
     Do populated parts, values, footprints, placement, DNP/BOM flags, BOM
-    fields or assembly notes differ?
+    fields, assembly notes or the assembly notes template differ?
+``pcb_drawings``
+    Does content on PCB documentation layers (``*.Fab``, ``Dwgs.User``,
+    ``Cmts.User``, ``User.*``) used by the fabrication and assembly drawings
+    differ? This is drawing content, not the bare board.
 ``schematic``
     Does the schematic content differ (title blocks excluded)?
+
+``fab_volatile_variables`` lists release-dependent variables (for example
+``${RELEASE_VERSION}``) used in text on fabrication layers; such boards get
+different silkscreen for every release.
 
 Equal source fingerprints mean the design inputs are equivalent; they do not
 prove byte-identical generated Gerbers. Generated-output comparison is handled
@@ -41,7 +51,24 @@ from typing import Any, Protocol
 from .errors import BoardwrightError
 from .sexpr import Node, SList, canonical, parse, unquote
 
-FINGERPRINT_SCHEMA = 1
+FINGERPRINT_SCHEMA = 2
+
+# Variables whose value differs per release/build by design.
+RELEASE_VOLATILE_VARIABLES = {
+    "RELEASE_VERSION",
+    "RELEASE_DATE",
+    "RELEASE_DATE_NUM",
+    "GIT_HASH_PCB",
+    "GIT_HASH_SCH",
+    "CURRENT_DATE",
+    "VARIANT",
+}
+TEXT_HEADS = {"gr_text", "fp_text", "gr_text_box", "fp_text_box", "property", "text"}
+FAB_NOTES_TEMPLATE = "boardwright_resources/kibot/resources/templates/fabrication_notes.txt"
+ASSEMBLY_NOTES_TEMPLATE = "boardwright_resources/kibot/resources/templates/assembly_notes.txt"
+# Documentation layers whose content appears on the fab/assembly drawings.
+DRAWING_LAYER_NAMES = {"Dwgs.User", "Cmts.User"}
+DRAWING_LAYER_SUFFIXES = (".Fab",)
 
 # Layers that are not part of the bare-board fabrication deliverable.
 NON_FAB_LAYER_SUFFIXES = (".Fab", ".CrtYd")
@@ -75,7 +102,8 @@ PCB_DROP_HEADS = {
     # Editor-only state; aux_axis_origin is kept because plots may use it.
     "grid_origin",
 }
-PCB_TOP_DROP_HEADS = {"version", "title_block", "paper", "property", "net", "general"}
+# "general" is kept: it carries the board thickness.
+PCB_TOP_DROP_HEADS = {"version", "title_block", "paper", "property", "net"}
 
 SCH_DROP_HEADS = {"uuid", "generator", "generator_version", "title_block", "version"}
 
@@ -140,10 +168,13 @@ class DesignFingerprint:
     schematic_format: str = ""
     pcb_file: str = ""
     schematic_files: tuple[str, ...] = field(default_factory=tuple)
+    pcb_drawings: str = ""
+    fab_volatile_variables: tuple[str, ...] = field(default_factory=tuple)
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["schematic_files"] = list(self.schematic_files)
+        data["fab_volatile_variables"] = list(self.fab_volatile_variables)
         return data
 
     @classmethod
@@ -163,6 +194,10 @@ class DesignFingerprint:
                 schematic_format=str(data.get("schematic_format", "")),
                 pcb_file=str(data.get("pcb_file", "")),
                 schematic_files=tuple(str(item) for item in data.get("schematic_files", []) or []),
+                pcb_drawings=str(data.get("pcb_drawings", "")),
+                fab_volatile_variables=tuple(
+                    str(item) for item in data.get("fab_volatile_variables", []) or []
+                ),
             )
         except KeyError as exc:
             raise BoardwrightError(f"Fingerprint record is missing `{exc.args[0]}`.") from exc
@@ -183,16 +218,21 @@ def compute_fingerprint(reader: SourceReader) -> DesignFingerprint:
 
     project_yaml = reader.read_text(".boardwright/project.yaml")
     manufacturing = _manufacturing_settings(project_yaml)
+    resolver = _TextResolver(_board_variables(reader, pcb_name, pcb, project_yaml))
 
     net_labels = _net_labels(pcb)
-    geometry = _normalise_pcb(pcb, net_labels)
-    netnames = sorted(
-        (label, name) for name, label in net_labels.items() if name
-    )
+    geometry = _normalise_pcb(pcb, net_labels, resolver)
+    netnames = {
+        "nets": sorted((label, name) for name, label in net_labels.items() if name),
+        "pin_functions": _pad_pin_functions(pcb),
+    }
     fab_spec = {
-        key: value
-        for key, value in sorted(manufacturing.items())
-        if key not in FABRICATION_EXCLUDED_MANUFACTURING_KEYS
+        "settings": {
+            key: value
+            for key, value in sorted(manufacturing.items())
+            if key not in FABRICATION_EXCLUDED_MANUFACTURING_KEYS
+        },
+        "notes_template": reader.read_text(FAB_NOTES_TEMPLATE) or "",
     }
     assembly = {
         "footprints": _pcb_assembly_rows(pcb),
@@ -200,6 +240,7 @@ def compute_fingerprint(reader: SourceReader) -> DesignFingerprint:
         "notes": {
             key: manufacturing.get(key, "") for key in sorted(ASSEMBLY_EXCLUDED_MANUFACTURING_KEYS)
         },
+        "notes_template": reader.read_text(ASSEMBLY_NOTES_TEMPLATE) or "",
     }
     schematic_canonical = [
         (name, canonical(_strip(tree, SCH_DROP_HEADS))) for name, tree in schematics
@@ -217,6 +258,8 @@ def compute_fingerprint(reader: SourceReader) -> DesignFingerprint:
         schematic_format=",".join(sorted({_format_label(tree) for _, tree in schematics})),
         pcb_file=pcb_name,
         schematic_files=tuple(schematic_names),
+        pcb_drawings=_hash(json.dumps(_drawing_items(pcb, resolver))),
+        fab_volatile_variables=tuple(sorted(resolver.volatile_used)),
     )
 
 
@@ -267,7 +310,7 @@ def _pad_net_name(pad: SList, numbers: dict[str, str]) -> str | None:
     return numbers.get(str(first), "")
 
 
-def _normalise_pcb(pcb: SList, net_labels: dict[str, str]) -> SList:
+def _normalise_pcb(pcb: SList, net_labels: dict[str, str], resolver: "_TextResolver | None" = None) -> SList:
     numbers = {
         net.items[1]: net.value(2) for net in pcb.children("net") if len(net.items) >= 3
     }
@@ -276,12 +319,22 @@ def _normalise_pcb(pcb: SList, net_labels: dict[str, str]) -> SList:
         if isinstance(item, SList) and item.head in PCB_TOP_DROP_HEADS:
             continue
         kept.append(item)
-    return _normalise_pcb_node(SList(kept), net_labels, numbers)
+    return _normalise_pcb_node(SList(kept), net_labels, numbers, resolver or _TextResolver({}), {})
 
 
-def _normalise_pcb_node(node: SList, net_labels: dict[str, str], numbers: dict[str, str]) -> SList:
+def _normalise_pcb_node(
+    node: SList,
+    net_labels: dict[str, str],
+    numbers: dict[str, str],
+    resolver: "_TextResolver",
+    scope: dict[str, str],
+) -> SList:
     out: list[Node] = []
     is_footprint = node.head == "footprint"
+    if is_footprint:
+        scope = _footprint_scope(node)
+    if node.head in TEXT_HEADS and any(_is_fab_layer(layer) for layer in _layers_of(node)):
+        node = SList([resolver.resolve_atom(item, scope) if isinstance(item, str) else item for item in node.items])
     for position, item in enumerate(node.items):
         if is_footprint and position == 1:
             # Library identifier: renaming a library entry is not physical.
@@ -302,7 +355,7 @@ def _normalise_pcb_node(node: SList, net_labels: dict[str, str], numbers: dict[s
         if item.head == "net_name":
             out.append(SList(["net_name", net_labels.get(item.value(1), "unconnected")]))
             continue
-        out.append(_normalise_pcb_node(item, net_labels, numbers))
+        out.append(_normalise_pcb_node(item, net_labels, numbers, resolver, scope))
     return SList(out)
 
 
@@ -388,6 +441,137 @@ def _pcb_assembly_rows(pcb: SList) -> list[list[str]]:
                 ),
             ]
         )
+    return sorted(rows)
+
+
+class _TextResolver:
+    """Expand KiCad ``${VAR}`` references the way the board plot would."""
+
+    def __init__(self, variables: dict[str, str]) -> None:
+        import re
+
+        self.variables = variables
+        self.volatile_used: set[str] = set()
+        self._pattern = re.compile(r"\$\{([^{}]+)\}")
+
+    def resolve_atom(self, atom: str, scope: dict[str, str]) -> str:
+        if "${" not in atom or not atom.startswith('"'):
+            return atom
+        text = self.resolve(unquote(atom), scope)
+        return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+
+    def resolve(self, text: str, scope: dict[str, str], depth: int = 0) -> str:
+        if depth > 8 or "${" not in text:
+            return text
+
+        def replace(match: Any) -> str:
+            name = match.group(1)
+            if name in RELEASE_VOLATILE_VARIABLES:
+                self.volatile_used.add(name)
+                return f"<release-dependent:{name}>"
+            if name in scope:
+                return self.resolve(scope[name], scope, depth + 1)
+            if name in self.variables:
+                return self.resolve(self.variables[name], scope, depth + 1)
+            return match.group(0)
+
+        return self._pattern.sub(replace, text)
+
+
+def _footprint_scope(footprint: SList) -> dict[str, str]:
+    scope: dict[str, str] = {}
+    for prop in footprint.children("property"):
+        name, value = prop.value(1), prop.value(2)
+        scope[name] = value
+        scope[name.upper()] = value
+    library_id = footprint.value(1)
+    library, _, name = library_id.partition(":")
+    scope.setdefault("FOOTPRINT_LIBRARY", library if name else "")
+    scope.setdefault("FOOTPRINT_NAME", name or library)
+    return scope
+
+
+def _board_variables(reader: SourceReader, pcb_name: str, pcb: SList, project_yaml: str | None) -> dict[str, str]:
+    variables: dict[str, str] = {}
+    if pcb_name:
+        project_file = pcb_name[: -len(".kicad_pcb")] + ".kicad_pro"
+        try:
+            project = json.loads(reader.read_text(project_file) or "{}")
+        except json.JSONDecodeError:
+            project = {}
+        text_variables = project.get("text_variables") if isinstance(project, dict) else None
+        if isinstance(text_variables, dict):
+            variables.update({str(k): str(v) for k, v in text_variables.items()})
+    for prop in pcb.children("property"):
+        variables[prop.value(1)] = prop.value(2)
+    # Boardwright re-syncs these from project.yaml before every build, so the
+    # metadata file wins over a possibly stale .kicad_pro copy.
+    data: Any = {}
+    if project_yaml:
+        try:
+            import yaml
+
+            data = yaml.safe_load(project_yaml) or {}
+        except Exception:  # pragma: no cover - malformed YAML is reported elsewhere
+            data = {}
+    project_section = data.get("project", {}) if isinstance(data, dict) else {}
+    documents = data.get("documents", {}) if isinstance(data, dict) else {}
+    schematic = documents.get("schematic", {}) if isinstance(documents, dict) else {}
+    if isinstance(project_section, dict) and project_section.get("board_revision"):
+        variables["BOARD_REVISION"] = variables["PCB_REVISION"] = str(project_section["board_revision"])
+    if isinstance(schematic, dict) and schematic.get("revision"):
+        variables["SCHEMATIC_REVISION"] = variables["DRAWING_REVISION"] = str(schematic["revision"])
+    title_block = pcb.child("title_block")
+    if title_block is not None:
+        builtins = {"rev": "REVISION", "title": "TITLE", "company": "COMPANY", "date": "ISSUE_DATE"}
+        for item in title_block.items[1:]:
+            if not isinstance(item, SList):
+                continue
+            if item.head in builtins:
+                variables[builtins[item.head]] = item.value(1)
+            elif item.head == "comment" and len(item.items) >= 3:
+                variables[f"COMMENT{item.value(1)}"] = item.value(2)
+    return variables
+
+
+def _is_drawing_layer(layer: str) -> bool:
+    return layer in DRAWING_LAYER_NAMES or layer.startswith("User.") or layer.endswith(DRAWING_LAYER_SUFFIXES)
+
+
+def _drawing_items(pcb: SList, resolver: "_TextResolver") -> list[str]:
+    """Canonical content on documentation layers used by the PCB drawings."""
+
+    def only_drawing(node: SList) -> bool:
+        layers = _layers_of(node)
+        return bool(layers) and all(_is_drawing_layer(layer) for layer in layers)
+
+    items: list[str] = []
+    for item in pcb.items:
+        if not isinstance(item, SList):
+            continue
+        if item.head == "footprint":
+            reference = _footprint_reference(item)
+            at = item.child("at")
+            side = item.child("layer")
+            for child in item.items:
+                if isinstance(child, SList) and child.head != "pad" and only_drawing(child) and not _is_hidden(child):
+                    items.append(
+                        f"{reference}|{canonical(at) if at else ''}|{side.value(1) if side else ''}|"
+                        + canonical(_strip(child, PCB_DROP_HEADS))
+                    )
+        elif only_drawing(item):
+            items.append(canonical(_strip(item, PCB_DROP_HEADS)))
+    return sorted(items)
+
+
+def _pad_pin_functions(pcb: SList) -> list[str]:
+    rows: list[str] = []
+    for footprint in pcb.children("footprint"):
+        reference = _footprint_reference(footprint)
+        for pad in footprint.children("pad"):
+            function = pad.child("pinfunction")
+            if function is not None:
+                rows.append(f"{reference}:{pad.value(1)}={function.value(1)}")
     return sorted(rows)
 
 
@@ -510,7 +694,7 @@ def _git(root: Path, *args: str) -> str:
 
 
 def changed_domains(old: DesignFingerprint, new: DesignFingerprint) -> tuple[str, ...]:
-    domains = ("pcb_geometry", "pcb_netnames", "fabrication_spec", "assembly", "schematic")
+    domains = ("pcb_geometry", "pcb_netnames", "fabrication_spec", "assembly", "pcb_drawings", "schematic")
     return tuple(name for name in domains if getattr(old, name) != getattr(new, name))
 
 
