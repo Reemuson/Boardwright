@@ -35,6 +35,10 @@ preflight:
       text: '@PROJECT_NUMBER@'
     - variable: 'BOARD_REVISION'
       text: '@BOARD_REVISION@'
+    - variable: 'PCB_REVISION'
+      text: '@BOARD_REVISION@'
+    - variable: 'SCHEMATIC_REVISION'
+      text: '@SCHEMATIC_REVISION@'
     - variable: 'DOCUMENT_TYPE'
       text: '@DOCUMENT_TYPE@'
     - variable: 'DRAWING_TITLE'
@@ -218,6 +222,7 @@ definitions:
   DESIGNER: ""
   PROJECT_NUMBER: ""
   BOARD_REVISION: A
+  SCHEMATIC_REVISION: A
   DOCUMENT_TYPE: SCHEMATIC
   DRAWING_TITLE: Schematic
   DRAWING_NUMBER: ""

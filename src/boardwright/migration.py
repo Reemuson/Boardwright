@@ -202,6 +202,7 @@ def apply_migration_plan(plan_path: Path) -> list[Path]:
                 plan.get("reference_rewrites", {}),
             )
         )
+        written.extend(_rewrite_pcb_title_revision(root))
         _ensure_unreleased_changelog(root / "CHANGELOG.md")
         _sync_kibot_project_metadata(root, load_config(root))
 
@@ -447,6 +448,31 @@ def _rewrite_schematic_text_variables(
     return written
 
 
+PCB_TITLE_REVISION_REWRITES = {
+    b'(rev "${REVISION}")': b'(rev "${PCB_REVISION}")',
+    b'(rev "${DRAWING_REVISION}")': b'(rev "${PCB_REVISION}")',
+}
+
+
+def _rewrite_pcb_title_revision(root: Path) -> list[Path]:
+    """Point PCB title-block revisions at the physical PCB revision.
+
+    Only the title-block ``rev`` token is replaced, byte-for-byte, so line
+    endings and the rest of the authored board file are untouched.
+    """
+
+    written: list[Path] = []
+    for path in sorted(root.glob("*.kicad_pcb")):
+        data = path.read_bytes()
+        updated = data
+        for source, target in PCB_TITLE_REVISION_REWRITES.items():
+            updated = updated.replace(source, target, 1)
+        if updated != data:
+            path.write_bytes(updated)
+            written.append(path)
+    return written
+
+
 def _replace_legacy_project_identifier(value: Any, project_stem: str) -> Any:
     if isinstance(value, dict):
         return {
@@ -529,6 +555,7 @@ def _migration_backup_paths(root: Path, plan: dict[str, Any], project: Path) -> 
         project,
     }
     paths.update(root.glob("*.kicad_sch"))
+    paths.update(root.glob("*.kicad_pcb"))
     paths.update(root / relative for relative in plan.get("removals", []))
     return _top_level_paths(paths)
 

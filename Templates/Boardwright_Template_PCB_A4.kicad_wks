@@ -497,6 +497,16 @@
 		)
 		(justify top)
 	)
+	(tbtext "PCB REV ${PCB_REVISION} | SCH REV ${SCHEMATIC_REVISION} | RELEASE ${RELEASE_VERSION}"
+		(name "boardwright_revision_identity")
+		(pos 26 20)
+		(font
+			(size 1.6 1.8)
+			(color 0 0 127 1)
+		)
+		(justify right top)
+		(comment "Boardwright revision identity: physical PCB, schematic and project release")
+	)
 	(tbtext "PROJECT"
 		(name "")
 		(pos 184 69)

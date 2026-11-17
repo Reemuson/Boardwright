@@ -970,17 +970,14 @@
   ],
   "text_variables": {
     "ASSEMBLY_NOTES": "ASSEMBLY NOTES",
-    "BOARD_NAME": "BOARD NAME",
     "BOARD_REVISION": "A",
     "COMPANY": "RYAN HICKS",
     "DESIGNER": "R. HICKS",
     "FABRICATION_NOTES": "FABRICATION NOTES",
     "GIT_HASH_PCB": "",
     "GIT_HASH_SCH": "",
-    "PROJECT_NAME": "PROJECT NAME",
     "RELEASE_DATE_NUM": "YYYY-MM-DD",
     "RELEASE_VERSION": "",
-    "REVISION": "",
     "SHEET_LEGAL_NOTICE": "THIS DESIGN AND/OR DRAWING IS THE PROPERTY OF RYAN HICKS\nAND SHALL NOT BE REPRODUCED WITHOUT AUTHORISATION.",
     "SHEET_NAME_1": "COVER PAGE",
     "SHEET_NAME_10": "................................",
@@ -1027,7 +1024,7 @@
     "PCBA_NAME": "Boardwright KiCad/KiBot Template",
     "PCB_NAME": "Boardwright KiCad/KiBot Template PCB",
     "DOCUMENT_TYPE": "SCHEMATIC",
-    "DRAWING_TITLE": "Schematic",
+    "DRAWING_TITLE": "SCHEMATIC",
     "DRAWING_NUMBER": "Boardwright KiCad/KiBot Template",
     "DRAWING_REVISION": "A",
     "RELEASE_DATE": "",
@@ -1060,6 +1057,8 @@
     "REVTABLE_NOTE": "",
     "LOGO": "assets/logos/logo-wordmark-colour.png",
     "TEMPLATE_LOGO": "assets/logos/logo-block-black.png",
-    "GIT_URL": "https://github.com/Reemuson/Boardwright.git"
+    "GIT_URL": "https://github.com/Reemuson/Boardwright.git",
+    "PCB_REVISION": "A",
+    "SCHEMATIC_REVISION": "A"
   }
 }

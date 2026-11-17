@@ -290,6 +290,21 @@ def _validate_deprecated_schematic_variables(
                 f"{path.name}; use '${{DRAWING_REVISION}}' instead.",
             )
         )
+    for path in sorted(root.glob("*.kicad_pcb")):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if '(rev "${REVISION}")' not in text:
+            continue
+        issues.append(
+            ValidationIssue(
+                "warning",
+                f"{path.name} title block revision uses the removed '${{REVISION}}' "
+                "variable; use '${PCB_REVISION}' so the board title block shows the "
+                "physical PCB revision.",
+            )
+        )
 
 
 def _find_known_local_branding(root: Path) -> list[tuple[str, str]]:

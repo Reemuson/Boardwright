@@ -9,7 +9,7 @@
 	(paper "A3")
 	(title_block
 		(date "2024-04-13")
-		(rev "${REVISION}")
+		(rev "${PCB_REVISION}")
 		(company "${COMPANY}")
 	)
 	(layers
