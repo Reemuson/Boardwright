@@ -135,6 +135,36 @@ Minimum feature sizes come from the KiCad design, by
 `N/A` means the board has no holes of that type. Missing rules, an unreadable
 drill or a zero annular ring stop the build.
 
+### Approved wording
+
+The notes render from `.boardwright/templates/fabrication_notes.txt` when it
+exists, otherwise from the Boardwright template. The project file is outside
+the Boardwright payload, so updates never replace it; use it to keep a released
+project's approved wording. It must reference every declared requirement that
+makes a statement, as a `${...}` placeholder or in a `#?` condition, or
+rendering fails.
+
+Template syntax: `${name}` substitutes a value (for example
+`${manufacturing_standard_cap}`, `${flammability_rating_cap}`,
+`${tg_rating_cap}`, `${COMPANY_cap}`, and the feature sizes above). A line
+starting `@NOTE@` becomes the next numbered note. A `#?EXPR` line keeps the next
+line only if `EXPR` is true. `EXPR` uses `and`/`or`/`not` over `stackup`,
+`impedance_controlled`, `rohs_pb_free`, `halogen_free`, `tented_vias`,
+`silkscreen_enabled` and `conformal_coating`; any other name fails. Spacing is
+reproduced exactly, and the file is written with LF line endings.
+
+Notes have exactly one writer, `prepare_pcb_tables.py`; KiBot defines no notes
+output.
+
+### Releases before output manifests
+
+For a reused baseline whose previous release has no committed
+`accepted_manifest.json`, `check-baseline` compares against that release's
+published `boardwright-<tag>-release.zip`. It authenticates the package first:
+published by the release workflow, GitHub SHA-256 digest matched, and tag
+unmoved and in history. The step fails if the package cannot be obtained or
+authenticated.
+
 ## Drawing Number Resolution
 
 `${DRAWING_NUMBER}` is resolved per document before KiCad/KiBot output

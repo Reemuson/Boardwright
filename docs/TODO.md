@@ -251,15 +251,10 @@ Goal: make the generated README a useful hardware project front page.
       vs 10 differences before switching pipelines to `v2_dk10` (MIGRATION.md).
 - [ ] Decide whether to pin `INTI-CMNB/KiBot` actions to commit SHAs (audit M8).
 - [ ] Review `docker_kibot_linux.sh` `/etc/shadow` mount and KiCad 8 default (audit M7).
-- [ ] Fail closed when the previous release has no output manifest: build the
-      comparison manifest from the published release package, or require a
-      recorded override (audit F19).
-- [ ] Decide the FIC-100A fabrication-note wording against 0.1.3 (audit F18): approve
-      the template wording as a fabrication-documentation change or keep the 0.1.3
-      text. Then declare `manufacturing:` in ci-test and rebuild the candidate.
-- [ ] Remove or repair the unused KiBot `notes` group: its `report` output would
-      overwrite the Boardwright-rendered notes from a template it cannot fully
-      render (audit F17).
+- [x] Fail closed when the previous release has no output manifest (audit F19).
+- [x] FIC-100A keeps its 0.1.3 fabrication-note wording (audit F18, option a).
+- [x] Single fabrication-notes writer; KiBot notes outputs removed (audit F17).
+- [ ] Stop the KiBot build mutating `.gitattributes` and `.git/config` (audit F16).
 - [ ] Live-test the ledger/manifest release path on boardwright-ci-test. The branch
       and runbook are prepared locally (`AUDIT-2026-11.md`, follow-up); awaiting
       authorisation to push/dispatch.
