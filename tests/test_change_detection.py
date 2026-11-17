@@ -216,6 +216,61 @@ class ChangeDetectionTests(unittest.TestCase):
         self.assertTrue(assessment.baseline_legacy)
         self.assertTrue(any("no recorded schematic" in r for r in assessment.reviews))
 
+    # declared fabrication requirements (audit F18) ---------------------------
+    def _append_manufacturing(self, body: str) -> None:
+        import yaml
+
+        project = self.tmp / ".boardwright" / "project.yaml"
+        data = yaml.safe_load(project.read_text(encoding="utf-8"))
+        manufacturing = data.get("manufacturing") or {}
+        self.assertEqual({}, manufacturing)
+        manufacturing.update(yaml.safe_load("x:\n" + body)["x"])
+        data["manufacturing"] = manufacturing
+        project.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+
+    def _release_without_manufacturing(self) -> None:
+        import yaml
+
+        project = self.tmp / ".boardwright" / "project.yaml"
+        data = yaml.safe_load(project.read_text(encoding="utf-8"))
+        data.pop("manufacturing", None)
+        project.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        self.project.commit("legacy project without declared requirements")
+        self._release_initial()
+
+    def test_newly_declared_requirements_keep_the_baseline_for_output_verification(self) -> None:
+        self._release_without_manufacturing()
+        self._append_manufacturing("  manufacturing_standard: IPC-6012A Class 2\n  conformal_coating: null\n")
+        template = self.tmp / ".boardwright" / "templates" / "fabrication_notes.txt"
+        template.parent.mkdir(parents=True)
+        template.write_text("@NOTE@\tFABRICATE PER ${manufacturing_standard_cap}.\n", encoding="utf-8")
+        assessment = self.project.assess("1.0.1", "documentation", "A.0", "Declare approved requirements")
+        self.assertEqual((), assessment.problems, format_impact(assessment))
+        self.assertNotIn("fabrication_spec", assessment.detected)
+        self.assertEqual("reused", assessment.fabrication_baseline.status)
+        self.assertTrue(any("newly declared" in r and "check-baseline" in r for r in assessment.reviews))
+
+    def test_changed_declared_requirement_is_a_fabrication_change(self) -> None:
+        self._release_without_manufacturing()
+        self._append_manufacturing("  manufacturing_standard: IPC-6012A Class 2\n")
+        self.project.commit("declare")
+        self.project.release("1.0.1", "A.0", classes="documentation", justification="declare")
+        project = self.tmp / ".boardwright" / "project.yaml"
+        project.write_text(
+            project.read_text(encoding="utf-8").replace("IPC-6012A Class 2", "IPC-6012 Class 3"), encoding="utf-8"
+        )
+        assessment = self.project.assess("1.0.2", "documentation", "A.0", "Class 3")
+        self.assertIn("fabrication_spec", assessment.detected)
+        self.assertNotEqual("reused", assessment.fabrication_baseline.status)
+        self.assertTrue(any("declare the `fabrication` change class" in p for p in assessment.problems))
+
+    def test_newly_added_non_requirement_setting_is_a_fabrication_change(self) -> None:
+        self._release_without_manufacturing()
+        self._append_manufacturing("  manufacturing_standard: IPC-6012A Class 2\n  impedance_enabled: true\n")
+        assessment = self.project.assess("1.0.1", "documentation", "A.0", "Impedance")
+        self.assertIn("fabrication_spec", assessment.detected)
+        self.assertNotEqual("reused", assessment.fabrication_baseline.status)
+
     def test_documentation_only_release_still_reuses_baseline(self) -> None:
         self._release_initial()
         self.project.write(note="CORRECTED NOTE")
