@@ -5,13 +5,19 @@
 
 The prepare-release workflow writes ``.boardwright/accepted_manifest.json`` for
 the outputs it generated and commits it with the release state. The publish
-workflow regenerates outputs from the tag and verifies them against that
-manifest, so the published package is provably the accepted one.
+workflow regenerates outputs from the tag and verifies the controlled outputs
+against that manifest.
 
-Each file records a raw SHA-256 (byte identity) and, for text fabrication and
-assembly outputs, a normalised SHA-256 with creation timestamps and generator
-banners removed (content identity). Byte-identical and normalised-equivalent
-are reported separately; neither is silently treated as the other.
+Controlled outputs are machine-readable manufacturing data: Gerber, Excellon,
+Gerber job and IPC-D-356 files (loose, and inside the fabrication zip), plus
+assembly CSV/position files. Each file records a raw SHA-256 (byte identity)
+and a normalised SHA-256 with only timestamp/generator attributes and the
+title-block revision field of ``TF.ProjectId`` removed (content identity).
+Byte-identical and normalised-equivalent are reported separately.
+
+Drawings (PDF), drill maps, renders, reports and ODB++ archives are recorded
+as informational only: they embed dates/release text, and KiCad 9 writes
+ODB++ symbol tables in a non-deterministic order.
 
 Usage::
 
@@ -31,27 +37,41 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-MANIFEST_SCHEMA = 1
+MANIFEST_SCHEMA = 2
+# Bump whenever normalised_bytes() changes. Normalised hashes are only
+# comparable between manifests written by the same normaliser version.
+NORMALISER_VERSION = 2
 DEFAULT_MANIFEST = Path(".boardwright") / "accepted_manifest.json"
 OUTPUT_ROOTS = ("Manufacturing", "Schematic", "Reports", "Testing")
 CONTROLLED_CATEGORIES = ("fabrication", "assembly")
+ZIP_MEMBER_SEPARATOR = "!/"
 
-FAB_TEXT_SUFFIXES = {".gbr", ".gbrjob", ".drl", ".gbl", ".gtl", ".gto", ".gbo", ".gts", ".gbs", ".gtp", ".gbp", ".gm1", ".gko", ".xln", ".ipc", ".d356"}
-FAB_TEXT_SUFFIXES |= {f".g{n}" for n in range(1, 33)}
+GERBER_SUFFIXES = {".gbr", ".gtl", ".gbl", ".gto", ".gbo", ".gts", ".gbs", ".gtp", ".gbp", ".gm1", ".gko"}
+GERBER_SUFFIXES |= {f".g{n}" for n in range(1, 33)}
+DRILL_SUFFIXES = {".drl", ".xln", ".exc"}
+JOB_SUFFIXES = {".gbrjob"}
+NETLIST_SUFFIXES = {".ipc", ".d356"}
+FAB_TEXT_SUFFIXES = GERBER_SUFFIXES | DRILL_SUFFIXES | JOB_SUFFIXES | NETLIST_SUFFIXES
 ASSEMBLY_TEXT_SUFFIXES = {".csv", ".pos"}
 
-_VOLATILE_LINE = re.compile(
-    r"(TF\.CreationDate|TF\.GenerationSoftware|TF\.ProjectId|CreationDate|Created by KiCad|"
-    r"^;\s*(DRILL file|FORMAT|#@!)|\bGenerated\b.*\d{4}-\d{2}-\d{2}|"
-    r'^"?(Date|Generated|Creation ?Date|KiCad Version|Tool|Generator)"?\s*[:,])',
-    re.IGNORECASE,
+# Gerber X2 / Excellon attribute lines that carry only a timestamp or the
+# generating tool. Matched exactly; geometry, apertures, FileFunction,
+# polarity and every other attribute are kept.
+_GERBER_VOLATILE = re.compile(
+    r"^(%TF\.(CreationDate|GenerationSoftware),.*\*%"
+    r"|G04 #@! TF\.(CreationDate|GenerationSoftware),.*\*"
+    r"|G04 Created by KiCad .*\*)$"
 )
+_GERBER_PROJECT_ID = re.compile(r"^(%TF\.ProjectId|G04 #@! TF\.ProjectId),([^,]*),([^,*]*),[^*]*(\*%?)$")
+_DRILL_VOLATILE = re.compile(r"^; ?(DRILL file \{.*\} date .*|#@! TF\.(CreationDate|GenerationSoftware),.*)$")
+_DRILL_PROJECT_ID = re.compile(r"^(; ?#@! TF\.ProjectId),([^,]*),([^,]*),.*$")
+_NETLIST_VOLATILE = re.compile(r"^C\s.*(\d{4}[-/]\d{2}[-/]\d{2}|Pcbnew|KiCad)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
 class Difference:
     path: str
-    kind: str  # missing | unexpected | changed | regenerated
+    kind: str  # missing | unexpected | changed | regenerated | incomparable
 
     def __str__(self) -> str:
         labels = {
@@ -59,33 +79,97 @@ class Difference:
             "unexpected": "not present in the accepted outputs",
             "changed": "content differs after normalisation",
             "regenerated": "bytes differ but normalised content is identical",
+            "incomparable": "bytes differ and the manifests use different normaliser versions",
         }
         return f"{self.path}: {labels[self.kind]}"
 
 
 def category_for(relative: str) -> str:
+    """Classify an output path (or ``archive.zip!/member`` entry).
+
+    Only machine-readable manufacturing data is controlled. Drawings, drill
+    maps, PDFs, renders and archives themselves are informational; the
+    fabrication archive is verified through its members instead.
+    """
+
     lowered = relative.lower()
+    if ZIP_MEMBER_SEPARATOR in lowered:
+        archive, member = lowered.split(ZIP_MEMBER_SEPARATOR, 1)
+        if archive.startswith("manufacturing/fabrication/") and _is_fabrication_archive(archive):
+            return "fabrication" if Path(member).suffix in FAB_TEXT_SUFFIXES else "informational"
+        return "informational"
     suffix = Path(lowered).suffix
-    if lowered.startswith("manufacturing/fabrication/gerbers/") and suffix != ".zip":
+    if lowered.startswith("manufacturing/fabrication/gerbers/") and suffix in FAB_TEXT_SUFFIXES:
         return "fabrication"
     if lowered.startswith("manufacturing/assembly/") and suffix in ASSEMBLY_TEXT_SUFFIXES:
         return "assembly"
     return "informational"
 
 
+def _is_fabrication_archive(lowered: str) -> bool:
+    # ODB++ archives are excluded: KiCad 9 writes their symbol tables in a
+    # non-deterministic order, so member bytes differ between identical builds.
+    return lowered.endswith(".zip") and "odb" not in Path(lowered).name
+
+
 def normalised_bytes(relative: str, data: bytes) -> bytes:
+    """Remove only provably volatile content from controlled text outputs."""
+
     if category_for(relative) == "informational":
         return data
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
         return data
-    kept = [
-        line.rstrip()
-        for line in text.replace("\r\n", "\n").split("\n")
-        if not _VOLATILE_LINE.search(line)
-    ]
-    return "\n".join(kept).encode("utf-8")
+    suffix = Path(relative.lower()).suffix
+    if suffix in JOB_SUFFIXES:
+        return _normalise_gerber_job(text)
+    lines = [line.rstrip() for line in text.replace("\r\n", "\n").split("\n")]
+    if suffix in GERBER_SUFFIXES:
+        kept = []
+        for line in lines:
+            if _GERBER_VOLATILE.match(line):
+                continue
+            match = _GERBER_PROJECT_ID.match(line)
+            # Keep project name and GUID; drop the title-block revision field,
+            # which is release metadata (validated by the ledger), not artwork.
+            kept.append(f"{match[1]},{match[2]},{match[3]}{match[4]}" if match else line)
+        lines = kept
+    elif suffix in DRILL_SUFFIXES:
+        kept = []
+        for line in lines:
+            if _DRILL_VOLATILE.match(line):
+                continue
+            match = _DRILL_PROJECT_ID.match(line)
+            kept.append(f"{match[1]},{match[2]},{match[3]}" if match else line)
+        lines = kept
+    elif suffix in NETLIST_SUFFIXES:
+        lines = [line for line in lines if not _NETLIST_VOLATILE.match(line)]
+    return "\n".join(lines).encode("utf-8")
+
+
+def _normalise_gerber_job(text: str) -> bytes:
+    try:
+        job = json.loads(text)
+    except json.JSONDecodeError:
+        return text.replace("\r\n", "\n").encode("utf-8")
+    header = job.get("Header") if isinstance(job, dict) else None
+    if isinstance(header, dict):
+        header.pop("CreationDate", None)
+        header.pop("GenerationSoftware", None)
+        project = header.get("ProjectId")
+        if isinstance(project, dict):
+            project.pop("Revision", None)
+    return json.dumps(job, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _entry(relative: str, data: bytes) -> dict[str, str]:
+    return {
+        "category": category_for(relative),
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "normalized_sha256": hashlib.sha256(normalised_bytes(relative, data)).hexdigest(),
+        "size": str(len(data)),
+    }
 
 
 def build_manifest(root: Path, roots: tuple[str, ...] = OUTPUT_ROOTS) -> dict[str, Any]:
@@ -97,13 +181,36 @@ def build_manifest(root: Path, roots: tuple[str, ...] = OUTPUT_ROOTS) -> dict[st
         for path in sorted(p for p in base.rglob("*") if p.is_file()):
             relative = path.relative_to(root).as_posix()
             data = path.read_bytes()
-            files[relative] = {
-                "category": category_for(relative),
-                "sha256": hashlib.sha256(data).hexdigest(),
-                "normalized_sha256": hashlib.sha256(normalised_bytes(relative, data)).hexdigest(),
-                "size": str(len(data)),
+            files[relative] = _entry(relative, data)
+            lowered = relative.lower()
+            if lowered.startswith("manufacturing/fabrication/") and _is_fabrication_archive(lowered):
+                files.update(_archive_entries(relative, data))
+    return {"schema": MANIFEST_SCHEMA, "normaliser": NORMALISER_VERSION, "files": files}
+
+
+def _archive_entries(relative: str, data: bytes) -> dict[str, dict[str, str]]:
+    import io
+    import zipfile
+
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        # Recorded as a controlled entry that can never match a real archive.
+        return {
+            f"{relative}{ZIP_MEMBER_SEPARATOR}<unreadable>": {
+                "category": "fabrication",
+                "sha256": "unreadable",
+                "normalized_sha256": "unreadable",
+                "size": "0",
             }
-    return {"schema": MANIFEST_SCHEMA, "files": files}
+        }
+    entries: dict[str, dict[str, str]] = {}
+    for info in sorted(archive.infolist(), key=lambda item: item.filename):
+        if info.is_dir():
+            continue
+        name = f"{relative}{ZIP_MEMBER_SEPARATOR}{info.filename}"
+        entries[name] = _entry(name, archive.read(info))
+    return entries
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
@@ -111,8 +218,13 @@ def load_manifest(path: Path) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Cannot read manifest {path}: {exc}") from exc
-    if not isinstance(data, dict) or data.get("schema") != MANIFEST_SCHEMA or not isinstance(data.get("files"), dict):
-        raise ValueError(f"Manifest {path} is not a schema {MANIFEST_SCHEMA} Boardwright manifest.")
+    if (
+        not isinstance(data, dict)
+        or data.get("schema") not in (1, MANIFEST_SCHEMA)
+        or not isinstance(data.get("files"), dict)
+    ):
+        raise ValueError(f"Manifest {path} is not a Boardwright output manifest (schema 1 or {MANIFEST_SCHEMA}).")
+    data.setdefault("normaliser", 1)
     return data
 
 
@@ -129,21 +241,38 @@ def compare_manifests(
         }
 
     old, new = pick(accepted), pick(current)
+    same_normaliser = accepted.get("normaliser", 1) == current.get("normaliser", 1)
     differences: list[Difference] = []
     for path in sorted(set(old) | set(new)):
         if path not in new:
             differences.append(Difference(path, "missing"))
         elif path not in old:
             differences.append(Difference(path, "unexpected"))
+        elif old[path]["sha256"] == new[path]["sha256"]:
+            continue
+        elif not same_normaliser:
+            differences.append(Difference(path, "incomparable"))
         elif old[path]["normalized_sha256"] != new[path]["normalized_sha256"]:
             differences.append(Difference(path, "changed"))
-        elif old[path]["sha256"] != new[path]["sha256"]:
+        else:
             differences.append(Difference(path, "regenerated"))
     return differences
 
 
 def blocking(differences: list[Difference]) -> list[Difference]:
     return [item for item in differences if item.kind != "regenerated"]
+
+
+INCOMPARABLE_HINT = (
+    "The accepted manifest was written by a different Boardwright normaliser, so only byte "
+    "identity can be checked. Rebuild the accepted state with the current Boardwright (new "
+    "release version), or compare the outputs manually and record the result."
+)
+
+
+def _print_hints(differences: list[Difference]) -> None:
+    if any(item.kind == "incomparable" for item in differences):
+        print(INCOMPARABLE_HINT, file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -201,6 +330,7 @@ def main(argv: list[str] | None = None) -> int:
         print(("ERROR " if item in hard else "note  ") + str(item))
     if hard:
         print(f"{len(hard)} controlled output(s) differ.", file=sys.stderr)
+        _print_hints(hard)
         return 1
     soft = len(differences)
     print(
@@ -265,6 +395,7 @@ def _check_baseline(root: Path) -> int:
             "real, re-classify the release (fabrication reissue or new revision).",
             file=sys.stderr,
         )
+        _print_hints(hard)
         return 1
     print(
         f"{'/'.join(categories).capitalize()} outputs match approved release {record.previous_version}"
