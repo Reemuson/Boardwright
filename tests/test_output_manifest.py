@@ -46,6 +46,18 @@ class OutputManifestTests(unittest.TestCase):
         self.assertEqual("assembly", category_for("Manufacturing/Assembly/x-CPL.csv"))
         self.assertEqual("informational", category_for("Schematic/x.pdf"))
         self.assertEqual("informational", category_for("Manufacturing/Fabrication/Gerbers/x.zip"))
+        self.assertEqual("fabrication", category_for("Manufacturing/Fabrication/x-fabrication_notes.txt"))
+        self.assertEqual("assembly", category_for("Manufacturing/Assembly/x-assembly_notes.txt"))
+        self.assertEqual("informational", category_for("Manufacturing/Fabrication/x-fabrication.pdf"))
+
+    def test_recategorised_file_is_still_compared(self) -> None:
+        self._write()
+        first = build_manifest(self.root)
+        notes = "Manufacturing/Fabrication/b-fabrication_notes.txt"
+        first["files"][notes] = {"category": "informational", "sha256": "a", "normalized_sha256": "a", "size": "1"}
+        second = build_manifest(self.root)
+        second["files"][notes] = {"category": "fabrication", "sha256": "b", "normalized_sha256": "b", "size": "1"}
+        self.assertEqual([(notes, "changed")], [(d.path, d.kind) for d in blocking(compare_manifests(first, second))])
 
     def test_identical_regeneration_is_byte_identical(self) -> None:
         self._write()

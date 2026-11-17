@@ -107,14 +107,33 @@ class ChangeDetectionTests(unittest.TestCase):
         self.assertTrue(any("declare the `fabrication` change class" in p for p in assessment.problems))
         self.assertTrue(any("${RELEASE_VERSION}" in r for r in assessment.reviews))
 
-    def test_fabrication_notes_template_is_fabrication_spec(self) -> None:
+    def test_notes_template_is_tooling_not_fabrication_spec(self) -> None:
         template = self.tmp / FAB_NOTES
         template.parent.mkdir(parents=True)
         template.write_text("1. Finish: ENIG.\n", encoding="utf-8")
-        self.assertEqual(
-            ("fabrication_spec",),
-            self._domains_after(lambda: template.write_text("1. Finish: HASL.\n", encoding="utf-8")),
-        )
+        before = fingerprint_working_tree(self.tmp)
+        template.write_text("1. Finish: HASL.\n", encoding="utf-8")
+        after = fingerprint_working_tree(self.tmp)
+        from boardwright.fingerprint import changed_domains
+
+        self.assertEqual((), changed_domains(before, after))
+        self.assertNotEqual(before.tooling, after.tooling)
+        # Line-ending-only differences (Windows checkout vs Git object) are not tooling changes.
+        template.write_bytes(b"1. Finish: HASL.\r\n")
+        self.assertEqual(after.tooling, fingerprint_working_tree(self.tmp).tooling)
+
+    def test_tooling_change_requires_tooling_class(self) -> None:
+        template = self.tmp / FAB_NOTES
+        template.parent.mkdir(parents=True)
+        template.write_text("1. Finish: ENIG.\n", encoding="utf-8")
+        self.project.commit("template")
+        self._release_initial()
+        template.write_text("1. Surface finish: ENIG.\n", encoding="utf-8")
+        assessment = self.project.assess("1.0.1", "documentation", "A.0", "Update tooling")
+        self.assertTrue(any("declare the `tooling` change class" in p for p in assessment.problems))
+        assessment = self.project.assess("1.0.1", "tooling", "A.0", "Update tooling")
+        self.assertEqual((), assessment.problems, format_impact(assessment))
+        self.assertEqual("reused", assessment.fabrication_baseline.status)
 
     def test_pin_function_change_is_netname_data(self) -> None:
         self._edit_pcb('(net 2 "{net}") (uuid "a")'.replace("{net}", "VIN"), '(net 2 "VIN") (pinfunction "A") (uuid "a")')
