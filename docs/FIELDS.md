@@ -96,6 +96,45 @@ Approval is intentionally not emitted as a Boardwright variable. It can be signe
 after the fact on controlled drawings instead of being baked into generated
 metadata.
 
+## Fabrication Note Requirements
+
+The fabrication notes are a controlled manufacturing specification. Boardwright
+renders them from two sources and never from silent defaults.
+
+Manufacturing statements come from `.boardwright/project.yaml`
+`manufacturing:`. All of these keys must be present. Rendering and
+`boardwright validate` fail if any is missing, so a Boardwright update cannot
+change an approved specification. Set a key empty (text) or `null` (boolean) to
+omit its statement deliberately.
+
+| Key | Statement |
+| --- | --- |
+| `manufacturing_standard` | `FABRICATE PER …` |
+| `core_material` | `CORE MATERIAL: …` |
+| `flammability_rating` | flammability requirement |
+| `tg_rating` | Tg requirement |
+| `rohs_pb_free` | RoHS / Pb-free process (`true`: required; `false`: not required) |
+| `halogen_free` | halogen-free equivalent material |
+| `tented_vias` | via tenting |
+| `silkscreen_enabled` | silkscreen legend |
+| `conformal_coating` | `true`: required; `false`: states "not required"; `null`: no statement |
+
+Minimum feature sizes come from the KiCad design, by
+`boardwright.fabrication_requirements`:
+
+| Note line | Source |
+| --- | --- |
+| TRACE WIDTH | Narrowest routed track; must not be below board-setup `min_track_width`. |
+| TRACE TO TRACE | Smallest design-rule clearance (net classes, local overrides, `.kicad_dru` `clearance` constraints), floored by board-setup `min_clearance`. A rule, not measured spacing: DRC violations are deviations to record. |
+| MIN. HOLE (PTH) | Smallest via or plated pad drill (slot width for slots). |
+| MIN. HOLE (NPTH) | Smallest non-plated pad drill. |
+| ANNULAR RING | Smallest outer ring over vias and plated pads, including slots, drill offsets and padstack layers. |
+| COPPER TO HOLE / EDGE, HOLE TO HOLE | Board-setup `min_hole_clearance`, `min_copper_edge_clearance`, `min_hole_to_hole`. |
+| BOARD THICKNESS | PCB `(general (thickness …))`. |
+
+`N/A` means the board has no holes of that type. Missing rules, an unreadable
+drill or a zero annular ring stop the build.
+
 ## Drawing Number Resolution
 
 `${DRAWING_NUMBER}` is resolved per document before KiCad/KiBot output
