@@ -52,6 +52,14 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Dispatch inputs reach scripts only via env (prevents script injection).
+  IN_COMMIT_OUTPUTS: ${{ inputs.commit_outputs }}
+  IN_SOURCE_LABEL: ${{ inputs.source_label }}
+  IN_SOURCE_REF_OR_GH_REF_NAME: ${{ inputs.source_ref || github.ref_name }}
+  IN_SOURCE_SHA: ${{ inputs.source_sha }}
+  IN_TARGET_BRANCH_OR_MAIN: ${{ inputs.target_branch || 'main' }}
+  IN_VARIANT: ${{ inputs.variant }}
+  IN_VARIANT_OR_CHECKED: ${{ inputs.variant || 'CHECKED' }}
   PYTHONPATH: ${{ github.workspace }}/src
   KIBOT_CONFIG: boardwright_resources/kibot/yaml/kibot_main.yaml
   KIBOT_LOG: kibot_main_outputs.log
@@ -78,7 +86,7 @@ jobs:
         shell: bash
         run: |
           actual="$(git rev-parse HEAD)"
-          expected="${{ inputs.source_sha }}"
+          expected="${IN_SOURCE_SHA}"
           if [[ "$actual" != "$expected" ]]; then
             echo "Checked out $actual, expected reviewed source $expected." >&2
             exit 1
@@ -90,24 +98,24 @@ jobs:
           source_sha="$(git rev-parse HEAD)"
           short_sha="$(git rev-parse --short=12 HEAD)"
           commit_url="https://github.com/${GITHUB_REPOSITORY}/commit/${source_sha}"
-          source_label="${{ inputs.source_label }}"
+          source_label="${IN_SOURCE_LABEL}"
           if [[ -z "$source_label" ]]; then
-            source_label="${{ inputs.source_ref || github.ref_name }}@${short_sha}"
+            source_label="${IN_SOURCE_REF_OR_GH_REF_NAME}@${short_sha}"
           fi
 
           {
             echo "## Boardwright Accept to Main"
             echo
-            echo "- Variant: \`${{ inputs.variant || 'CHECKED' }}\`"
+            echo "- Variant: \`${IN_VARIANT_OR_CHECKED}\`"
             echo "- Source: [\`${source_label}\`](${commit_url})"
-            echo "- Target branch: \`${{ inputs.target_branch || 'main' }}\`"
-            echo "- Commit README snapshot: \`${{ inputs.commit_outputs }}\`"
+            echo "- Target branch: \`${IN_TARGET_BRANCH_OR_MAIN}\`"
+            echo "- Commit README snapshot: \`${IN_COMMIT_OUTPUTS}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Choose KiBot variant and output set
         shell: bash
         run: |
-          variant="${{ github.event.inputs.variant }}"
+          variant="${IN_VARIANT}"
           if [[ -z "$variant" ]]; then
             variant="CHECKED"
           fi
@@ -271,7 +279,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.commit_outputs
         shell: bash
         run: |
-          target_branch="${{ inputs.target_branch || 'main' }}"
+          target_branch="${IN_TARGET_BRANCH_OR_MAIN}"
           source_sha="$(git rev-parse HEAD)"
           snapshot_dir="$(mktemp -d)"
 

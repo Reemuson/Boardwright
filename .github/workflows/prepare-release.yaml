@@ -38,6 +38,21 @@ on:
         description: Revision table description, 60 characters or fewer
         required: true
         type: string
+      change_classes:
+        description: "Comma-separated change classes: documentation, electrical, fabrication, assembly, tooling (blank only for the first release)"
+        required: false
+        default: ""
+        type: string
+      justification:
+        description: Why this release is needed (recorded in .boardwright/releases.yaml)
+        required: false
+        default: ""
+        type: string
+      source_sha:
+        description: Reviewed main commit to release; the run fails if main has moved
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -52,6 +67,16 @@ env:
   KIBOT_CONFIG: boardwright_resources/kibot/yaml/kibot_main.yaml
   KIBOT_LOG: kibot_prepare_release.log
   KICAD_VERSION: "9"
+  # Dispatch inputs reach shell steps only through the environment, never
+  # through ${{ }} interpolation inside scripts (prevents script injection).
+  IN_VERSION: ${{ inputs.version }}
+  IN_VARIANT: ${{ inputs.variant }}
+  IN_RELEASE_KIND: ${{ inputs.release_kind }}
+  IN_DRAWING_REVISION: ${{ inputs.drawing_revision }}
+  IN_REVISION_DESCRIPTION: ${{ inputs.revision_description }}
+  IN_CHANGE_CLASSES: ${{ inputs.change_classes }}
+  IN_JUSTIFICATION: ${{ inputs.justification }}
+  IN_SOURCE_SHA: ${{ inputs.source_sha }}
 
 jobs:
   prepare:
@@ -64,6 +89,34 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+
+      - name: Verify reviewed source and tag availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$IN_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release version must be semantic (for example 1.0.1): $IN_VERSION" >&2
+            exit 1
+          fi
+          head_sha="$(git rev-parse HEAD)"
+          if [[ -n "$IN_SOURCE_SHA" && "$head_sha" != "$IN_SOURCE_SHA"* ]]; then
+            echo "main is at $head_sha but the reviewed source is $IN_SOURCE_SHA; refusing to release unreviewed commits." >&2
+            exit 1
+          fi
+          echo "BOARDWRIGHT_SOURCE_SHA=$head_sha" >> "$GITHUB_ENV"
+          if git rev-parse --verify --quiet "refs/tags/$IN_VERSION" >/dev/null; then
+            echo "Tag already exists: $IN_VERSION" >&2
+            exit 1
+          fi
+          set +e
+          git ls-remote --exit-code --tags origin "refs/tags/$IN_VERSION" >/dev/null 2>&1
+          status=$?
+          set -e
+          case "$status" in
+            0) echo "Remote tag already exists: $IN_VERSION" >&2; exit 1 ;;
+            2) echo "Tag $IN_VERSION is free." ;;
+            *) echo "Could not query remote tags (exit $status); refusing to continue." >&2; exit 1 ;;
+          esac
 
       - name: Record job start time
         shell: bash
@@ -90,14 +143,20 @@ jobs:
       - name: Prepare changelog and release metadata
         shell: bash
         run: |
-          version="${{ inputs.version }}"
-          variant="${{ inputs.variant }}"
-          release_kind="${{ inputs.release_kind }}"
-          drawing_revision="${{ inputs.drawing_revision }}"
-          revision_description="${{ inputs.revision_description }}"
+          set -euo pipefail
+          version="$IN_VERSION"
+          variant="$IN_VARIANT"
+          release_kind="$IN_RELEASE_KIND"
+          drawing_revision="$IN_DRAWING_REVISION"
+          revision_description="$IN_REVISION_DESCRIPTION"
           release_include_source_archive="$(python -c "import sys; sys.path.insert(0, 'src'); from boardwright.config import load_config; print(str(load_config().release_include_source_archive).lower())")"
 
-          boardwright release "$version" --prepare --allow-dirty --drawing-revision "$drawing_revision" --revision-description "$revision_description"
+          boardwright release "$version" --prepare --allow-dirty \
+            --variant "$variant" \
+            --drawing-revision "$drawing_revision" \
+            --revision-description "$revision_description" \
+            --change-class "$IN_CHANGE_CLASSES" \
+            --justification "$IN_JUSTIFICATION"
 
           cat > .boardwright/release.env <<EOF
           RELEASE_VERSION=$version
@@ -114,13 +173,16 @@ jobs:
             echo "- Release kind: \`${release_kind}\`"
             echo "- Drawing revision: \`${drawing_revision}\`"
             echo "- Revision description: \`${revision_description}\`"
+            echo "- Change classes: \`${IN_CHANGE_CLASSES:-initial}\`"
+            echo "- Source commit: \`${BOARDWRIGHT_SOURCE_SHA}\`"
             echo "- Target branch: \`main\`"
+            echo "- Release ledger: \`.boardwright/releases.yaml\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Choose KiBot variant and output set
         shell: bash
         run: |
-          variant="${{ inputs.variant }}"
+          variant="$IN_VARIANT"
 
           case "$variant" in
             DRAFT)
@@ -241,6 +303,16 @@ jobs:
             exit 1
           fi
 
+      - name: Record accepted output manifest
+        shell: bash
+        run: python -m boardwright.output_manifest write
+
+      - name: Check reused baselines against the previous release
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m boardwright.output_manifest check-baseline | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Discard generated source side effects
         shell: bash
         run: |
@@ -252,12 +324,14 @@ jobs:
       - name: Commit accepted release state
         shell: bash
         run: |
-          version="${{ inputs.version }}"
-          variant="${{ inputs.variant }}"
+          set -euo pipefail
+          version="$IN_VERSION"
+          variant="$IN_VARIANT"
 
           git rm -r --ignore-unmatch HTML KiRI Manufacturing Reports Schematic Testing
           git add CHANGELOG.md .boardwright/project.yaml .boardwright/document_revisions.yaml
           git add -f .boardwright/revision_history_variables.env .boardwright/release.env
+          git add -f .boardwright/releases.yaml .boardwright/accepted_manifest.json
           git add README.md assets/renders/*.png || true
 
           if git diff --cached --quiet; then
@@ -265,33 +339,30 @@ jobs:
             exit 1
           fi
 
-          git commit -m "release: prepare ${version} (${variant})"
+          git commit -m "release: prepare ${version} (${variant})" -m "Source: ${BOARDWRIGHT_SOURCE_SHA}"
+          # Non-forced push: fails if main moved after checkout.
           git push origin HEAD:main
 
       - name: Create and push tag
         shell: bash
         run: |
-          version="${{ inputs.version }}"
-
-          if git rev-parse --verify --quiet "refs/tags/$version"; then
-            echo "Local tag already exists: $version" >&2
+          set -euo pipefail
+          version="$IN_VERSION"
+          git tag -a "$version" -m "Release $version"
+          if ! git push origin "refs/tags/$version"; then
+            echo "::error::Release commit $(git rev-parse HEAD) is on main but tag $version was not pushed. Recover: git tag -a $version $(git rev-parse HEAD) -m 'Release $version' && git push origin $version, then dispatch release.yaml on the tag." >&2
             exit 1
           fi
-          if git ls-remote --exit-code --tags origin "refs/tags/$version" >/dev/null 2>&1; then
-            echo "Remote tag already exists: $version" >&2
-            exit 1
-          fi
-
-          git tag "$version"
-          git push origin "$version"
 
       - name: Dispatch tag release workflow
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="${{ inputs.version }}"
-          gh workflow run release.yaml --ref "$version" --repo "$GITHUB_REPOSITORY"
+          # Tags pushed with GITHUB_TOKEN do not trigger workflows, so this
+          # dispatch is the single publish trigger. release.yaml is also
+          # serialised per tag and refuses to overwrite a published release.
+          gh workflow run release.yaml --ref "$IN_VERSION" --repo "$GITHUB_REPOSITORY"
 
       - name: Upload prepare logs
         if: always()

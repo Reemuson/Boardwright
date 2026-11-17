@@ -27,6 +27,9 @@ permissions:
   actions: read
 
 env:
+  # Dispatch inputs reach scripts only via env (prevents script injection).
+  IN_SOURCE_LABEL: ${{ inputs.source_label }}
+  IN_VARIANT: ${{ inputs.variant }}
   PYTHONPATH: ${{ github.workspace }}/src
   KIBOT_CONFIG: boardwright_resources/kibot/yaml/kibot_main.yaml
   KIBOT_LOG: kibot_preview.log
@@ -51,7 +54,7 @@ jobs:
       - name: Choose KiBot variant and output set
         shell: bash
         run: |
-          variant="${{ github.event.inputs.variant }}"
+          variant="${IN_VARIANT}"
           if [[ -z "$variant" ]]; then
             variant="DRAFT"
           fi
@@ -80,7 +83,7 @@ jobs:
         run: |
           short_sha="$(git rev-parse --short=12 HEAD)"
           commit_url="https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
-          source_label="${{ inputs.source_label }}"
+          source_label="${IN_SOURCE_LABEL}"
           if [[ -z "$source_label" ]]; then
             source_label="${GITHUB_REF_NAME}@${short_sha}"
           fi
