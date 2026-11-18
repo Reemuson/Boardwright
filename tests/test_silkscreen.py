@@ -22,6 +22,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from boardwright import silkscreen  # noqa: E402
+from boardwright.kibot_config import scalar  # noqa: E402
 from boardwright.validation import validate_project  # noqa: E402,F401  (import check)
 
 PCB = """(kicad_pcb (version 20241229) (generator "pcbnew")
@@ -120,6 +121,18 @@ class PlotOptionTests(unittest.TestCase):
             {"plot_footprint_refs": True, "plot_footprint_values": True},
             silkscreen.gerber_plot_options(REPO),
         )
+
+    def test_shipped_fabrication_output_config_fully_resolves(self) -> None:
+        from boardwright.kibot_config import fabrication_output_config
+
+        def read(path: str):
+            file = REPO / path
+            return file.read_text(encoding="utf-8") if file.exists() else None
+
+        config = fabrication_output_config(read)
+        self.assertIn("plot_footprint_values: true", config)
+        self.assertIn("kibot_out_excellon_drill.yaml", config)
+        self.assertNotIn("(unresolved)", config)
 
     def test_placeholder_resolves_through_main_definitions(self) -> None:
         self._write("@PLOT_VALUES@", main_values="false")
@@ -288,8 +301,8 @@ class WiringTests(unittest.TestCase):
         self.assertIn("run_by_default: false", reference)
         self.assertIn("layers: ['F.Silkscreen', 'B.Silkscreen']", reference)
         self.assertEqual(
-            silkscreen._scalar(release, "subtract_mask_from_silk"),
-            silkscreen._scalar(reference, "subtract_mask_from_silk"),
+            scalar(release, "subtract_mask_from_silk"),
+            scalar(reference, "subtract_mask_from_silk"),
         )
 
     def test_reference_runs_with_every_fabrication_group(self) -> None:

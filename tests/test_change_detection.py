@@ -140,7 +140,8 @@ class ChangeDetectionTests(unittest.TestCase):
         self.assertEqual("A", assessment.proposed.pcb_revision)
         self.assertEqual("reused", assessment.assembly_baseline.status)
         self.assertFalse(assessment.documentation_only)
-        self.assertTrue(any("output tooling changed them" in r for r in assessment.reviews))
+        self.assertIn("fabrication_outputs", assessment.detected)
+        self.assertTrue(any("fabrication package is re-issued" in r for r in assessment.reviews))
 
     def test_fabrication_output_reissue_requires_new_fabrication_drawing_revision(self) -> None:
         self._release_then_change_gerber_options()
@@ -150,14 +151,57 @@ class ChangeDetectionTests(unittest.TestCase):
             format_impact(assessment),
         )
 
-    def test_tooling_only_keeps_baseline_and_points_to_reissue(self) -> None:
-        # Without `fabrication` the baseline is claimed reused; check-baseline
-        # must then prove the outputs identical, and blocks if they are not.
+    def test_gerber_option_change_is_never_documentation_only(self) -> None:
         self._release_then_change_gerber_options()
-        assessment = self.project.assess("1.0.1", "tooling", "A.0", "Plot test-point labels")
-        self.assertEqual((), assessment.problems, format_impact(assessment))
+        for classes in ("tooling", "documentation,tooling"):
+            assessment = self.project.assess("1.0.1", classes, "A.0", "Plot test-point labels")
+            self.assertTrue(
+                any("Fabrication data changed (Fabrication output options" in p and "declare the `fabrication`" in p
+                    for p in assessment.problems),
+                format_impact(assessment),
+            )
+
+    def test_comment_only_gerber_edit_is_not_a_fabrication_change(self) -> None:
+        self._release_then_change_gerber_options()
+        gerber = self.tmp / "boardwright_resources/kibot/yaml/kibot_out_gerber.yaml"
+        gerber.write_text("# reworded comment\noptions:\n  plot_footprint_values: false  # note\n", encoding="utf-8")
+        assessment = self.project.assess("1.0.1", "tooling", "A.0", "Comment")
+        self.assertNotIn("fabrication_outputs", assessment.detected)
         self.assertEqual("reused", assessment.fabrication_baseline.status)
-        self.assertTrue(any("declare `fabrication` to re-issue" in r for r in assessment.reviews))
+
+    def test_global_plot_definition_change_is_detected(self) -> None:
+        gerber = self.tmp / "boardwright_resources/kibot/yaml/kibot_out_gerber.yaml"
+        main = self.tmp / "boardwright_resources/kibot/yaml/kibot_main.yaml"
+        gerber.parent.mkdir(parents=True)
+        gerber.write_text("options:\n  plot_footprint_values: @PLOT_VALUES@\n", encoding="utf-8")
+        main.write_text(
+            "import:\n  - file: kibot_out_gerber.yaml\n    definitions:\n      PLOT_VALUES: @PLOT_VALUES@\n"
+            "\ndefinitions:\n  PLOT_VALUES: false\n",
+            encoding="utf-8",
+        )
+        self.project.commit("gerber options")
+        self._release_initial()
+        main.write_text(main.read_text(encoding="utf-8").replace("PLOT_VALUES: false", "PLOT_VALUES: true"), encoding="utf-8")
+        assessment = self.project.assess("1.0.1", "tooling", "A.0", "Plot values")
+        self.assertIn("fabrication_outputs", assessment.detected)
+
+    def test_tooling_that_changes_fab_outputs_can_be_reissued(self) -> None:
+        # A notes-template change is not a fabrication_outputs domain, but if
+        # it changes the rendered notes the engineer declares `fabrication`.
+        template = self.tmp / FAB_NOTES
+        template.parent.mkdir(parents=True)
+        template.write_text("1. Finish: ENIG.\n", encoding="utf-8")
+        self.project.commit("template")
+        self._release_initial()
+        template.write_text("1. Finish: ENIG. Bake before assembly.\n", encoding="utf-8")
+        self.project.set_revisions(fab_rev="B")
+        assessment = self.project.assess("1.0.1", "fabrication,tooling", "A.0", "Notes")
+        self.assertEqual((), assessment.problems, format_impact(assessment))
+        self.assertEqual("A/2", assessment.fabrication_baseline.id)
+        self.assertTrue(any("output tooling changed them" in r for r in assessment.reviews))
+        tooling_only = self.project.assess("1.0.1", "tooling", "A.0", "Notes")
+        self.assertEqual("reused", tooling_only.fabrication_baseline.status)
+        self.assertTrue(any("declare `fabrication` to re-issue" in r for r in tooling_only.reviews))
 
     def test_fabrication_without_any_change_still_rejected(self) -> None:
         self._release_initial()

@@ -65,6 +65,7 @@ fingerprints (`src/boardwright/fingerprint.py`):
 | `assembly` | Footprint reference, value, library, side, position, attributes and fields; schematic symbol BOM fields and DNP/BOM/board flags; assembly notes. | Datasheet, description, simulation fields. |
 | `pcb_drawings` | Content on `*.Fab`, `Dwgs.User`, `Cmts.User` and `User.*` layers, which the fabrication and assembly drawings plot. | Courtyard, margin, Eco layers; hidden text. |
 | `schematic` | All root `.kicad_sch` content. | Title blocks, UUIDs, generator/version. |
+| `fabrication_outputs` | Effective options of the Gerber, Excellon drill and ODB++ outputs: `kibot_out_gerber/excellon_drill/odb.yaml` with every `@NAME@` resolved through `kibot_main.yaml` (for example `PLOT_VALUES`). These change the fabrication data without any design change. | Comments, output name and comment. Not compared against ledger records written before the domain existed. |
 
 Tracked separately (not design domains):
 
@@ -95,7 +96,7 @@ the PCB blocks the release.
 | --- | --- |
 | `pcb_geometry` changed | `fabrication` class **and** a new PCB revision. The fabrication baseline is `new`. |
 | PCB revision changed, geometry unchanged | Rejected unless `fabrication` is declared (deliberate re-spin; flagged for review). |
-| `pcb_netnames`, `fabrication_spec` or `release_marking` only | `fabrication` class and a new fabrication drawing revision. The PCB revision is retained and the fabrication baseline is `reissued` (`A/2`). |
+| `pcb_netnames`, `fabrication_spec`, `release_marking` or `fabrication_outputs` only | `fabrication` class and a new fabrication drawing revision. The PCB revision is retained and the fabrication baseline is `reissued` (`A/2`). |
 | No fabrication input changed | Fabrication baseline `reused`; declaring `fabrication` is rejected. |
 | `assembly` changed | `assembly` class and a new assembly drawing revision. |
 | `schematic` changed | `documentation` or `electrical` class and a new schematic revision. |
@@ -104,7 +105,7 @@ the PCB blocks the release.
 | `pcb_drawings` changed | `documentation` (or `fabrication`/`assembly`) class and a new fabrication or assembly drawing revision. The bare-board baseline is unaffected; a review item asks whether a fabrication requirement changed. |
 | KiCad format changed | `tooling` class, with a review item that regenerated outputs may not be byte-identical. |
 | Tooling changed | `tooling` class, with a review item that rendered notes and output options may differ. |
-| Tooling changed and it changes fabrication outputs (PCB source unchanged) | `fabrication` and `tooling` classes and a new fabrication drawing revision. The PCB revision is retained and the fabrication baseline is `reissued` (`A/2`). `check-baseline` lists every controlled fabrication file that differs from the previous release. Declaring only `tooling` claims the baseline is reused, so any output difference blocks. |
+| Other tooling (e.g. a notes template) changed and it changes fabrication outputs | `fabrication` and `tooling` classes and a new fabrication drawing revision. The PCB revision is retained and the fabrication baseline is `reissued` (`A/2`). `check-baseline` lists every controlled fabrication file that differs from the previous release. Declaring only `tooling` claims the baseline is reused, so any output difference blocks. |
 | Baseline has no recorded document revision (legacy) | Review item: revision changes cannot be enforced against that baseline. |
 | PCB revision previously released with different geometry | Rejected: a revision identifier is never reused. |
 
