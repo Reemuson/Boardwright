@@ -167,6 +167,13 @@ authenticated.
 
 ## Drawing Number Resolution
 
+In the Boardwright title blocks the PROJECT cell shows `${PROJECT_NUMBER}`
+(the descriptive `project.name`) and the large identifier cell shows
+`${DRAWING_NUMBER}`. The worksheets ship with the Boardwright placeholder logo;
+a project with its own logo embeds it with `boardwright worksheet-logo`, and
+`boardwright validate` warns while the placeholder is still embedded.
+
+
 `${DRAWING_NUMBER}` is resolved per document before KiCad/KiBot output
 generation.
 
