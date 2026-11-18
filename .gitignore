@@ -37,6 +37,7 @@ venv/
 .boardwright/revision_history_*.csv
 .boardwright/sheet_titles.env
 .boardwright-sandbox/
+.boardwright-checks/
 boardwright-preview/
 boardwright-release/
 boardwright-*-release.zip
