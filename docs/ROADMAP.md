@@ -119,14 +119,15 @@ Delivered:
   (`RELEASE_MODEL.md`): documentation-only releases reuse the approved PCB
   fabrication baseline without a new PCB revision
 - accepted-output manifest committed at prepare and verified at publish
+- live-tested on boardwright-ci-test: fabrication re-issue 0.1.4 and
+  documentation-only 0.1.5 published as draft releases (`AUDIT-2026-11.md`)
 - reviewed `source_sha` pinning, pre-push tag checks, per-tag publish
   serialisation
 
 Remaining:
 
-- live retest of the ledger/manifest release path on boardwright-ci-test
-  (prepared locally; see `AUDIT-2026-11.md` follow-up)
-- live retest draft release
+- drawing PDF content as a controlled output (audit D2) and a CI-enforced
+  review approval (audit P1)
 - measure whether CI runtime needs further optimization
 
 ## Milestone 5: Project README, Legal Review, And Usable Dashboard

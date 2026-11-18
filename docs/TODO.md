@@ -253,17 +253,30 @@ Goal: make the generated README a useful hardware project front page.
 - [ ] Review `docker_kibot_linux.sh` `/etc/shadow` mount and KiCad 8 default (audit M7).
 - [x] Plot visible silkscreen value text (test-point labels) and verify shipped
       silkscreen Gerbers against an unfiltered reference plot (audit F20).
-- [ ] Live-verify the `gbr_silk_reference` KiBot output and the silkscreen check
-      step in CI (verified locally with kicad-cli 9.0.6 only).
+- [x] Live-verify the `gbr_silk_reference` KiBot output and the silkscreen check
+      step in CI (ci-test preview, acceptance and release runs, 0.1.4 and 0.1.5).
 - [ ] Cross-check Gerber and ODB++ silkscreen geometry once ODB++ has a
       canonicaliser (F20 was visible only as a Gerber/ODB++ disagreement).
 - [x] Fail closed when the previous release has no output manifest (audit F19).
 - [x] FIC-100A keeps its 0.1.3 fabrication-note wording (audit F18, option a).
 - [x] Single fabrication-notes writer; KiBot notes outputs removed (audit F17).
 - [ ] Stop the KiBot build mutating `.gitattributes` and `.git/config` (audit F16).
-- [ ] Live-test the ledger/manifest release path on boardwright-ci-test. The branch
-      and runbook are prepared locally (`AUDIT-2026-11.md`, follow-up); awaiting
-      authorisation to push/dispatch.
+- [x] Live-test the ledger/manifest release path on boardwright-ci-test:
+      0.1.4 (fabrication re-issue A/2 against legacy 0.1.3) and 0.1.5
+      (documentation-only against 0.1.4) published as drafts
+      (`AUDIT-2026-11.md`, end-to-end report).
+- [ ] Control drawing PDF content (audit D2): fabrication/assembly PDFs are
+      informational in the manifest. Promote the E2E raster comparison
+      (`compare_drawing_pdfs.py`, title block masked) into Boardwright with
+      per-worksheet masks and tests, and run it in check-baseline/publish verify.
+- [ ] Enforce the human visual approval in CI, e.g. a GitHub Environment gate
+      (audit P1).
+- [ ] Replace schematic cover placeholders and generate the visible revision
+      history from the ledger (audit D1; with the AS 1100 worksheet work).
+- [ ] FIC-100A DRC clearance 0.1917 mm vs 0.2 mm (audit D3/F15): owner to fix
+      in a future PCB revision or record a waiver.
+- [ ] Document in `FIELDS.md` that the GIT HASH cell shows the last
+      design-source commit, not the release commit.
 - [x] Add board dimensions.
 - [x] Keep board images side by side in README and release markdown.
 - [x] Add latest release/package links.
