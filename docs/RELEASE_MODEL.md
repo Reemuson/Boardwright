@@ -70,8 +70,9 @@ Tracked separately (not design domains):
 
 - **KiCad file format version.** A format change alone requires the `tooling`
   class.
-- **Tooling.** Boardwright's KiBot output configuration and notes templates
-  (line endings normalised). A change requires the `tooling` class. Its effect
+- **Tooling.** Boardwright's KiBot output configuration (`kibot_out_*`,
+  `kibot_filt_*`, `kibot_globals`, and the global definitions in
+  `kibot_main.yaml`) and notes templates (line endings normalised). A change requires the `tooling` class. Its effect
   on rendered notes and output options is checked by the output manifest.
 - **Release-dependent marking.** `${RELEASE_VERSION}`, `${RELEASE_DATE}`,
   `${RELEASE_DATE_NUM}`, `${GIT_HASH_*}`, `${CURRENT_DATE}` or `${VARIANT}` in
@@ -103,6 +104,7 @@ the PCB blocks the release.
 | `pcb_drawings` changed | `documentation` (or `fabrication`/`assembly`) class and a new fabrication or assembly drawing revision. The bare-board baseline is unaffected; a review item asks whether a fabrication requirement changed. |
 | KiCad format changed | `tooling` class, with a review item that regenerated outputs may not be byte-identical. |
 | Tooling changed | `tooling` class, with a review item that rendered notes and output options may differ. |
+| Tooling changed and it changes fabrication outputs (PCB source unchanged) | `fabrication` and `tooling` classes and a new fabrication drawing revision. The PCB revision is retained and the fabrication baseline is `reissued` (`A/2`). `check-baseline` lists every controlled fabrication file that differs from the previous release. Declaring only `tooling` claims the baseline is reused, so any output difference blocks. |
 | Baseline has no recorded document revision (legacy) | Review item: revision changes cannot be enforced against that baseline. |
 | PCB revision previously released with different geometry | Rejected: a revision identifier is never reused. |
 
@@ -149,6 +151,9 @@ Then:
 1. When the ledger says a baseline is `reused`, the fabrication (and/or
    assembly) outputs are compared with the previous release's committed
    manifest. A content difference fails the run before anything is pushed.
+   When the fabrication baseline is `reissued`, `check-baseline` lists every
+   controlled fabrication file that differs from the previous release (and
+   warns if none does), so reviewers see which layers the re-issue changes.
 2. `release.yaml` regenerates outputs from the tag and verifies them against
    the accepted manifest before publishing.
 3. The package includes `MANIFEST.txt` (SHA-256 per file),
@@ -158,8 +163,17 @@ Results distinguish *byte-identical* from *equivalent after normalisation*
 (`regenerated`). Historical packages are never overwritten. A published
 release is never re-published.
 
-Releases prepared before manifests existed have source-fingerprint evidence
-only. The workflows report this as a warning instead of a pass.
+Releases prepared before manifests existed are compared with their
+authenticated published package instead; failing to obtain or authenticate it
+fails the run (see [`FIELDS.md`](FIELDS.md), "Releases before output
+manifests").
+
+**Silkscreen completeness.** Every run that generates Gerbers also plots an
+unfiltered silkscreen reference and runs `python -m boardwright.silkscreen`:
+the shipped silkscreen Gerbers must contain exactly the board's visible
+silkscreen geometry, so a plot option cannot silently drop markings such as
+test-point labels. `boardwright validate` checks the same rule statically from
+the PCB text and the Gerber plot options.
 
 Evidence (November 2026): the boardwright-ci-test releases 0.1.2 and 0.1.3 have
 identical design sources and were built by CI 11 hours apart. Every Gerber and

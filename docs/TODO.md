@@ -251,6 +251,12 @@ Goal: make the generated README a useful hardware project front page.
       vs 10 differences before switching pipelines to `v2_dk10` (MIGRATION.md).
 - [ ] Decide whether to pin `INTI-CMNB/KiBot` actions to commit SHAs (audit M8).
 - [ ] Review `docker_kibot_linux.sh` `/etc/shadow` mount and KiCad 8 default (audit M7).
+- [x] Plot visible silkscreen value text (test-point labels) and verify shipped
+      silkscreen Gerbers against an unfiltered reference plot (audit F20).
+- [ ] Live-verify the `gbr_silk_reference` KiBot output and the silkscreen check
+      step in CI (verified locally with kicad-cli 9.0.6 only).
+- [ ] Cross-check Gerber and ODB++ silkscreen geometry once ODB++ has a
+      canonicaliser (F20 was visible only as a Gerber/ODB++ disagreement).
 - [x] Fail closed when the previous release has no output manifest (audit F19).
 - [x] FIC-100A keeps its 0.1.3 fabrication-note wording (audit F18, option a).
 - [x] Single fabrication-notes writer; KiBot notes outputs removed (audit F17).
