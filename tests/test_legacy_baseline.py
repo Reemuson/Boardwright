@@ -210,6 +210,21 @@ class CheckBaselineTests(unittest.TestCase):
         self.assertNotIn(f"reissue {GERBER}", text)
         self.assertIn("2 other controlled fabrication file(s) are identical", text)
 
+    def test_reissue_keeps_newly_declared_notes_promise(self) -> None:
+        self.reissue()
+        silk = "Manufacturing/Fabrication/Gerbers/X-F_Silkscreen.gbr"
+        approved = {**APPROVED, silk: "%FSLAX46Y46*%\nD10*\nM02*\n"}
+        changed_silk = {**approved, silk: "%FSLAX46Y46*%\nD10*\nG36*\nG37*\nM02*\n"}
+        with mock.patch("boardwright.impact._only_newly_declared_requirements", return_value=("tg_rating",)):
+            self.write_outputs(changed_silk)
+            code, text = self.check(self.published(approved))
+            self.assertEqual(0, code, text)
+            self.write_outputs({**changed_silk, NOTES: "TRACE TO TRACE 0.600 mm\n"})
+            code, text = self.check(self.published(approved))
+        self.assertEqual(1, code, text)
+        self.assertIn(f"ERROR {NOTES}", text)
+        self.assertIn("only newly declared", text)
+
     def test_reissue_with_no_fabrication_change_warns(self) -> None:
         self.reissue()
         self.write_outputs(APPROVED)
