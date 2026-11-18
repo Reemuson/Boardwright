@@ -454,21 +454,30 @@ class TuiTests(unittest.TestCase):
         self.assertIn("Ready for dry run.", inspector)
         self.assertIn("Stage: release_ready", inspector)
 
-    def test_embed_template_sheet_image_updates_all_templates(self) -> None:
+    def test_embed_template_sheet_image_uses_the_shared_active_sheet_selection(self) -> None:
         config = type(
             "Config",
             (),
             {
                 "root": Path.cwd(),
                 "template_sheet_image": "assets/logos/logo-block-black.png",
+                "template": {},
             },
         )()
-
-        with patch.object(tui, "embed_logo_in_worksheets", return_value=()) as embed:
+        targets = [Path.cwd() / "Templates/active.kicad_wks"]
+        with patch("boardwright.worksheet_logo.select_logo_targets", return_value=targets) as select, patch.object(
+            tui, "embed_logo_in_worksheets", return_value=()
+        ) as embed:
             tui._embed_template_sheet_image(config)
 
-        self.assertTrue(embed.called)
-        self.assertGreater(len(embed.call_args.args[0]), 1)
+        select.assert_called_once()
+        self.assertEqual(targets, embed.call_args.args[0])
+
+    def test_embed_template_sheet_image_skips_without_a_logo(self) -> None:
+        config = type("Config", (), {"root": Path.cwd(), "template_sheet_image": "", "template": {}})()
+        with patch.object(tui, "embed_logo_in_worksheets", return_value=()) as embed:
+            tui._embed_template_sheet_image(config)
+        embed.assert_not_called()
 
     def test_ci_status_style_prioritizes_active_work(self) -> None:
         self.assertEqual(

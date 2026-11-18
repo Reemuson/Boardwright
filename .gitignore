@@ -35,6 +35,7 @@ venv/
 [Aa][Gg][Ee][Nn][Tt][Ss].[Mm][Dd]
 .boardwright/revision_history_variables.env
 .boardwright/revision_history_*.csv
+.boardwright/local.yaml
 .boardwright/sheet_titles.env
 .boardwright-sandbox/
 .boardwright-checks/

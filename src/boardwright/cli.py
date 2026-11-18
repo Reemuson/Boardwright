@@ -119,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
             return _sheet_title(args)
         if args.command == "worksheet-logo":
             return _worksheet_logo(args)
+        if args.command == "worksheet":
+            return _worksheet(args)
         if args.command == "source-package":
             return _source_package(args)
         if args.command == "docker-kibot":
@@ -579,6 +581,31 @@ def _build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Zero-based bitmap block to replace. Defaults to the first bitmap.",
     )
+    worksheet_logo.add_argument(
+        "--output",
+        type=Path,
+        help="Write branded copies into this directory instead of editing the worksheets in place.",
+    )
+
+    worksheet = subparsers.add_parser(
+        "worksheet",
+        help="Inspect or adopt the project's active KiCad drawing sheets.",
+    )
+    worksheet.add_argument(
+        "action",
+        choices=("status", "adopt", "extract"),
+        help=(
+            "status: show the sheet each drawing renders and any problems; adopt: switch embedded "
+            "sheets to their identical Templates/ file; extract: write embedded sheets for review."
+        ),
+    )
+    worksheet.add_argument("--apply", action="store_true", help="adopt: write the .kicad_pro change.")
+    worksheet.add_argument(
+        "--out",
+        type=Path,
+        default=Path(".boardwright-checks/embedded-worksheets"),
+        help="extract: output directory (default .boardwright-checks/embedded-worksheets).",
+    )
 
     source_package = subparsers.add_parser(
         "source-package",
@@ -789,6 +816,8 @@ def _update(args: argparse.Namespace) -> int:
         target = write_plan(args.output, plan)
         print(f"Wrote update plan: {target}")
         print(f"Blockers: {len(plan.get('blockers', []))}")
+        for notice in plan.get("notices", []):
+            print(f"note: {notice}")
         return 1 if plan.get("blockers") else 0
     if args.update_command == "apply":
         written = apply_update_plan(args.plan)
@@ -901,24 +930,20 @@ def _sheet_title(args: argparse.Namespace) -> int:
 
 
 def _worksheet_logo(args: argparse.Namespace) -> int:
+    from .worksheet_logo import select_logo_targets
+
     config = load_config()
     logo = args.logo or Path(config.template_sheet_image)
+    if not str(logo):
+        raise BoardwrightError("No logo given and template.sheet_image is not configured.")
     logo = logo if logo.is_absolute() else config.root / logo
-
-    if args.all_templates:
-        worksheets = sorted((config.root / "Templates").glob("*.kicad_wks"))
-    elif args.worksheet:
-        worksheets = [
-            path if path.is_absolute() else config.root / path
-            for path in args.worksheet
-        ]
-    else:
-        worksheet = Path(config.worksheet)
-        worksheets = [worksheet if worksheet.is_absolute() else config.root / worksheet]
-
-    if not worksheets:
-        raise BoardwrightError("No worksheet files selected.")
-
+    worksheets = select_logo_targets(
+        config,
+        logo,
+        explicit=[path if path.is_absolute() else config.root / path for path in args.worksheet or []],
+        all_templates=args.all_templates,
+        output=(args.output if args.output is None or args.output.is_absolute() else config.root / args.output),
+    )
     results = embed_logo_in_worksheets(
         worksheets,
         logo,
@@ -931,6 +956,46 @@ def _worksheet_logo(args: argparse.Namespace) -> int:
             f"updated {worksheet_label} with {logo_label} "
             f"({result.png_width}x{result.png_height}, bitmap {result.bitmap_index})"
         )
+    if config.local_overrides:
+        print("note: using .boardwright/local.yaml overrides: " + ", ".join(config.local_overrides))
+    return 0
+
+
+def _worksheet(args: argparse.Namespace) -> int:
+    from . import drawing_sheets
+
+    config = load_config()
+    template_worksheet = str(config.template.get("worksheet") or "")
+    if args.action == "status":
+        for document, ref in drawing_sheets.active_sheet_refs(config.root, template_worksheet).items():
+            where = ref.path if ref.kind in ("file", "relative", "absolute") else ref.setting or "(KiCad default)"
+            print(f"{document:12} {ref.kind:9} {where}")
+        logo = config.template_sheet_image or "(none)"
+        suffix = " (local override)" if "template.sheet_image" in config.local_overrides else ""
+        print(f"{'logo':12} {'':9} {logo}{suffix}")
+        issues = drawing_sheets.sheet_issues(config.root, template_worksheet) + drawing_sheets.branding_issues(config)
+        for issue in issues:
+            print(f"- {issue.level}: {issue.message}")
+        return 1 if any(issue.level == "error" for issue in issues) else 0
+    if args.action == "adopt":
+        results = drawing_sheets.plan_adoption(config.root)
+        for result in results:
+            print(f"{result.section:10} {result.action:13} {result.detail}")
+        if not args.apply:
+            if any(result.action == "adopted" for result in results):
+                print("Dry run: re-run with --apply to update the .kicad_pro.")
+            return 0
+        written = drawing_sheets.apply_adoption(config.root, results)
+        for path in written:
+            print(f"updated {_display_path(path, config.root)}")
+        blocked = [result for result in results if result.action in ("diverged", "missing", "unverifiable")]
+        return 1 if blocked else 0
+    out = args.out if args.out.is_absolute() else config.root / args.out
+    written = drawing_sheets.extract_embedded(config.root, out)
+    for path in written:
+        print(f"wrote {_display_path(path, config.root)}")
+    if not written:
+        print("No embedded worksheets.")
     return 0
 
 

@@ -115,6 +115,9 @@ jobs:
           cp boardwright_resources/kibot/resources/fonts/*.ttf ~/.local/share/fonts/
           fc-cache -f ~/.local/share/fonts || true
 
+      - name: Check drawing sheets and branding
+        shell: bash
+        run: python -m boardwright.drawing_sheets check | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Generate revision table variables
         if: env.KIBOT_VARIANT != 'DRAFT'
         shell: bash

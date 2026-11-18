@@ -83,6 +83,26 @@
 		(start 25 10.0002)
 		(end 185 10.0002)
 	)
+	(tbtext "${SHEET_LEGAL_NOTICE}"
+		(name "")
+		(pos 97.5 32.5)
+		(font
+			(size 1.25 1.25)
+		)
+		(justify center)
+		(maxlen 66)
+		(comment "Project legal notice (sheet.legal_notice)")
+	)
+	(tbtext "PCB REV ${PCB_REVISION} | ASSY REV ${ASSEMBLY_REVISION} | SCH REV ${SCHEMATIC_REVISION} | RELEASE ${RELEASE_VERSION}"
+		(name "boardwright_revision_identity")
+		(pos 97.5 23)
+		(font
+			(size 1.5 1.6)
+		)
+		(justify center)
+		(maxlen 72)
+		(comment "Boardwright revision identity: physical PCB, PCBA (assembly), schematic and project release")
+	)
 	(bitmap
 		(name "")
 		(pos 35 52)
@@ -457,11 +477,11 @@
 		(repeat 2)
 		(incrx 15)
 	)
-	(tbtext "REV	"
+	(tbtext "REV"
 		(name "")
-		(pos 18.5 15 lbcorner)
+		(pos 17.5 15 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 2 2)
 		)
 		(justify center)
 	)
@@ -469,22 +489,23 @@
 		(name "")
 		(pos 35 22.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 18)
 	)
-	(tbtext "DESCRIPTION	"
+	(tbtext "DESCRIPTION"
 		(name "")
-		(pos 47.5 15 lbcorner)
+		(pos 46.5 15 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 2 2)
 		)
 	)
 	(tbtext "DRAWN"
 		(name "")
 		(pos 122.5 15 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 2 2)
 		)
 		(justify center)
 	)
@@ -492,17 +513,18 @@
 		(name "")
 		(pos 137.5 15 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 2 2)
 		)
 		(justify center)
 	)
 	(tbtext "${REVTABLE_1_REV}"
 		(name "")
-		(pos 18.5 22.5 lbcorner)
+		(pos 17.5 22.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 13)
 	)
 	(line
 		(name "")
@@ -516,57 +538,62 @@
 	)
 	(tbtext "${REVTABLE_NOTE}"
 		(name "")
-		(pos 11 51 lbcorner)
+		(pos 147 47.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
-		(justify bottom)
+		(maxlen 121)
 	)
 	(tbtext "${REVTABLE_3_REV}"
 		(name "")
-		(pos 18.5 32.5 lbcorner)
+		(pos 17.5 32.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 13)
 	)
 	(tbtext "${REVTABLE_2_REV}"
 		(name "")
-		(pos 18.5 27.5 lbcorner)
+		(pos 17.5 27.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 13)
 	)
 	(tbtext "${REVTABLE_4_REV}"
 		(name "")
-		(pos 18.5 37.5 lbcorner)
+		(pos 17.5 37.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 13)
 	)
 	(tbtext "${REVTABLE_5_REV}"
 		(name "")
-		(pos 18.5 42.5 lbcorner)
+		(pos 17.5 42.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 13)
 	)
 	(tbtext "${REVTABLE_6_REV}"
 		(name "")
-		(pos 18.5 47.5 lbcorner)
+		(pos 17.5 47.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 13)
 	)
 	(tbtext "DATE"
 		(name "")
-		(pos 34.527 15.4822 lbcorner)
+		(pos 35 15 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 2 2)
 		)
 		(justify center)
 	)
@@ -574,131 +601,148 @@
 		(name "")
 		(pos 35 27.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 18)
 	)
 	(tbtext "${REVTABLE_3_DATE}"
 		(name "")
 		(pos 35 32.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 18)
 	)
 	(tbtext "${REVTABLE_4_DATE}"
 		(name "")
 		(pos 35 37.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 18)
 	)
 	(tbtext "${REVTABLE_5_DATE}"
 		(name "")
 		(pos 35 42.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 18)
 	)
 	(tbtext "${REVTABLE_6_DATE}"
 		(name "")
 		(pos 35 47.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 18)
 	)
 	(tbtext "${REVTABLE_1_DESC}"
 		(name "")
-		(pos 47.5 22.5 lbcorner)
+		(pos 46.5 22.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
+		(maxlen 65)
 	)
 	(tbtext "${REVTABLE_2_DESC}"
 		(name "")
-		(pos 47.5 27.5 lbcorner)
+		(pos 46.5 27.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
+		(maxlen 65)
 	)
 	(tbtext "${REVTABLE_3_DESC}"
 		(name "")
-		(pos 47.5 32.5 lbcorner)
+		(pos 46.5 32.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
+		(maxlen 65)
 	)
 	(tbtext "${REVTABLE_4_DESC}"
 		(name "")
-		(pos 47.5 37.5 lbcorner)
+		(pos 46.5 37.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
+		(maxlen 65)
 	)
 	(tbtext "${REVTABLE_5_DESC}"
 		(name "")
-		(pos 47.5 42.5 lbcorner)
+		(pos 46.5 42.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
+		(maxlen 65)
 	)
 	(tbtext "${REVTABLE_6_DESC}"
 		(name "")
-		(pos 47.5 47.5 lbcorner)
+		(pos 46.5 47.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
+		(maxlen 65)
 	)
 	(tbtext "${REVTABLE_1_DRAWN}"
 		(name "")
 		(pos 122.5 22.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 13)
 	)
 	(tbtext "${REVTABLE_2_DRAWN}"
 		(name "")
 		(pos 122.5 27.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 13)
 	)
 	(tbtext "${REVTABLE_3_DRAWN}"
 		(name "")
 		(pos 122.5 32.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 13)
 	)
 	(tbtext "${REVTABLE_4_DRAWN}"
 		(name "")
 		(pos 122.5 37.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 13)
 	)
 	(tbtext "${REVTABLE_5_DRAWN}"
 		(name "")
 		(pos 122.5 42.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 13)
 	)
 	(tbtext "${REVTABLE_6_DRAWN}"
 		(name "")
 		(pos 122.5 47.5 lbcorner)
 		(font
-			(size 2.5 2.5)
+			(size 1.8 1.8)
 		)
 		(justify center)
+		(maxlen 13)
 	)
 	(line
 		(name "")
@@ -830,6 +874,7 @@
 			(size 2 2)
 		)
 		(justify center)
+		(maxlen 23)
 	)
 	(tbtext "${DRAWN_DATE}"
 		(name "")
@@ -838,14 +883,16 @@
 			(size 2 2)
 		)
 		(justify center)
+		(maxlen 23)
 	)
 	(tbtext "${DRAWING_TITLE}"
 		(name "")
-		(pos 97.5 45)
+		(pos 97.5 44)
 		(font
 			(size 3 3)
 		)
 		(justify center)
+		(maxlen 72)
 	)
 	(line
 		(name "")
@@ -867,10 +914,11 @@
 			(size 5 5)
 		)
 		(justify center)
+		(maxlen 13)
 	)
 	(tbtext "DRG. NO."
 		(name "")
-		(pos 59 22.75)
+		(pos 58.5 22.75)
 		(font
 			(size 2.5 2.5)
 		)
@@ -879,9 +927,10 @@
 		(name "")
 		(pos 42.5 15)
 		(font
-			(size 2.5 2.5)
+			(size 3 3)
 		)
 		(justify center)
+		(maxlen 33)
 	)
 	(tbtext "${PROJECT_NUMBER}"
 		(name "")
@@ -890,5 +939,6 @@
 			(size 2.5 2.5)
 		)
 		(justify center)
+		(maxlen 45)
 	)
 )

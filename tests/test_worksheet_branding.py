@@ -34,6 +34,8 @@ TITLE_BLOCK_TEMPLATES = [path for path in TEMPLATES if "AS1100" not in path.name
 PNG_1X1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/l6gK0wAAAABJRU5ErkJggg=="
 )
+# A different valid PNG header (2x1) for "another logo".
+PNG_OTHER = PNG_1X1[:16] + (2).to_bytes(4, "big") + PNG_1X1[20:]
 
 
 def cell(text: str, x: float, y: float) -> str:
@@ -93,7 +95,9 @@ class PlaceholderLogoTests(unittest.TestCase):
             embed_logo_in_worksheet(worksheet, logo)
             self.assertEqual(PNG_1X1, embedded_png(worksheet.read_text(encoding="utf-8")))
 
-    def _project(self, tmp: Path, *, embed: bytes | None, declared: bytes | None) -> SimpleNamespace:
+    def _project(
+        self, tmp: Path, *, embed: bytes | None, declared: bytes | None, explicit: bool = True
+    ) -> SimpleNamespace:
         (tmp / "Templates").mkdir()
         worksheet = tmp / "Templates" / "Boardwright_Template_PCB_GIT_A4.kicad_wks"
         shutil.copyfile(REPO / "Templates" / worksheet.name, worksheet)
@@ -101,11 +105,17 @@ class PlaceholderLogoTests(unittest.TestCase):
             (tmp / "embed.png").write_bytes(embed)
             embed_logo_in_worksheet(worksheet, tmp / "embed.png")
         (tmp / "board.kicad_pro").write_text(
-            json.dumps({"pcbnew": {"page_layout_descr_file": "Templates/" + worksheet.name}}), encoding="utf-8"
+            json.dumps({"pcbnew": {"page_layout_descr_file": "${KIPRJMOD}/Templates/" + worksheet.name}}),
+            encoding="utf-8",
         )
         if declared is not None:
             (tmp / "logo.png").write_bytes(declared)
-        return SimpleNamespace(root=tmp, template_sheet_image="logo.png" if declared is not None else "")
+        logo = "logo.png" if declared is not None else ""
+        return SimpleNamespace(
+            root=tmp,
+            template_sheet_image=logo,
+            template={"sheet_image": logo} if explicit else {},
+        )
 
     def check(self, **kwargs) -> list:
         with tempfile.TemporaryDirectory() as tmp:
@@ -113,17 +123,40 @@ class PlaceholderLogoTests(unittest.TestCase):
             _validate_worksheet_logo(self._project(Path(tmp), **kwargs), issues)
             return issues
 
-    def test_placeholder_with_project_logo_warns(self) -> None:
+    def test_placeholder_with_project_logo_is_an_error(self) -> None:
         issues = self.check(embed=None, declared=PNG_1X1)
-        self.assertEqual(["warning"], [issue.level for issue in issues])
-        self.assertIn("Boardwright placeholder logo", issues[0].message)
+        self.assertEqual(["error"], [issue.level for issue in issues])
+        self.assertIn("still renders the Boardwright logo", issues[0].message)
+
+    def test_placeholder_with_inherited_logo_is_an_error(self) -> None:
+        issues = self.check(embed=None, declared=PNG_1X1, explicit=False)
+        self.assertEqual(["error"], [issue.level for issue in issues])
 
     def test_embedded_project_logo_passes(self) -> None:
         self.assertEqual([], self.check(embed=PNG_1X1, declared=PNG_1X1))
 
-    def test_a_different_project_image_is_not_flagged(self) -> None:
-        # Projects may embed a dedicated worksheet image different from assets.logo.
-        self.assertEqual([], self.check(embed=PNG_1X1, declared=b"\x89PNG other"))
+    def test_explicit_sheet_image_must_be_what_renders(self) -> None:
+        issues = self.check(embed=PNG_1X1, declared=PNG_OTHER)
+        self.assertEqual(["error"], [issue.level for issue in issues])
+        self.assertIn("renders a different logo", issues[0].message)
+
+    def test_inherited_logo_may_differ_from_a_dedicated_sheet_image(self) -> None:
+        # assets.logo is also the README logo; a dedicated worksheet image may differ.
+        self.assertEqual([], self.check(embed=PNG_1X1, declared=PNG_OTHER, explicit=False))
+
+    def test_missing_configured_logo_fails_without_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = self._project(Path(tmp), embed=None, declared=PNG_1X1)
+            (Path(tmp) / "logo.png").unlink()
+            issues: list = []
+            _validate_worksheet_logo(project, issues)
+        self.assertEqual(["error"], [issue.level for issue in issues])
+        self.assertIn("is missing", issues[0].message)
+
+    def test_configured_logo_must_be_a_png(self) -> None:
+        issues = self.check(embed=None, declared=b"not a png")
+        self.assertEqual(["error"], [issue.level for issue in issues])
+        self.assertIn("not usable", issues[0].message)
 
     def test_no_declared_logo_no_warning(self) -> None:
         self.assertEqual([], self.check(embed=None, declared=None))

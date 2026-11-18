@@ -169,9 +169,8 @@ authenticated.
 
 In the Boardwright title blocks the PROJECT cell shows `${PROJECT_NUMBER}`
 (the descriptive `project.name`) and the large identifier cell shows
-`${DRAWING_NUMBER}`. The worksheets ship with the Boardwright placeholder logo;
-a project with its own logo embeds it with `boardwright worksheet-logo`, and
-`boardwright validate` warns while the placeholder is still embedded.
+`${DRAWING_NUMBER}`. Logos and the active sheet are covered in
+[Drawing Sheets And Branding](#drawing-sheets-and-branding).
 
 
 `${DRAWING_NUMBER}` is resolved per document before KiCad/KiBot output
@@ -203,6 +202,8 @@ Boardwright emits these for title blocks and drawing-facing reports.
 | `${BOARD_REVISION}` | Hardware board spin/design revision. |
 | `${PCB_REVISION}` | Same value as `${BOARD_REVISION}`; explicit name for the physical PCB revision. |
 | `${SCHEMATIC_REVISION}` | Schematic document revision, available on every document (for example, PCB drawings). |
+| `${ASSEMBLY_REVISION}` | Assembly drawing revision, `documents.assembly.revision`, available on every document. It is not the PCBA part number (`${PCBA_NAME}`) and not the assembly baseline (`A-B`, computed in the release ledger from the PCB and assembly drawing revisions). |
+| `${FABRICATION_REVISION}` | Fabrication drawing revision, `documents.fabrication.revision`, available on every document. |
 | `${DOCUMENT_TYPE}` | Current document type. |
 | `${DRAWING_TITLE}` | Current document title. |
 | `${DRAWING_NUMBER}` | Current document drawing number resolved from `number_source`. |
@@ -214,8 +215,7 @@ Boardwright emits these for title blocks and drawing-facing reports.
 
 ### Revision identities on drawings
 
-Every Boardwright worksheet except `Boardwright_Template_AS1100.kicad_wks`
-shows two kinds of revision:
+Every Boardwright worksheet shows two kinds of revision:
 
 - The **REVISION** cell shows `${DRAWING_REVISION}`, the revision of the drawing
   you are reading. On the fabrication drawing this is the fabrication drawing
@@ -226,16 +226,127 @@ shows two kinds of revision:
   PCB REV ${PCB_REVISION} | SCH REV ${SCHEMATIC_REVISION} | RELEASE ${RELEASE_VERSION}
   ```
 
+  The AS 1100 pair (`Boardwright_Template_AS1100.kicad_wks` and
+  `Boardwright_Template_PCB_AS1100_A3.kicad_wks`) prints it in the title area
+  and also states the assembly drawing revision (`ASSY REV`; see
+  `${ASSEMBLY_REVISION}` above):
+
+  ```text
+  PCB REV ${PCB_REVISION} | ASSY REV ${ASSEMBLY_REVISION} | SCH REV ${SCHEMATIC_REVISION} | RELEASE ${RELEASE_VERSION}
+  ```
+
+None of these replaces `${DRAWING_REVISION}`: each identity has its own
+variable, and the REV cell is always the current document's own revision.
+
 The template PCB title block uses `(rev "${PCB_REVISION}")`. Gerber X2
 `TF.ProjectId` therefore carries the physical board revision, which stays the
 same across documentation-only releases. The KiBot preflight sets
-`PCB_REVISION` and `SCHEMATIC_REVISION`, so CI renders the same values as
-KiCad desktop.
+`PCB_REVISION`, `SCHEMATIC_REVISION`, `ASSEMBLY_REVISION` and
+`FABRICATION_REVISION`, so CI renders the same values as KiCad desktop.
 
 Do not put `${RELEASE_VERSION}`, `${RELEASE_DATE}` or `${GIT_HASH_*}` on copper
 or silkscreen. These change with every release, so release preparation treats
 them as a fabrication re-issue (see [`RELEASE_MODEL.md`](RELEASE_MODEL.md)).
 Use `${PCB_REVISION}` for board markings.
+
+## Drawing Sheets And Branding
+
+### Active sheet
+
+KiCad renders each drawing with the page layout named in the `.kicad_pro`:
+the `schematic` setting for schematics and the `pcbnew` setting for PCB
+fabrication and assembly drawings (falling back to `template.worksheet`).
+Boardwright treats an external file referenced as
+`${KIPRJMOD}/Templates/<name>.kicad_wks` as the authoritative sheet.
+
+Verified with kicad-cli 9.0.6 and 10.0.1 (not yet in the KiCad GUI):
+
+| `.kicad_pro` setting | Schematic export | PCB export |
+| --- | --- | --- |
+| `kicad-embed://<name>` | copy embedded in the `.kicad_sch` | copy embedded in the `.kicad_pcb` |
+| `${KIPRJMOD}/Templates/<name>` | the file, even if an embedded copy remains | the file, even if an embedded copy remains |
+| `Templates/<name>` (bare relative) | the file | **not resolved** (KiCad default sheet) |
+
+`boardwright validate` reports a bare relative PCB sheet as an error and an
+embedded sheet as a warning, because Boardwright's logo, update and
+fingerprint tools act on external files.
+
+```text
+boardwright worksheet status            # sheet per document, logo, problems
+boardwright worksheet adopt [--apply]   # embedded -> ${KIPRJMOD}/Templates/ file
+boardwright worksheet extract           # write embedded sheets for review
+```
+
+`adopt` changes only the `.kicad_pro` setting, and only when the embedded copy
+is byte-equivalent (line endings aside) to the `Templates/` file. A diverged,
+missing or undecodable copy is left unchanged and reported; review it with
+`extract` (written to `.boardwright-checks/`, never into `Templates/`).
+Decoding embedded sheets needs zstd (Python 3.14+ or the `zstandard`
+package). The design files are never rewritten; KiCad may drop an unused
+embedded copy on a later save, which does not count as a design change.
+
+### AS 1100 sheets
+
+`Boardwright_Template_AS1100.kicad_wks` (schematic) and
+`Boardwright_Template_PCB_AS1100_A3.kicad_wks` (fabrication/assembly; adds the
+`${LAYER}` label) are A3 landscape sheets. Revision-table rows use 1.8 mm text;
+every variable cell has a maximum length, so KiCad compresses long values
+instead of overflowing neighbouring cells. The title area carries
+`${DRAWING_TITLE}`, `${SHEET_LEGAL_NOTICE}` and the identity line.
+
+### Logo
+
+Tracked Boardwright templates carry only the Boardwright logo
+(`assets/logos/logo-block-black.png`); a test enforces it. A project brands its
+drawings by declaring `template.sheet_image` (a PNG committed to the project)
+and running:
+
+```text
+boardwright worksheet-logo              # active sheets only
+boardwright worksheet-logo --output DIR # branded copies; sources untouched
+```
+
+Without `--worksheet`/`--all-templates` the command writes only the sheets the
+drawings render with, and refuses when a drawing renders an embedded sheet
+(adopt first). The TUI uses the same rules when it saves Info.
+
+Boardwright never falls back to its own logo silently. With an explicit
+`template.sheet_image`, `validate` and CI fail if the file is missing, is not a
+PNG, or is not what an active sheet renders. A logo inherited only from
+`template.logo`/`assets.logo` (also the README logo) may differ from a
+dedicated worksheet image, but the Boardwright logo rendering in its place is
+an error. The shipped default `sheet_image` counts as Boardwright branding,
+not as a project logo.
+
+Branding is kept through project lifecycle operations:
+
+- **Migration** embeds a PNG project logo into the sheets it installs; a
+  non-PNG logo stays the README logo only.
+- **`boardwright update`** merges worksheet layout changes while keeping the
+  project's own logo images (the logo is project-owned; line endings are
+  normalised). The plan notes embedded sheets it cannot reach and active
+  sheets it changes.
+
+### Personal logo (local override)
+
+`.boardwright/local.yaml` is untracked (`.gitignore`) and may override only
+`template.*` keys, for example a personal `template.sheet_image` for local
+previews. Its logo is never written into Git-tracked worksheets: use
+`worksheet-logo --output <untracked dir>`. Release fingerprints read
+`project.yaml` from Git and ignore `local.yaml`, so a local override cannot
+change a release. Only interactive previews read it (`worksheet status`,
+`worksheet-logo --output`, the TUI's display). Everything that writes tracked
+files, release evidence or controlled outputs loads the tracked metadata only:
+KiBot metadata sync and `prepare_pcb_tables`, migration, revision-table
+variables, and `drawing_sheets check`. Saving Info in the TUI never writes a
+value back to `project.yaml` that came only from `local.yaml`.
+
+### CI
+
+Every output workflow runs `python -m boardwright.drawing_sheets check` before
+KiBot, for every variant. The project logo is reproducible in CI because it is
+committed to the project and embedded in the committed active sheet; nothing is
+fetched at build time. Local Docker builds use the same checkout.
 
 ## Revision Table Variables
 
@@ -309,6 +420,11 @@ drawing identity fields.
 | `${GIT_URL}` | Canonical repository URL from project config. |
 | `${GIT_HASH_SCH}` | Last non-merge Git hash touching the schematic. |
 | `${GIT_HASH_PCB}` | Last non-merge Git hash touching the PCB. |
+
+The GIT HASH cell on schematic worksheets shows `${GIT_HASH_SCH}`: the last
+commit that changed the schematic sources. It is not the release commit, the
+tag, or the merge commit on `main`; a documentation-only release that does not
+touch the schematic keeps the previous hash.
 | `${RELEASE_DATE_NUM}` | Last Git commit date in `YYYY-MM-DD` format. |
 | `${VARIANT}` | Current KiBot variant value. |
 | `${SHEET_LEGAL_NOTICE}` | Legal notice text expanded into worksheet templates. |

@@ -349,12 +349,15 @@ Current implementation note:
   live under asset/project-image fields. Worksheet/title-block artwork lives
   under `template.sheet_image`.
 - The sheet-image path is captured in config and the TUI. The
-  `boardwright worksheet-logo` command embeds `template.sheet_image` by default
-  into worksheet bitmap data while preserving each worksheet's existing
-  position and scale.
-- Saving Info in the TUI should re-embed `template.sheet_image` into
-  all worksheet templates so changes are visible without running a separate
-  command.
+  `boardwright worksheet-logo` command embeds `template.sheet_image` into the
+  active worksheets (the external sheets the project's drawings render with)
+  while preserving each worksheet's existing position and scale.
+- Saving Info in the TUI re-embeds `template.sheet_image` into the same active
+  worksheets, through the same selection rules.
+- Active sheets, adoption of embedded sheets, logo validation, local
+  overrides and CI checks are specified in `FIELDS.md`
+  ("Drawing Sheets And Branding"); release control of sheet changes is in
+  `RELEASE_MODEL.md`.
 
 ## Legal, Licensing, And Provenance
 

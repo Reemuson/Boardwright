@@ -60,6 +60,34 @@ class NguyenMigrationTests(unittest.TestCase):
         plan = build_migration_plan(self.root, Path("legacy.kicad_pro"))
         self.assertEqual("legacy.kicad_pro", plan["project"])
 
+    def test_migration_carries_a_png_project_logo_into_the_active_worksheets(self) -> None:
+        import base64
+
+        from boardwright.config import load_config
+        from boardwright.drawing_sheets import active_sheet_files, branding_issues
+        from boardwright.worksheet_logo import embedded_png
+
+        if shutil.which("git") is None:
+            self.skipTest("git is not installed")
+        self._write_legacy_fixture()
+        png = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/l6gK0wAAAABJRU5ErkJggg=="
+        )
+        (self.root / "kibot_resources/custom-logo.png").write_bytes(png)
+        self._initialize_git()
+        plan = build_migration_plan(self.root)
+        plan["resolutions"]["pcba_name"] = "Example Assembly"
+        plan["resolutions"]["pcb_name"] = "Example PCB"
+        apply_migration_plan(write_plan(self.root / "migration.yaml", plan))
+
+        config = load_config(self.root)
+        self.assertEqual("assets/logos/custom-logo.png", config.template.get("sheet_image"))
+        sheets = active_sheet_files(self.root)
+        self.assertEqual(2, len(sheets))
+        for sheet in sheets:
+            self.assertEqual(png, embedded_png(sheet.read_text(encoding="utf-8")), sheet.name)
+        self.assertEqual([], branding_issues(config))
+
     def test_migration_preserves_design_history_and_license(self) -> None:
         if shutil.which("git") is None:
             self.skipTest("git is not installed")
@@ -92,11 +120,11 @@ class NguyenMigrationTests(unittest.TestCase):
 
         project = json.loads((self.root / "legacy.kicad_pro").read_text(encoding="utf-8"))
         self.assertEqual(
-            "Templates/Boardwright_Template_GIT.kicad_wks",
+            "${KIPRJMOD}/Templates/Boardwright_Template_GIT.kicad_wks",
             project["schematic"]["page_layout_descr_file"],
         )
         self.assertEqual(
-            "Templates/Boardwright_Template_PCB_GIT_A4.kicad_wks",
+            "${KIPRJMOD}/Templates/Boardwright_Template_PCB_GIT_A4.kicad_wks",
             project["pcbnew"]["page_layout_descr_file"],
         )
         self.assertNotIn("KDT_Hierarchical_KiBot", json.dumps(project))

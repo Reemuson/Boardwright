@@ -805,7 +805,7 @@
       "svg": "",
       "vrml": ""
     },
-    "page_layout_descr_file": "kicad-embed://Boardwright_Template_AS1100.kicad_wks"
+    "page_layout_descr_file": "${KIPRJMOD}/Templates/Boardwright_Template_PCB_AS1100_A3.kicad_wks"
   },
   "schematic": {
     "annotate_start_num": 0,
@@ -926,7 +926,7 @@
       "version": 1
     },
     "net_format_name": "KiCad",
-    "page_layout_descr_file": "kicad-embed://Boardwright_Template_AS1100.kicad_wks",
+    "page_layout_descr_file": "${KIPRJMOD}/Templates/Boardwright_Template_AS1100.kicad_wks",
     "plot_directory": "Schematic/",
     "space_save_all_events": true,
     "spice_current_sheet_as_root": false,
@@ -1059,6 +1059,8 @@
     "TEMPLATE_LOGO": "assets/logos/logo-block-black.png",
     "GIT_URL": "https://github.com/Reemuson/Boardwright.git",
     "PCB_REVISION": "A",
-    "SCHEMATIC_REVISION": "A"
+    "SCHEMATIC_REVISION": "A",
+    "ASSEMBLY_REVISION": "A",
+    "FABRICATION_REVISION": "A"
   }
 }

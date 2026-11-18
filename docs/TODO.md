@@ -238,8 +238,27 @@ Goal: make the generated README a useful hardware project front page.
       (audit M5/M6).
 - [ ] Add `${SCHEMATIC_REVISION}`/`${PCB_REVISION}` rows to the generated README
       template (the KiBot preflight now sets both variables).
-- [ ] Add a revision identity line to `Boardwright_Template_AS1100.kicad_wks`
-      (different layout; not covered by the generic worksheet change).
+- [x] Add a revision identity line to the AS 1100 sheets (audit F11): PCB,
+      assembly drawing (`ASSY REV ${ASSEMBLY_REVISION}`), schematic and release; matching PCB sheet
+      `Boardwright_Template_PCB_AS1100_A3.kicad_wks`; compact revision table
+      and length-limited title-block cells (GE01412/ELEC4840 reconciliation).
+- [x] Treat the active drawing sheet, its logo and drawn variables as
+      release inputs (fingerprint schema 3 sheet domains).
+- [x] Make logo replacement, validation, update, migration and the TUI act on
+      the sheets KiCad actually renders; fail on a missing configured logo;
+      untracked `.boardwright/local.yaml` for personal overrides; CI
+      `drawing_sheets check`.
+- [ ] Verify `${KIPRJMOD}/Templates/...` sheet resolution in the KiCad 9 and
+      10 GUI (open, edit, save; confirm KiCad keeps the setting and the
+      design files are unchanged). Only kicad-cli 9.0.6/10.0.1 were verified.
+- [ ] Owner review of the new AS 1100 sheets, then adopt them in ELEC4840
+      (its embedded sheet has diverged; `worksheet adopt` correctly refuses).
+      GE01412's CME sheets are identical to its `Templates/` copies and are
+      adoptable, but carry client branding and remain project-owned.
+- [ ] Add the assembly drawing revision (`ASSY REV`) to the eight non-AS 1100 Boardwright sheets'
+      identity line (fit check needed in each title block).
+- [ ] Add `zstandard` as an optional dependency, or document Python 3.14 for
+      embedded-sheet adoption on older interpreters.
 - [ ] Let `boardwright update` adopt projects that predate `.boardwright/state.yaml`
       (today it fails with a circular "run update plan" message).
 - [ ] Add an ODB++ feature-file canonicaliser so ODB++ can become a controlled
@@ -275,7 +294,7 @@ Goal: make the generated README a useful hardware project front page.
       history from the ledger (audit D1; with the AS 1100 worksheet work).
 - [ ] FIC-100A DRC clearance 0.1917 mm vs 0.2 mm (audit D3/F15): owner to fix
       in a future PCB revision or record a waiver.
-- [ ] Document in `FIELDS.md` that the GIT HASH cell shows the last
+- [x] Document in `FIELDS.md` that the GIT HASH cell shows the last
       design-source commit, not the release commit.
 - [x] Add board dimensions.
 - [x] Keep board images side by side in README and release markdown.

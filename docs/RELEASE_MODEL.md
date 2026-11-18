@@ -65,6 +65,7 @@ fingerprints (`src/boardwright/fingerprint.py`):
 | `assembly` | Footprint reference, value, library, side, position, attributes and fields; schematic symbol BOM fields and DNP/BOM/board flags; assembly notes. | Datasheet, description, simulation fields. |
 | `pcb_drawings` | Content on `*.Fab`, `Dwgs.User`, `Cmts.User` and `User.*` layers, which the fabrication and assembly drawings plot. | Courtyard, margin, Eco layers; hidden text. |
 | `schematic` | All root `.kicad_sch` content. | Title blocks, UUIDs, generator/version. |
+| `schematic_sheet`, `fabrication_sheet`, `assembly_sheet` | Each drawing's effective sheet: the external `.kicad_wks` (or embedded copy) it renders with, including the logo bitmap, plus the values of the stable drawing variables the sheet draws (`COMPANY`, `DESIGNER`, `PROJECT_NUMBER`, `PCBA_NAME`, `PCB_NAME`, `DOCUMENT_TYPE`, `DRAWING_TITLE`, `DRAWING_NUMBER`, `DRAWN_BY`, `DRAWN_DATE`, `SHEET_LEGAL_NOTICE`). | Revision, release, date, Git and revision-table variables (governed by the release model itself); unused `Templates/` files; `.boardwright/local.yaml`. Not compared against records that lack them. |
 | `fabrication_outputs` | Effective options of the Gerber, Excellon drill and ODB++ outputs: `kibot_out_gerber/excellon_drill/odb.yaml` with every `@NAME@` resolved through `kibot_main.yaml` (for example `PLOT_VALUES`). These change the fabrication data without any design change. | Comments, output name and comment. Not compared against ledger records written before the domain existed. |
 
 Tracked separately (not design domains):
@@ -81,7 +82,10 @@ Tracked separately (not design domains):
   is detected as `release_marking`.
 
 Fingerprint schema 2 (November 2026) added board thickness, variable
-resolution, pin functions, `pcb_drawings`, `tooling` and release marking. When
+resolution, pin functions, `pcb_drawings`, `tooling` and release marking.
+Schema 3 added the three drawing-sheet domains and excludes embedded
+worksheets from `pcb_geometry` and `schematic` (they are presentation, now
+counted once in the sheet domains). When
 the baseline was recorded with an older schema, Boardwright recomputes it
 read-only from the release tag, or from the recorded source commit, using the
 current rules. It only reports a schema mismatch when neither is available.
@@ -102,6 +106,7 @@ the PCB blocks the release.
 | `schematic` changed | `documentation` or `electrical` class and a new schematic revision. |
 | Schematic revision changed, schematic unchanged | `documentation` required (for example, title-block-only corrections). |
 | `electrical` declared, PCB and BOM unchanged | Allowed, with a review item to confirm the as-built PCB still implements the schematic. |
+| `schematic_sheet`, `fabrication_sheet` or `assembly_sheet` changed | `documentation` class (or `fabrication`/`assembly`/`electrical`) and a new revision of each affected drawing, unless the PCB revision changes. A Boardwright update, a logo change or a title-block value change therefore never re-issues an approved drawing under its old revision. Fabrication and assembly baselines are unaffected. |
 | `pcb_drawings` changed | `documentation` (or `fabrication`/`assembly`) class and a new fabrication or assembly drawing revision. The bare-board baseline is unaffected; a review item asks whether a fabrication requirement changed. |
 | KiCad format changed | `tooling` class, with a review item that regenerated outputs may not be byte-identical. |
 | Tooling changed | `tooling` class, with a review item that rendered notes and output options may differ. |

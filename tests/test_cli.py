@@ -101,6 +101,8 @@ class CliTests(unittest.TestCase):
                 "root": Path.cwd(),
                 "template_sheet_image": "assets/sheet-image.png",
                 "worksheet": "Templates/example.kicad_wks",
+                "template": {},
+                "local_overrides": (),
             },
         )()
         result_obj = type(
@@ -114,7 +116,10 @@ class CliTests(unittest.TestCase):
                 "png_height": 5,
             },
         )()
-        with patch.object(cli, "load_config", return_value=config), patch.object(
+        targets = [Path.cwd() / "Templates/example.kicad_wks"]
+        with patch.object(cli, "load_config", return_value=config), patch(
+            "boardwright.worksheet_logo.select_logo_targets", return_value=targets
+        ) as select, patch.object(
             cli,
             "embed_logo_in_worksheets",
             return_value=(result_obj,),
@@ -122,7 +127,8 @@ class CliTests(unittest.TestCase):
             result = cli.main(["worksheet-logo"])
 
         self.assertEqual(0, result)
-        embed.assert_called_once()
+        select.assert_called_once()
+        self.assertEqual(targets, embed.call_args.args[0])
         self.assertIn("updated Templates", stdout.getvalue())
 
     def test_adopt_command_initializes_and_fills_repo_metadata(self) -> None:
