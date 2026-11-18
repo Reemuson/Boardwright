@@ -193,6 +193,49 @@ class CheckBaselineTests(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertIn(NOTES, text)
 
+    # F20: a re-issued fabrication baseline reports exactly what changed.
+    def reissue(self) -> None:
+        self.record.fabrication_baseline = SimpleNamespace(id="A/2", status="reissued")
+        self.record.pcb_revision = "A"
+
+    def test_reissue_lists_changed_fabrication_layers(self) -> None:
+        self.reissue()
+        silk = "Manufacturing/Fabrication/Gerbers/X-F_Silkscreen.gbr"
+        approved = {**APPROVED, silk: "%FSLAX46Y46*%\nD10*\nM02*\n"}
+        self.write_outputs({**approved, silk: "%FSLAX46Y46*%\nD10*\nG36*\nG37*\nM02*\n"})
+        code, text = self.check(self.published(approved))
+        self.assertEqual(0, code, text)
+        self.assertIn("re-issued as A/2 under PCB revision A", text)
+        self.assertIn(f"reissue {silk}: content differs", text)
+        self.assertNotIn(f"reissue {GERBER}", text)
+        self.assertIn("2 other controlled fabrication file(s) are identical", text)
+
+    def test_reissue_with_no_fabrication_change_warns(self) -> None:
+        self.reissue()
+        self.write_outputs(APPROVED)
+        code, text = self.check(self.published(APPROVED))
+        self.assertEqual(0, code, text)
+        self.assertIn("the re-issue changes nothing", text)
+
+    def test_reissue_still_blocks_reused_assembly_changes(self) -> None:
+        self.reissue()
+        self.record.assembly_baseline = SimpleNamespace(id="A", status="reused")
+        bom = "Manufacturing/Assembly/X-bom.csv"
+        self.write_outputs({**APPROVED, bom: "R1,10k\n"})
+        code, text = self.check(self.published({**APPROVED, bom: "R1,1k\n"}))
+        self.assertEqual(1, code, text)
+        self.assertIn(bom, text)
+
+    def test_reissue_needs_the_previous_package(self) -> None:
+        self.reissue()
+        self.write_outputs(APPROVED)
+
+        def fail(*_args):
+            raise LegacyBaselineError("no digest")
+
+        code, _text = self.check(fail)
+        self.assertEqual(2, code)
+
     def test_package_without_controlled_outputs_fails(self) -> None:
         self.write_outputs(APPROVED)
         code, text = self.check(self.published({"Manufacturing/Fabrication/readme.pdf": "x"}))

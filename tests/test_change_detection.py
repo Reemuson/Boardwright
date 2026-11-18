@@ -122,6 +122,56 @@ class ChangeDetectionTests(unittest.TestCase):
         template.write_bytes(b"1. Finish: HASL.\r\n")
         self.assertEqual(after.tooling, fingerprint_working_tree(self.tmp).tooling)
 
+    # F20: a tooling change that alters fabrication outputs -----------------
+    def _release_then_change_gerber_options(self) -> None:
+        gerber = self.tmp / "boardwright_resources/kibot/yaml/kibot_out_gerber.yaml"
+        gerber.parent.mkdir(parents=True)
+        gerber.write_text("options:\n  plot_footprint_values: false\n", encoding="utf-8")
+        self.project.commit("gerber options")
+        self._release_initial()
+        gerber.write_text("options:\n  plot_footprint_values: true\n", encoding="utf-8")
+
+    def test_fabrication_output_tooling_change_reissues_fabrication(self) -> None:
+        self._release_then_change_gerber_options()
+        self.project.set_revisions(fab_rev="B")
+        assessment = self.project.assess("1.0.1", "fabrication,tooling", "A.0", "Plot test-point labels")
+        self.assertEqual((), assessment.problems, format_impact(assessment))
+        self.assertEqual(("reissued", "A/2"), (assessment.fabrication_baseline.status, assessment.fabrication_baseline.id))
+        self.assertEqual("A", assessment.proposed.pcb_revision)
+        self.assertEqual("reused", assessment.assembly_baseline.status)
+        self.assertFalse(assessment.documentation_only)
+        self.assertTrue(any("output tooling changed them" in r for r in assessment.reviews))
+
+    def test_fabrication_output_reissue_requires_new_fabrication_drawing_revision(self) -> None:
+        self._release_then_change_gerber_options()
+        assessment = self.project.assess("1.0.1", "fabrication,tooling", "A.0", "Plot test-point labels")
+        self.assertTrue(
+            any("fabrication drawing revision must change" in p for p in assessment.problems),
+            format_impact(assessment),
+        )
+
+    def test_tooling_only_keeps_baseline_and_points_to_reissue(self) -> None:
+        # Without `fabrication` the baseline is claimed reused; check-baseline
+        # must then prove the outputs identical, and blocks if they are not.
+        self._release_then_change_gerber_options()
+        assessment = self.project.assess("1.0.1", "tooling", "A.0", "Plot test-point labels")
+        self.assertEqual((), assessment.problems, format_impact(assessment))
+        self.assertEqual("reused", assessment.fabrication_baseline.status)
+        self.assertTrue(any("declare `fabrication` to re-issue" in r for r in assessment.reviews))
+
+    def test_fabrication_without_any_change_still_rejected(self) -> None:
+        self._release_initial()
+        assessment = self.project.assess("1.0.1", "fabrication", "A.0", "nothing")
+        self.assertTrue(any("no fabrication input changed" in p for p in assessment.problems))
+
+    def test_global_plot_definitions_are_tooling(self) -> None:
+        main = self.tmp / "boardwright_resources/kibot/yaml/kibot_main.yaml"
+        main.parent.mkdir(parents=True)
+        main.write_text("definitions:\n  PLOT_VALUES: true\n", encoding="utf-8")
+        before = fingerprint_working_tree(self.tmp)
+        main.write_text("definitions:\n  PLOT_VALUES: false\n", encoding="utf-8")
+        self.assertNotEqual(before.tooling, fingerprint_working_tree(self.tmp).tooling)
+
     def test_tooling_change_requires_tooling_class(self) -> None:
         template = self.tmp / FAB_NOTES
         template.parent.mkdir(parents=True)
