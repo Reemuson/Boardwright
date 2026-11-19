@@ -99,7 +99,7 @@ model cache is the Docker volume `boardwright-3d-k9` (or `-k10`).
 | Line endings | The stage is cloned with `core.autocrlf=false` and `core.eol=lf`, so its files have the same bytes as a Linux checkout. Files with `eol=crlf` (`*.bat`) stay CRLF, as on GitHub. The build refuses any tree where tracked text checked in as LF has a CRLF working copy. |
 | Local overrides | `.boardwright/local.yaml` is ignored, so it is never cloned. The build refuses to run if one is present. Tracked writers already ignore it (`load_config(local=False)`). |
 | Tracked sources | The build restores every tracked file it rewrote (`ci_cleanup`, `.gitattributes` first). It fails if anything outside the kept outputs (`README.md`, `assets/renders`, plus the caller's `--keep`) is still modified. Locally, `container build` also checks that the developer's `git status` is unchanged. |
-| Ownership and permissions | On Linux the container runs as the calling uid:gid, so CI outputs belong to the runner and the workflows no longer use `sudo chown`. After every run the runner fails if any file in the work tree belongs to another user; the record states the container's uid:gid. Docker Desktop maps ownership itself. `BOARDWRIGHT_CONTAINER_USER=1001:121` reproduces the runner's uid locally. Scripts run through `python`, so execute bits do not matter. |
+| Ownership and permissions | On Linux the container runs as the calling uid:gid, so CI outputs belong to the runner and the workflows no longer use `sudo chown`. After every run the runner fails if any file in the work tree belongs to another user; the record states the container's uid:gid. Docker Desktop maps ownership itself. `BOARDWRIGHT_CONTAINER_USER=1001:1001` reproduces the GitHub runner's uid:gid locally (recorded by the live runs). Scripts run through `python`, so execute bits do not matter. |
 | Home, fonts, Git | `HOME` is container-private, and the bundled fonts are installed there before KiBot. Git trusts the mounted tree through `safe.directory`. |
 | Mounts | One read-write mount (the stage or CI checkout at `/work`) and the 3D cache at `/cache_3d`. Nothing else from the host is mounted. |
 | Order | The worksheet and logo check (`drawing_sheets check`) is the first step, before any KiBot run. |
@@ -201,6 +201,17 @@ python -m boardwright.output_manifest verify --root <stage>
 
 ## Known differences and limits
 
+- Historical CI used the moving `dev` image: KiCad 9.0.7+1 with a KiBot
+  1.9.2 development build. The pinned image has the same KiCad (9.0.7+1;
+  `kicad-cli --version` prints `9.0.7`) and the stable KiBot 1.9.1. A rebuild
+  of 0.1.5 verified against its accepted manifest. KiCad 9.0.6 is only the
+  desktop install used for local checks; it never builds controlled outputs.
+- KiCad 10 builds are not reproducible across hosts yet. On the same commit
+  and image, a Docker Desktop build and a GitHub build filled one copper zone
+  differently (L1 and L2), and the manifest normaliser does not recognise
+  the KiCad 10 drill-file header (`; DRILL file KiCad 10…`, without braces),
+  so drill files differ in their dates only. Both must be resolved before any
+  project moves to KiCad 10 (`MIGRATION.md`).
 - `DRAFT` also generates the table CSVs (`table_sources`). The README report
   resolves every output's path, which configures `pdf_fabrication`, and that
   output refuses to load without its drill-table and test-point CSVs. The

@@ -271,9 +271,12 @@ Goal: make the generated README a useful hardware project front page.
 - [x] Pin the build image by digest; the KiBot action is no longer used (audit M8, `BUILD.md`).
 - [x] Remove the Docker helper scripts (`/etc/shadow` mount, KiCad 8 `:dev`);
       `docker-kibot` is an alias for `container shell` (audit M7).
-- [ ] Exercise the converted workflows on the testbench (preview, accept,
-      prepare with review hold, publish, compat) and run
-      `boardwright container compare` against a local build of each commit.
+- [x] Exercise preview, accept (isolated target branch) and compat on the
+      testbench and compare each with a local build (`AUDIT-2026-11.md`).
+- [ ] Exercise prepare-release with review hold. It runs only on `main`, so
+      the testbench `main` needs the new payload first (needs approval).
+- [ ] KiCad 10: make zone fills reproducible across hosts, and recognise the
+      KiCad 10 drill header in a new manifest normaliser version.
 - [x] Fix `DRAFT` builds on boards with drill tables: `md_readme` configures
       `pdf_fabrication`, which needs the table CSVs, so `DRAFT` now runs
       `table_sources` first (`BUILD.md`).

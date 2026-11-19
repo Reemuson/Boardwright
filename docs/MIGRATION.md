@@ -63,7 +63,27 @@ Projects created before `.boardwright/state.yaml` existed cannot use
 `boardwright update` yet. The payload can be installed from
 `managed_project.collect_payload()`; the TODO tracks proper support.
 
-## KiCad 9 to KiCad 10
+## Existing projects: shared Docker build
+
+A project created before the shared Docker build needs these changes. They
+were made on the testbench (`boardwright-ci-test`, branch `ci/docker-ci`).
+
+1. Install the new payload: workflows, `src/boardwright`, the KiBot YAML and
+   scripts, and `Templates/`. Use `boardwright update` where
+   `.boardwright/state.yaml` exists. Otherwise copy `collect_payload()`
+   byte-for-byte from an LF checkout of Boardwright, and delete
+   `docker_kibot_linux.sh` and `docker_kibot_windows.bat`.
+2. Re-embed the project logo in the new worksheets:
+   `python -m boardwright worksheet-logo --all-templates`.
+3. Point `page_layout_descr_file` in the `.kicad_pro` at
+   `${KIPRJMOD}/Templates/...`. The sheet check that now runs before KiBot
+   refuses bare relative paths, which PCB exports do not resolve.
+4. Commit on Windows with `core.autocrlf=false`, or build from a clone made
+   with `core.autocrlf=false` and `core.eol=lf`. The build refuses CRLF
+   working copies.
+5. Expect a `tooling` change in the next release: KiBot moves from the `dev`
+   image to the pinned stable release (`BUILD.md`).
+
 
 Status: groundwork is in place. CI builds with the pinned KiCad 9 image
 (`BUILD.md`) until a project has passed the comparison below.
@@ -94,6 +114,15 @@ Implemented:
   shared build for one commit with KiCad 9 and KiCad 10, uploads both output
   sets and compares the controlled outputs. A build that leaves tracked
   sources modified fails; the restored files are listed in the build log.
+
+Blocking (found by the live compatibility run, 2026-11-19):
+
+- The KiCad 10 zone fill differed between a local Docker Desktop build and a
+  GitHub build of the same commit and image (L1/L2 copper). KiCad 9 builds of
+  that commit matched.
+- The manifest normaliser does not recognise the KiCad 10 drill header, so
+  KiCad 10 drill files compare as changed when only their dates differ. The
+  fix needs a new normaliser version.
 
 Procedure for a project:
 
