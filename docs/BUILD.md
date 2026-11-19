@@ -99,7 +99,7 @@ model cache is the Docker volume `boardwright-3d-k9` (or `-k10`).
 | Line endings | The stage is cloned with `core.autocrlf=false` and `core.eol=lf`, so its files have the same bytes as a Linux checkout. Files with `eol=crlf` (`*.bat`) stay CRLF, as on GitHub. The build refuses any tree where tracked text checked in as LF has a CRLF working copy. |
 | Local overrides | `.boardwright/local.yaml` is ignored, so it is never cloned. The build refuses to run if one is present. Tracked writers already ignore it (`load_config(local=False)`). |
 | Tracked sources | The build restores every tracked file it rewrote (`ci_cleanup`, `.gitattributes` first). It fails if anything outside the kept outputs (`README.md`, `assets/renders`, plus the caller's `--keep`) is still modified. Locally, `container build` also checks that the developer's `git status` is unchanged. |
-| Ownership and permissions | On Linux the container runs as the calling uid:gid, so CI outputs belong to the runner and the workflows no longer use `sudo chown`. Docker Desktop maps ownership itself. `BOARDWRIGHT_CONTAINER_USER=1001:121` reproduces the runner's uid locally. Scripts run through `python`, so execute bits do not matter. |
+| Ownership and permissions | On Linux the container runs as the calling uid:gid, so CI outputs belong to the runner and the workflows no longer use `sudo chown`. After every run the runner fails if any file in the work tree belongs to another user; the record states the container's uid:gid. Docker Desktop maps ownership itself. `BOARDWRIGHT_CONTAINER_USER=1001:121` reproduces the runner's uid locally. Scripts run through `python`, so execute bits do not matter. |
 | Home, fonts, Git | `HOME` is container-private, and the bundled fonts are installed there before KiBot. Git trusts the mounted tree through `safe.directory`. |
 | Mounts | One read-write mount (the stage or CI checkout at `/work`) and the 3D cache at `/cache_3d`. Nothing else from the host is mounted. |
 | Order | The worksheet and logo check (`drawing_sheets check`) is the first step, before any KiBot run. |
@@ -168,7 +168,7 @@ format) and `boardwright-build/record.json`:
 | `tools` | `kicad-cli`, KiBot and Python versions from inside the container. |
 | `configuration` | Variant, KiCad major version, the Git tree ID of `boardwright_resources/kibot`, and the pinned Python requirements. |
 | `steps` | Every step's name and full command. |
-| `normaliser`, `github_run` | Manifest normaliser version; repository and run ID on GitHub. |
+| `normaliser`, `github_run`, `container_user` | Manifest normaliser version; repository and run ID on GitHub; the uid:gid the build ran as. |
 
 The workflows upload `boardwright-build/` with the KiBot logs.
 

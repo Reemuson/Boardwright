@@ -133,6 +133,24 @@ class CredentialTests(unittest.TestCase):
         self.assertEqual([], container.repository_credentials(self.root))
 
 
+class OwnershipTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="bw-own-"))
+        self.addCleanup(_rmtree, self.root)
+        (self.root / "Manufacturing").mkdir()
+        (self.root / "Manufacturing" / "b-F_Cu.gbr").write_text("x", encoding="utf-8")
+        self.owner = self.root.lstat().st_uid
+
+    def test_outputs_owned_by_the_caller_pass(self) -> None:
+        with patch.object(container.os, "getuid", create=True, return_value=self.owner):
+            self.assertEqual([], container.foreign_owned(self.root))
+
+    def test_outputs_owned_by_another_user_are_reported(self) -> None:
+        with patch.object(container.os, "getuid", create=True, return_value=self.owner + 1):
+            found = container.foreign_owned(self.root)
+        self.assertIn("Manufacturing/b-F_Cu.gbr", found)
+
+
 class StageTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp(prefix="bw-stage-"))

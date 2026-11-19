@@ -157,6 +157,7 @@ class PreflightAndBuildTests(unittest.TestCase):
         self.assertEqual("repo:tag@sha256:abc", record["image"])
         self.assertEqual("t1", record["boardwright_source"]["tree"])
         self.assertEqual("t2", record["configuration"]["kibot_config_tree"])
+        self.assertIn("container_user", record)
         self.assertTrue(all(step["argv"][0] != sys.executable for step in record["steps"]))
         self.assertEqual("fabrication", manifest["files"]["Manufacturing/Fabrication/Gerbers/b-F_Cu.gbr"]["category"])
 
