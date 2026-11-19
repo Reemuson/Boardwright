@@ -278,6 +278,8 @@ Goal: make the generated README a useful hardware project front page.
 - [x] A release that keeps a drawing revision (for example `tooling` only)
       no longer rewrites its revision-table rows; issued rows come from the
       previous release tag and never change (`SPEC.md`).
+- [ ] Make `container candidate` work on Windows hosts: the stage's `origin`
+      is a Windows path the container cannot query for the remote-tag check.
 - [ ] KiCad 10: make zone fills reproducible across hosts, and recognise the
       KiCad 10 drill header in a new manifest normaliser version.
 - [x] Fix `DRAFT` builds on boards with drill tables: `md_readme` configures
