@@ -265,8 +265,11 @@ Remaining:
 
 ## Milestone 8: Shared Local And CI Build
 
-Status: implemented on `feat/as1100-worksheets` (2026-11-19), verified locally
-with Docker Desktop. Not yet exercised on GitHub (`BUILD.md`, `TODO.md`).
+Status: implemented on `feat/docker-ci` (2026-11-19). Every converted workflow
+(dev-preview, main-outputs, kicad-compat, prepare-release, release) has run on
+the testbench with KiCad 9 and matched a local Docker Desktop build; testbench
+0.1.6 was released through it as a draft (`AUDIT-2026-11.md`). Tooling defects
+remain in `TODO.md`.
 
 - one pipeline (`boardwright build`) run by every workflow and every local
   build, in a digest-pinned KiBot image (KiCad 9 default, 10 explicit)
@@ -277,8 +280,8 @@ with Docker Desktop. Not yet exercised on GitHub (`BUILD.md`, `TODO.md`).
 
 Remaining:
 
-- run each converted workflow on the testbench repository and compare its
-  `boardwright-build/` evidence with a local build of the same commit
+- `container candidate` on Windows hosts, and a `container compare` that can
+  compare release-candidate builds (`TODO.md`)
 - commit-message standardisation (next workstream)
 
 ## Later

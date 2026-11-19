@@ -278,8 +278,23 @@ Goal: make the generated README a useful hardware project front page.
 - [x] A release that keeps a drawing revision (for example `tooling` only)
       no longer rewrites its revision-table rows; issued rows come from the
       previous release tag and never change (`SPEC.md`).
+- [x] Release through the shared Docker build on the testbench: 0.1.6
+      (`tooling`, A/2 and A reused) approved from held `44541045029`, published
+      as a draft by the converted `release.yaml` (`AUDIT-2026-11.md`).
 - [ ] Make `container candidate` work on Windows hosts: the stage's `origin`
       is a Windows path the container cannot query for the remote-tag check.
+      The 0.1.6 rehearsal needed a stage on `main` with `origin` set to itself.
+- [ ] Let `container compare` compare release-candidate builds. Both sides of
+      a prepare build record the release-preparation edits in
+      `source_modified`, so the comparison reports "build was made from
+      uncommitted changes" once per side even when the edits are identical.
+      Bind the prepared edits by content (for example a digest of the
+      prepared tree) rather than dropping the source-integrity check.
+- [ ] Derive the schematic cover release date from the release record, not
+      the commit date: held 0.1.6 built `d22180b` and showed 2026-11-20, the
+      tagged build of release commit `f0b3e3c` showed 2026-11-19 (the ledger
+      date). The review gate ignores dates, so the reviewed and published
+      covers can differ.
 - [ ] KiCad 10: make zone fills reproducible across hosts, and recognise the
       KiCad 10 drill header in a new manifest normaliser version.
 - [x] Fix `DRAFT` builds on boards with drill tables: `md_readme` configures
@@ -310,7 +325,7 @@ Goal: make the generated README a useful hardware project front page.
       (`compare_drawing_pdfs.py`, title block masked) into Boardwright with
       per-worksheet masks and tests, and run it in check-baseline/publish verify.
 - [ ] Enforce the human visual approval in CI, e.g. a GitHub Environment gate
-      (audit P1).
+      (audit P1). Still local-only at 0.1.6.
 - [ ] Replace schematic cover placeholders and generate the visible revision
       history from the ledger (audit D1; with the AS 1100 worksheet work).
 - [ ] FIC-100A DRC clearance 0.1917 mm vs 0.2 mm (audit D3/F15): owner to fix
