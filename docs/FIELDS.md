@@ -354,11 +354,12 @@ commit, without `.boardwright/local.yaml` (`BUILD.md`).
 `.boardwright/document_revisions.yaml` is the only formal revision-history source
 for Boardwright output. Rows are treated as newest-first.
 
-Release preparation is the normal way to add a controlled revision row. The
-operator supplies a drawing revision and a short description, 60 characters or
-fewer. Boardwright inserts that row at the top of the relevant document history,
-updates `documents.<document>.revision`, then regenerates the title-block
-revision variables. Commit messages and changelog entries remain Git/release
+Release preparation is the normal way to add a controlled revision row. When a
+drawing's revision advances, Boardwright inserts one row (with the short
+description, 60 characters or fewer) at the top of that document's history and
+regenerates the title-block revision variables. When it does not advance, the
+rows are left exactly as issued; previously issued rows are never rewritten
+(`SPEC.md`, Changelog And Revision History). Commit messages and changelog entries remain Git/release
 narrative and are not copied into the drawing revision table.
 
 The TUI Info panel also has a `Revisions` section for retroactive history entry.

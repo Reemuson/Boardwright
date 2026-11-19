@@ -273,8 +273,11 @@ Goal: make the generated README a useful hardware project front page.
       `docker-kibot` is an alias for `container shell` (audit M7).
 - [x] Exercise preview, accept (isolated target branch) and compat on the
       testbench and compare each with a local build (`AUDIT-2026-11.md`).
-- [ ] Exercise prepare-release with review hold. It runs only on `main`, so
-      the testbench `main` needs the new payload first (needs approval).
+- [x] Exercise prepare-release with review hold on the testbench (`44533715676`,
+      0.1.6 `tooling`, baseline 0.1.5 matched; not approved).
+- [x] A release that keeps a drawing revision (for example `tooling` only)
+      no longer rewrites its revision-table rows; issued rows come from the
+      previous release tag and never change (`SPEC.md`).
 - [ ] KiCad 10: make zone fills reproducible across hosts, and recognise the
       KiCad 10 drill header in a new manifest normaliser version.
 - [x] Fix `DRAFT` builds on boards with drill tables: `md_readme` configures

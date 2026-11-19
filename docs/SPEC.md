@@ -425,11 +425,26 @@ are required for every release after the first. Publishing never changes
 
 `CHANGELOG.md` remains the human/Git release narrative. Commit messages and
 recorded changes stay with Git and release notes. Controlled drawing revision
-history is a separate YAML-backed table: when preparing an actual release, the
-operator supplies a drawing revision and a short revision-table description.
-Boardwright writes that row to `.boardwright/document_revisions.yaml`, updates
-the current document drawing revision, and regenerates fixed `REVTABLE_*`
-variables.
+history is a separate YAML-backed table. It records drawing revisions, not
+project releases: a release that does not advance a drawing's revision (for
+example a `tooling`-only release) leaves that drawing's rows untouched and is
+recorded only in the release ledger and `CHANGELOG.md`. The title-block release
+version and date still update.
+
+Release preparation applies the same rules to the schematic, fabrication and
+assembly drawings:
+
+- Issued rows are taken from the previous release tag's
+  `.boardwright/document_revisions.yaml` (the working tree when there is no
+  tag). Their revision, date, description and author never change; a working
+  tree edit to an issued row blocks the release.
+- When a drawing's revision advances, exactly one row is added at the top,
+  dated on the release date, using the revision-table description (or the
+  description of a prepared draft row for that revision). Reusing an issued
+  revision, or leaving unissued rows for a drawing whose revision does not
+  advance, blocks the release.
+- The schematic revision comes from the release's drawing revision; the
+  fabrication and assembly revisions come from `documents.<document>.revision`.
 
 Supported changelog sections are:
 
