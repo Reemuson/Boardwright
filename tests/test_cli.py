@@ -268,19 +268,20 @@ class CliTests(unittest.TestCase):
         build_source.assert_called_once()
         self.assertIn("boardwright-source.zip", stdout.getvalue())
 
-    def test_docker_kibot_command_launches_helper(self) -> None:
-        config = type("Config", (), {"root": Path.cwd()})()
-        with patch.object(cli, "load_config", return_value=config), patch.object(
-            cli.shutil,
-            "which",
-            return_value="docker",
-        ), patch.object(cli.subprocess, "run", return_value=type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()) as run:
-            result = cli.main(["docker-kibot", "--version", "9"])
+    def test_docker_kibot_is_an_alias_for_the_pinned_container_shell(self) -> None:
+        with patch("boardwright.container.main", return_value=0) as container_main:
+            result = cli.main(["docker-kibot", "--version", "10"])
 
         self.assertEqual(0, result)
-        run.assert_called_once()
-        command = run.call_args.args[0]
-        self.assertTrue(any("docker_kibot" in str(part) for part in command))
+        container_main.assert_called_once_with(["shell", "--kicad", "10"])
+
+    def test_build_and_container_commands_are_listed_and_delegated(self) -> None:
+        with patch("boardwright.build.main", return_value=0) as build_main:
+            self.assertEqual(0, cli.main(["build", "--variant", "DRAFT"]))
+        build_main.assert_called_once_with(["--variant", "DRAFT"])
+        with patch("boardwright.container.main", return_value=0) as container_main:
+            self.assertEqual(0, cli.main(["container", "image"]))
+        container_main.assert_called_once_with(["image"])
 
     def test_dev_extra_includes_tui_and_templates(self) -> None:
         data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))

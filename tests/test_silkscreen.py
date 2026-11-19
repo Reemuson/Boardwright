@@ -312,14 +312,21 @@ class WiringTests(unittest.TestCase):
             block = main.split(f"  - name: {group}\n", 1)[1].split("\n\n", 1)[0]
             self.assertIn("- @GERBER_OUTPUT@\n      - gbr_silk_reference", block)
 
-    def test_workflows_verify_silkscreen_before_cleanup(self) -> None:
-        for name in ("dev-preview", "main-outputs", "prepare-release"):
+    def test_pipeline_verifies_silkscreen_after_kibot_and_before_cleanup(self) -> None:
+        from boardwright.build import VARIANTS, plan_build
+
+        for variant in VARIANTS:
+            steps = plan_build(variant, "9").steps
+            names = [step.name for step in steps]
+            check = names.index("Verify silkscreen Gerbers against the board")
+            last_kibot = max(i for i, step in enumerate(steps) if step.argv[0] == "kibot")
+            self.assertLess(last_kibot, check, variant)
+            self.assertLess(check, names.index("Clean generated outputs"), variant)
+        # Every output workflow, including release.yaml, now runs the check
+        # through the shared build, before any manifest is written.
+        for name in ("dev-preview", "main-outputs", "prepare-release", "release"):
             text = (REPO / f".github/workflows/{name}.yaml").read_text(encoding="utf-8")
-            check = text.index("python -m boardwright.silkscreen")
-            self.assertLess(text.index("uses: INTI-CMNB/KiBot"), check, name)
-            self.assertLess(check, text.index("- name: Clean generated outputs"), name)
-            if name == "prepare-release":
-                self.assertLess(check, text.index("python -m boardwright.output_manifest write"))
+            self.assertRegex(text, r"python -m boardwright\.container (build|candidate)", name)
 
     def test_reference_directory_is_ignored(self) -> None:
         self.assertIn(".boardwright-checks/", (REPO / ".gitignore").read_text(encoding="utf-8").splitlines())

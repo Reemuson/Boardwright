@@ -267,9 +267,20 @@ Goal: make the generated README a useful hardware project front page.
       template sheets carry fixed 2024/2025 dates.
 - [ ] Move remaining test modules off `Path.cwd()` workspaces (audit M3).
 - [ ] Run `kicad-compat.yaml` on a representative project and record the KiCad 9
-      vs 10 differences before switching pipelines to `v2_dk10` (MIGRATION.md).
-- [ ] Decide whether to pin `INTI-CMNB/KiBot` actions to commit SHAs (audit M8).
-- [ ] Review `docker_kibot_linux.sh` `/etc/shadow` mount and KiCad 8 default (audit M7).
+      vs 10 differences before switching pipelines to `KICAD_VERSION: "10"` (MIGRATION.md).
+- [x] Pin the build image by digest; the KiBot action is no longer used (audit M8, `BUILD.md`).
+- [x] Remove the Docker helper scripts (`/etc/shadow` mount, KiCad 8 `:dev`);
+      `docker-kibot` is an alias for `container shell` (audit M7).
+- [ ] Exercise the converted workflows on the testbench (preview, accept,
+      prepare with review hold, publish, compat) and run
+      `boardwright container compare` against a local build of each commit.
+- [x] Fix `DRAFT` builds on boards with drill tables: `md_readme` configures
+      `pdf_fabrication`, which needs the table CSVs, so `DRAFT` now runs
+      `table_sources` first (`BUILD.md`).
+- [ ] Build a board without holes: KiBot writes no drill-table CSV, but the
+      board's `kibot_table_csv_drill_table` group still requires one, so any
+      variant fails (the template's placeholder PCB).
+- [ ] Add a `doctor` check for Docker Desktop and the pinned image.
 - [x] Plot visible silkscreen value text (test-point labels) and verify shipped
       silkscreen Gerbers against an unfiltered reference plot (audit F20).
 - [x] Live-verify the `gbr_silk_reference` KiBot output and the silkscreen check
@@ -279,7 +290,9 @@ Goal: make the generated README a useful hardware project front page.
 - [x] Fail closed when the previous release has no output manifest (audit F19).
 - [x] FIC-100A keeps its 0.1.3 fabrication-note wording (audit F18, option a).
 - [x] Single fabrication-notes writer; KiBot notes outputs removed (audit F17).
-- [ ] Stop the KiBot build mutating `.gitattributes` and `.git/config` (audit F16).
+- [x] Stop the KiBot build mutating `.gitattributes` and `.git/config` (audit F16):
+      `kibot` is called directly, not through the action entrypoint that ran
+      `kicad-git-filters.py`; `ci_cleanup` stays as the fail-closed check.
 - [x] Live-test the ledger/manifest release path on boardwright-ci-test:
       0.1.4 (fabrication re-issue A/2 against legacy 0.1.3) and 0.1.5
       (documentation-only against 0.1.4) published as drafts

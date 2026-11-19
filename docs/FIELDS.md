@@ -346,7 +346,8 @@ value back to `project.yaml` that came only from `local.yaml`.
 Every output workflow runs `python -m boardwright.drawing_sheets check` before
 KiBot, for every variant. The project logo is reproducible in CI because it is
 committed to the project and embedded in the committed active sheet; nothing is
-fetched at build time. Local Docker builds use the same checkout.
+fetched at build time. Local Docker builds use a clean clone of the same
+commit, without `.boardwright/local.yaml` (`BUILD.md`).
 
 ## Revision Table Variables
 

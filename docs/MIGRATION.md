@@ -65,16 +65,15 @@ Projects created before `.boardwright/state.yaml` existed cannot use
 
 ## KiCad 9 to KiCad 10
 
-Status: groundwork is in place. CI still builds with KiCad 9
-(`INTI-CMNB/KiBot@v2_dk9`) until a project has passed the comparison below.
+Status: groundwork is in place. CI builds with the pinned KiCad 9 image
+(`BUILD.md`) until a project has passed the comparison below.
 
 Verified upstream on 2026-11-17:
 
 | Item | Version |
 | --- | --- |
 | KiBot stable | 1.9.1 |
-| KiBot GitHub Action for KiCad 10 | `v2_dk10` (`b139bf6`) |
-| Newest stable KiBot KiCad 10 image | `kicad10_auto_full:1.9.1-1_k10.0.5_d13.2_b4.2.4LTS` (KiCad **10.0.5**) |
+| Pinned KiCad 10 image (2026-11-19) | `kicad10_auto_full:1.9.1-2_k10.0.5_d13.2_b4.2.4LTS` by digest (KiCad **10.0.5**), see `BUILD.md` |
 
 KiBot images do not yet ship KiCad 10.0.8. KiCad 10.0.8 desktop files may
 therefore be newer than the CI image. Confirm that the CI image can read
@@ -87,12 +86,14 @@ Implemented:
 - `scripts/kibot_launch.sh` selects the group by explicit KiCad major version
   (`9` or `10`, or `--kicad MAJOR`). Other versions now fail instead of falling
   back silently.
-- `docker_kibot_linux.sh -v 10` uses the pinned KiCad 10.0.5 image.
+- `python -m boardwright container build --kicad 10` builds locally with the
+  pinned KiCad 10.0.5 image.
 - The fingerprints accept both KiCad 9 numbered nets and name-only net syntax.
   A format-only upgrade yields the same geometry hash, plus a `tooling` change.
-- `.github/workflows/kicad-compat.yaml` is manual dispatch only. It builds
-  one commit with KiCad 9 and KiCad 10, uploads both output sets, lists source
-  files KiCad 10 rewrote, and compares fabrication and assembly outputs.
+- `.github/workflows/kicad-compat.yaml` is manual dispatch only. It runs the
+  shared build for one commit with KiCad 9 and KiCad 10, uploads both output
+  sets and compares the controlled outputs. A build that leaves tracked
+  sources modified fails; the restored files are listed in the build log.
 
 Procedure for a project:
 
@@ -102,13 +103,12 @@ Procedure for a project:
    both artifacts. Record why each difference exists.
 3. On a branch, open and save the project in KiCad 10, then commit the format
    upgrade alone.
-4. Change `KICAD_VERSION`, `v2_dk9` → `v2_dk10`, and `all_group_k9` →
-   `all_group_k10` in the four pipeline workflows.
+4. Change `KICAD_VERSION: "9"` to `"10"` in the four pipeline workflows. The
+   build selects the pinned KiCad 10 image and `all_group_k10`.
 5. Release with the `tooling` class. The checklist confirms that geometry,
    netnames and assembly fingerprints are unchanged. The baseline check
    reports whether Gerbers are byte-identical or only equivalent after
    normalisation.
 
-Limitations of the comparison workflow: it skips document-PDF metadata
-regeneration and the combined review PDF. Compare those by eye in the
-uploaded PDFs.
+The comparison runs the full build, including drawing regeneration. Drawing
+PDFs are informational; compare them by eye in the uploaded artifacts.

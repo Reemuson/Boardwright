@@ -67,6 +67,16 @@ from .git_ops import remote_url
 
 
 def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    # build and container own their argument parsing (shared with CI).
+    if arguments[:1] == ["build"]:
+        from .build import main as build_main
+
+        return build_main(arguments[1:])
+    if arguments[:1] == ["container"]:
+        from .container import main as container_main
+
+        return container_main(arguments[1:])
     parser = _build_parser()
     args = parser.parse_args(argv)
 
@@ -274,6 +284,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--justification",
         default="",
         help="Why this release is needed; recorded in .boardwright/releases.yaml.",
+    )
+    release.add_argument(
+        "--release-env",
+        action="store_true",
+        help="With --prepare: also write .boardwright/release.env (version, variant, kind) for the publish workflow.",
     )
     release.add_argument(
         "--source-sha",
@@ -629,13 +644,24 @@ def _build_parser() -> argparse.ArgumentParser:
 
     docker_kibot = subparsers.add_parser(
         "docker-kibot",
-        help="Launch the bundled local KiBot Docker helper script.",
+        help="Alias for 'container shell': interactive shell in the pinned KiBot image.",
     )
     docker_kibot.add_argument(
         "--version",
         "-v",
+        choices=("9", "10"),
         default="9",
-        help="KiCad major version for the Docker image tag. Defaults to 9.",
+        help="KiCad major version. Defaults to 9.",
+    )
+    subparsers.add_parser(
+        "build",
+        add_help=False,
+        help="Run the output build in this checkout (inside the container); see 'build --help'.",
+    )
+    subparsers.add_parser(
+        "container",
+        add_help=False,
+        help="Run builds and checks in the pinned KiBot container; see 'container --help'.",
     )
 
     return parser
@@ -1012,35 +1038,12 @@ def _source_package(args: argparse.Namespace) -> int:
 
 
 def _docker_kibot(args: argparse.Namespace) -> int:
-    config = load_config()
-    if shutil.which("docker") is None:
-        raise BoardwrightError("Docker is not installed. Install Docker Desktop or Docker Engine to use the local KiBot runner.")
+    # Compatibility alias: the old helper scripts mounted /etc/shadow and used a
+    # moving KiCad 8 image (audit M7). The pinned container replaces them.
+    from .container import main as container_main
 
-    if os.name == "nt":
-        script = config.root / "boardwright_resources" / "kibot" / "resources" / "scripts" / "docker_kibot_windows.bat"
-        command = ["cmd", "/c", str(script), "-v", str(args.version)]
-    else:
-        script = config.root / "boardwright_resources" / "kibot" / "resources" / "scripts" / "docker_kibot_linux.sh"
-        command = ["/bin/sh", str(script), "-v", str(args.version)]
-
-    if not script.exists():
-        raise BoardwrightError(f"Missing local KiBot helper script: {script}")
-
-    completed = subprocess.run(
-        command,
-        cwd=config.root,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        message = completed.stderr.strip() or completed.stdout.strip()
-        raise BoardwrightError(f"Local KiBot runner failed: {message}")
-
-    output = completed.stdout.strip()
-    if output:
-        print(output)
-    return 0
+    print("note: docker-kibot is now 'boardwright container shell'.", file=sys.stderr)
+    return container_main(["shell", "--kicad", str(args.version)])
 
 
 def _display_path(path: Path, root: Path) -> str:
@@ -1169,6 +1172,19 @@ def _promote(args: argparse.Namespace) -> int:
     return 0
 
 
+def _write_release_env(config, version: str, variant: str, kind: str) -> None:
+    # Read by release.yaml; the include flag comes from tracked configuration only.
+    tracked = load_config(config.root, local=False)
+    lines = [
+        f"RELEASE_VERSION={version}",
+        f"RELEASE_VARIANT={variant}",
+        f"RELEASE_KIND={kind}",
+        f"RELEASE_INCLUDE_SOURCE_ARCHIVE={str(tracked.release_include_source_archive).lower()}",
+    ]
+    target = config.root / ".boardwright" / "release.env"
+    target.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+
 def _release(args: argparse.Namespace) -> int:
     config = load_config()
     if args.dispatch:
@@ -1223,6 +1239,9 @@ def _release(args: argparse.Namespace) -> int:
             variant=args.variant,
         )
         print(f"Prepared release {plan.version}.")
+        if args.release_env:
+            _write_release_env(config, args.version, args.variant, args.kind)
+            print("Wrote .boardwright/release.env.")
         print("Recorded release identities in .boardwright/releases.yaml.")
         print("Updated CHANGELOG.md, .boardwright/document_revisions.yaml, and revision-history variables.")
         print(f"Suggested commit: release: prepare {plan.version}")

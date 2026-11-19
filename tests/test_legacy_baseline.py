@@ -266,10 +266,14 @@ class WorkflowTests(unittest.TestCase):
         path = Path(__file__).resolve().parents[1] / ".github/workflows/prepare-release.yaml"
         jobs = yaml.safe_load(path.read_text(encoding="utf-8"))["jobs"]
         steps = next(iter(jobs.values()))["steps"]
-        step = next(s for s in steps if s.get("name") == "Check reused baselines against the previous release")
-        self.assertIn("check-baseline", step["run"])
+        # check-baseline runs inside the shared candidate command (host side).
+        step = next(s for s in steps if s.get("name") == "Build release candidate in the pinned container")
+        self.assertIn("python -m boardwright.container candidate", step["run"])
         self.assertIn("set -o pipefail", step["run"])  # a failing check fails the step despite tee
         self.assertEqual("${{ github.token }}", step["env"]["GH_TOKEN"])
+        from boardwright.container import _candidate
+        import inspect
+        self.assertIn("check-baseline", inspect.getsource(_candidate))
         checkout = next(s for s in steps if "actions/checkout" in str(s.get("uses")))
         self.assertEqual(0, checkout["with"]["fetch-depth"])  # tags and ancestry available
 

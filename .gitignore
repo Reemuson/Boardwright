@@ -57,3 +57,5 @@ assets/logos/Spine.json
 # KiBot / workflow logs and generated run detritus
 kibot*.log
 Reports/
+
+boardwright-build/

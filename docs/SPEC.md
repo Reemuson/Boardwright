@@ -658,11 +658,21 @@ Implemented curated source-package support:
   release noise. The release workflow can include that archive in the release
   package when `release_include_source_archive` is enabled in project config.
 
-Implemented local KiBot runner support:
+Implemented build environment ([`BUILD.md`](BUILD.md) is authoritative):
 
-- `boardwright docker-kibot`: launches the bundled Docker helper script for a
-  local KiBot session, using the repo-managed KiBot image selection helpers
-  already present in `boardwright_resources/kibot/resources/scripts/`.
+- `boardwright build --variant V`: the output pipeline, run inside the pinned
+  KiBot image. Every output workflow and every local build uses it. The
+  drawing-sheet and logo check runs first. The build refuses
+  `.boardwright/local.yaml` and CRLF checkouts, restores tracked side effects
+  (and fails if any remain), and writes `boardwright-build/record.json` and
+  `manifest.json`.
+- `boardwright container build|candidate|run|shell|stage|image|compare`: runs
+  commands in the image pinned by digest (KiCad 9 by default, `--kicad 10`
+  explicit). Local builds use a fresh LF clone, never the working tree.
+  `candidate` rehearses prepare-release without committing, pushing or
+  tagging. `compare` checks a local build against a GitHub build.
+- `boardwright docker-kibot`: alias for `container shell`. The old helper
+  scripts (KiCad 8 `:dev` image, `/etc/shadow` mount) were removed.
 
 Implemented accepted-output CLI support:
 
@@ -992,6 +1002,7 @@ Do not prioritize these until the normal workflow is reliable:
 - full git client
 - full GitHub Actions browser
 - KiCad file browser
-- local KiBot/Docker runner as the primary flow
+- a local Docker build replacing CI as the system of record (local builds
+  rehearse and compare; CI builds remain the release evidence)
 - multi-board management
 - complete metadata editor

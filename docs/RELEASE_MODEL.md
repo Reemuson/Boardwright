@@ -165,6 +165,11 @@ Then:
 3. The package includes `MANIFEST.txt` (SHA-256 per file),
    `RELEASE_IDENTITY.json`, and `ACCEPTED_OUTPUT_MANIFEST.json`.
 
+Every build also writes `boardwright-build/record.json`: the source commit,
+the container image digest and the tool versions. `boardwright container
+compare` uses it to compare a local Docker build with a GitHub build under the
+same rules ([`BUILD.md`](BUILD.md)).
+
 Results distinguish *byte-identical* from *equivalent after normalisation*
 (`regenerated`). Historical packages are never overwritten. A published
 release is never re-published.
@@ -240,4 +245,4 @@ change does not alter the bare board.
 | Push to `main` rejected | `main` moved after checkout; nothing pushed. | Review the new commits, then re-dispatch with the new `source_sha`. |
 | Tag push failed | The release commit is on `main`, with no tag. | The workflow prints the exact `git tag -a … && git push` commands. Then dispatch `release.yaml` on the tag. Do not re-run prepare: the ledger already records the version. |
 | `release.yaml` failed | Tag exists, no published release. | Re-run `release.yaml` on the tag. It is serialised per tag and refuses to overwrite a published release. |
-| Output verification failed in `release.yaml` | Tag exists; outputs differ from accepted state. | Investigate tool drift (for example, a moved KiBot image). Do not publish. Prepare a new release version. |
+| Output verification failed in `release.yaml` | Tag exists; outputs differ from accepted state. | Investigate tool drift. Builds use a digest-pinned image (`BUILD.md`), so compare the `boardwright-build/record.json` of both runs first. Do not publish. Prepare a new release version. |

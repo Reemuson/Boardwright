@@ -4,6 +4,8 @@
 import unittest
 from pathlib import Path
 
+from boardwright.build import VARIANTS, plan_build
+
 
 
 # Diagnostic workflows build a reduced output set and never commit or publish;
@@ -48,14 +50,20 @@ class WorkflowTests(unittest.TestCase):
             self.assertNotIn("additional_args: --log kibot_prepare_notes.log notes", text)
             self.assertNotIn("additional_args: --log kibot_release_notes.log notes", text)
 
-    def test_workflows_clean_generated_outputs_after_kibot(self) -> None:
+    # The build pipeline itself lives in boardwright.build (shared by local
+    # Docker and CI); these tests check it there. Each workflow only calls it.
+
+    def test_pipeline_cleans_generated_outputs_after_kibot(self) -> None:
+        for variant in VARIANTS:
+            names = [step.name for step in plan_build(variant, "9").steps]
+            last_kibot = max(i for i, step in enumerate(plan_build(variant, "9").steps) if step.argv[0] == "kibot")
+            self.assertEqual("Clean generated outputs", names[-1])
+            self.assertLess(last_kibot, names.index("Clean generated outputs"))
+
+    def test_every_pipeline_workflow_calls_the_shared_build(self) -> None:
         for workflow in _pipeline_workflows():
             text = workflow.read_text(encoding="utf-8")
-
-            self.assertIn("Normalize generated output ownership", text)
-            self.assertIn("sudo chown -R", text)
-            self.assertIn("Clean generated outputs", text)
-            self.assertIn("clean_generated_outputs.py", text)
+            self.assertRegex(text, r"python -m boardwright\.container (build|candidate)")
 
     def test_branch_mutating_workflows_discard_generated_source_side_effects(self) -> None:
         for filename in ("main-outputs.yaml", "prepare-release.yaml"):
@@ -66,43 +74,33 @@ class WorkflowTests(unittest.TestCase):
             # fail-closed, by the shared helper (see test_ci_cleanup).
             self.assertIn("python -m boardwright.ci_cleanup", text)
 
-    def test_workflows_prepare_tables_before_full_outputs(self) -> None:
-        for workflow in _pipeline_workflows():
-            text = workflow.read_text(encoding="utf-8")
+    def test_pipeline_prepares_tables_before_full_outputs(self) -> None:
+        for variant in ("PRELIMINARY", "CHECKED", "RELEASED"):
+            steps = plan_build(variant, "9").steps
+            names = [step.name for step in steps]
+            main = names.index(f"KiBot {variant} outputs")
+            for name in ("Prepare PDF table placeholders", "KiBot PDF table CSV sources",
+                         "Prune empty conditional PDF pages", "Prepare combined PDF contents"):
+                self.assertLess(names.index(name), main, name)
+            tables = steps[names.index("KiBot PDF table CSV sources")].argv
+            self.assertEqual("table_sources", tables[-1])
+        self.assertNotIn("Prepare PDF table placeholders", [s.name for s in plan_build("DRAFT", "9").steps])
 
-            self.assertIn("Prepare Boardwright PDF table placeholders", text)
-            self.assertIn("prepare_pcb_tables.py", text)
-            self.assertIn("Generate KiBot PDF table CSV sources", text)
-            self.assertIn("table_sources", text)
-            self.assertIn("env.KIBOT_VARIANT != 'DRAFT'", text)
-            self.assertIn("Prune empty conditional PDF pages", text)
-            self.assertIn("prune_pdf_pages.py", text)
-            self.assertIn("Normalize project ownership before combined PDF prep", text)
-            self.assertLess(
-                text.index("Normalize project ownership before combined PDF prep"),
-                text.index("Prepare native combined PDF contents"),
-            )
+    def test_pipeline_regenerates_document_pdfs_with_document_metadata(self) -> None:
+        steps = {step.name: step.argv for step in plan_build("CHECKED", "9").steps}
+        fabrication = steps["Regenerate fabrication drawing"]
+        assembly = steps["Regenerate assembly drawing"]
+        self.assertIn("boardwright_resources/kibot/yaml/kibot_document_fabrication.generated.yaml", fabrication)
+        self.assertEqual(("pdf_fabrication", "zip_compress_fab"), fabrication[-2:])
+        self.assertIn("draw_fancy_stackup,erc,drc", fabrication)
+        self.assertIn("boardwright_resources/kibot/yaml/kibot_document_assembly.generated.yaml", assembly)
+        self.assertEqual("pdf_assembly", assembly[-1])
 
-
-    def test_workflows_regenerate_document_pdfs_with_document_metadata(self) -> None:
-        for workflow in _pipeline_workflows():
-            text = workflow.read_text(encoding="utf-8")
-
-            self.assertIn("Regenerate fabrication PDF metadata", text)
-            self.assertIn("kibot_document_fabrication.generated.yaml", text)
-            self.assertIn("--skip-pre draw_fancy_stackup,erc,drc --log", text)
-            self.assertIn("pdf_fabrication zip_compress_fab", text)
-            self.assertIn("Regenerate assembly PDF metadata", text)
-            self.assertIn("kibot_document_assembly.generated.yaml", text)
-            self.assertIn("pdf_assembly", text)
-
-    def test_workflows_install_bundled_fonts_before_kibot(self) -> None:
-        for workflow in _pipeline_workflows():
-            text = workflow.read_text(encoding="utf-8")
-
-            self.assertIn("Install bundled KiCad/PDF fonts", text)
-            self.assertIn("boardwright_resources/kibot/resources/fonts/*.ttf", text)
-            self.assertIn("fc-cache -f ~/.local/share/fonts", text)
+    def test_pipeline_installs_bundled_fonts_before_kibot(self) -> None:
+        source = Path("src/boardwright/build.py").read_text(encoding="utf-8")
+        self.assertIn('FONTS = "boardwright_resources/kibot/resources/fonts"', source)
+        self.assertIn('"fc-cache"', source)
+        self.assertLess(source.index("    install_fonts(root)"), source.index("    run_plan(plan, root, echo)"))
 
     def test_workflows_use_pinned_official_cache_action(self) -> None:
         for workflow in _pipeline_workflows():
@@ -135,10 +133,13 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("~/.cache/pip", text)
 
     def test_release_workflows_can_publish_curated_source_archive(self) -> None:
-        prepare = Path(".github/workflows/prepare-release.yaml").read_text(encoding="utf-8")
+        cli = Path("src/boardwright/cli.py").read_text(encoding="utf-8")
+        candidate = Path("src/boardwright/container.py").read_text(encoding="utf-8")
         release = Path(".github/workflows/release.yaml").read_text(encoding="utf-8")
 
-        self.assertIn("RELEASE_INCLUDE_SOURCE_ARCHIVE", prepare)
+        # prepare-release writes release.env through the shared candidate command.
+        self.assertIn("RELEASE_INCLUDE_SOURCE_ARCHIVE", cli)
+        self.assertIn('"--release-env"', candidate)
         self.assertIn("Build curated source archive", release)
         self.assertIn("boardwright-${{ github.ref_name }}-source.zip", release)
         self.assertIn("Curated source package", release)
@@ -193,11 +194,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("GITHUB_STEP_SUMMARY", preview)
         self.assertIn("GITHUB_STEP_SUMMARY", accepted)
 
-    def test_draft_workflows_skip_heavy_preflights(self) -> None:
-        for workflow in _pipeline_workflows():
-            text = workflow.read_text(encoding="utf-8")
-
-            self.assertIn("--skip-pre draw_fancy_stackup,erc,drc", text)
+    def test_draft_pipeline_skips_heavy_preflights(self) -> None:
+        for step in plan_build("DRAFT", "9").steps:
+            if step.argv[0] == "kibot":
+                self.assertIn("draw_fancy_stackup,erc,drc", step.argv)
 
     def test_prepare_release_force_adds_ignored_release_metadata(self) -> None:
         text = Path(".github/workflows/prepare-release.yaml").read_text(encoding="utf-8")

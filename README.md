@@ -285,7 +285,19 @@ python -m boardwright update status
 python -m boardwright review
 python -m boardwright accepted
 python -m boardwright source-package --output boardwright-source.zip
-python -m boardwright docker-kibot --version 9
+python -m boardwright container shell
+```
+
+Build outputs locally in the same pinned container that GitHub Actions uses
+(Docker Desktop; see [docs/BUILD.md](docs/BUILD.md)):
+
+```powershell
+python -m boardwright container image --check
+python -m boardwright container build --variant DRAFT
+python -m boardwright container build --variant CHECKED
+python -m boardwright container build --variant CHECKED --kicad 10
+python -m boardwright container candidate 1.2.0 --drawing-revision B --revision-description "..." --change-class documentation --justification "..."
+python -m boardwright container compare <local stage> <downloaded GitHub evidence>
 ```
 
 Run the test suite with:

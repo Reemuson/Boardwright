@@ -253,47 +253,36 @@ Success criteria:
 ## Milestone 7: KiCad 10
 
 Status: groundwork implemented (`MIGRATION.md`). Pipelines remain on KiCad 9.
+A pinned KiCad 10 image is available as an explicit build variant
+(`BUILD.md`).
 
 Remaining:
 
 - run `kicad-compat.yaml` on representative projects and explain every
   difference
-- switch the pipelines to `v2_dk10` / `all_group_k10` once differences are
-  understood. KiBot images currently ship KiCad 10.0.5.
+- switch the pipelines to `KICAD_VERSION: "10"` once differences are
+  understood. The pinned KiBot image ships KiCad 10.0.5.
+
+## Milestone 8: Shared Local And CI Build
+
+Status: implemented on `feat/as1100-worksheets` (2026-11-19), verified locally
+with Docker Desktop. Not yet exercised on GitHub (`BUILD.md`, `TODO.md`).
+
+- one pipeline (`boardwright build`) run by every workflow and every local
+  build, in a digest-pinned KiBot image (KiCad 9 default, 10 explicit)
+- local builds in clean LF clones; local overrides, CRLF checkouts and tracked
+  source changes are refused
+- release-candidate rehearsal (`container candidate`) and local-vs-GitHub
+  comparison (`container compare`) under the output-manifest rules
+
+Remaining:
+
+- run each converted workflow on the testbench repository and compare its
+  `boardwright-build/` evidence with a local build of the same commit
+- commit-message standardisation (next workstream)
 
 ## Later
 
-- first-class local Docker output generation matching the CI pipeline
 - multi-board or assembly variants once KiCad/KiBot variant support is stable
 - richer artifact browser if the small cockpit proves insufficient
-
-## Planned Local Docker Output Engine
-
-Boardwright should grow a first-class local Docker output engine alongside the
-current GitHub Actions flow. The target user experience is a non-interactive
-local command such as `boardwright preview --local` or
-`boardwright outputs generate --engine docker --variant PRELIMINARY` that
-mirrors the CI pipeline without requiring the user to remember KiBot groups or
-helper scripts.
-
-The local engine should:
-
-- detect Docker and report a clear doctor/setup action when it is missing or
-  not running
-- use the KiCad 9 KiBot image, currently
-  `ghcr.io/inti-cmnb/kicad9_auto_full:dev`
-- mount the project directory read/write and keep generated files project-local
-- install bundled fonts inside the container before generation
-- run `prepare_pcb_tables.py`, KiBot `table_sources`, `prune_pdf_pages.py`, the
-  selected KiBot output group, and `clean_generated_outputs.py` in the same
-  order as CI
-- write reviewable preview files to `boardwright-preview/` for local review
-  workflows
-- support a project setting such as `outputs.preview_engine: docker` while
-  keeping GitHub Actions available for shared/release workflows
-
-Installing Docker Desktop itself should remain guided rather than silent:
-Windows/macOS installs may need admin approval, WSL2 setup, service startup,
-license prompts, or reboot. Boardwright can offer `boardwright local setup` to
-validate Docker and pull the image, but it should not make hidden system-level
-changes.
+- a `doctor` check for Docker Desktop and the pinned image

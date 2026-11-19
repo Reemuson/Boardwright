@@ -41,7 +41,13 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn(".boardwright/releases.yaml", commit["run"])
         self.assertIn(".boardwright/accepted_manifest.json", commit["run"])
         names = [s.get("name") for s in _steps("prepare-release.yaml")]
-        self.assertIn("Check reused baselines against the previous release", names)
+        # check-baseline, the manifest and the review record are part of the
+        # shared candidate command (order guarded in test_container).
+        self.assertLess(names.index("Build release candidate in the pinned container"), names.index("Upload release candidate for review"))
+        self.assertLess(names.index("Build release candidate in the pinned container"), names.index("Commit accepted release state"))
+        candidate = next(s for s in _steps("prepare-release.yaml") if s.get("name") == "Build release candidate in the pinned container")
+        self.assertIn("python -m boardwright.container candidate", candidate["run"])
+        self.assertIn("GH_TOKEN", candidate["env"])
 
     def test_release_is_serialised_immutable_and_verified(self) -> None:
         data = yaml.safe_load((WORKFLOWS / "release.yaml").read_text(encoding="utf-8"))
@@ -49,10 +55,43 @@ class ReleaseWorkflowTests(unittest.TestCase):
         names = [s.get("name") for s in _steps("release.yaml")]
         self.assertIn("Refuse to overwrite a published release", names)
         self.assertIn("Verify outputs match the accepted release state", names)
-        self.assertLess(names.index("Choose KiBot variant and output set"), names.index("Generate revision table variables"))
+        self.assertLess(names.index("Choose KiBot variant and output set"), names.index("Build release outputs in the pinned container"))
+        self.assertLess(names.index("Build release outputs in the pinned container"), names.index("Verify outputs match the accepted release state"))
         collect = next(s for s in _steps("release.yaml") if s.get("name") == "Collect release assets")
         self.assertIn("sha256sum", collect["run"])
         self.assertIn("RELEASE_IDENTITY.json", collect["run"])
+
+    def test_builds_use_the_shared_container_command_only(self) -> None:
+        for workflow in WORKFLOWS.glob("*.yaml"):
+            text = workflow.read_text(encoding="utf-8")
+            with self.subTest(workflow=workflow.name):
+                # Image identity lives in src/boardwright/container.py only.
+                self.assertNotIn("INTI-CMNB/KiBot", text)
+                self.assertNotIn("ghcr.io", text)
+                self.assertNotIn("sudo chown", text)
+                runs = " ".join(step.get("run", "") for step in _steps(workflow.name))
+                self.assertNotRegex(runs, r"(^|\s)kibot\s")
+                self.assertNotIn("prepare_pcb_tables.py", runs)
+                self.assertNotIn("drawing_sheets check", runs)
+                self.assertRegex(runs, r"python -m boardwright\.container (build|candidate) .*--workdir \.")
+
+    def test_checkout_token_never_reaches_the_build_container(self) -> None:
+        import yaml
+
+        for workflow in WORKFLOWS.glob("*.yaml"):
+            data = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+            for job_name, job in data["jobs"].items():
+                for step in job.get("steps", []):
+                    with self.subTest(workflow=workflow.name, job=job_name, step=step.get("name") or step.get("uses")):
+                        if str(step.get("uses", "")).startswith("actions/checkout"):
+                            self.assertIs(False, (step.get("with") or {}).get("persist-credentials"))
+                        run = step.get("run", "")
+                        if "boardwright.container" in run:
+                            # Only check-baseline (host side, inside candidate) may use gh.
+                            self.assertNotIn("GIT_CONFIG_VALUE_0", run)
+                        if "git push" in run or "git ls-remote" in run or "git fetch" in run:
+                            self.assertIn("GIT_CONFIG_KEY_0=\"http.https://github.com/.extraheader\"", run)
+                            self.assertIn("::add-mask::", run)
 
     def test_kicad10_group_and_launcher_are_explicit(self) -> None:
         main = Path("boardwright_resources/kibot/yaml/kibot_main.yaml").read_text(encoding="utf-8")
