@@ -282,6 +282,7 @@ def stage(
     changes: tuple[list[str], list[str]] | None = None,
     purpose: str = "build",
     copy_from: Path | None = None,
+    revision: str = "",
 ) -> Path:
     """Clone ``HEAD`` (plus, with ``worktree``, uncommitted changes) into a fresh LF tree.
 
@@ -297,12 +298,16 @@ def stage(
     stage marker and from there into the build record; ``"preview"`` marks
     the build as never release evidence. ``copy_from`` reads the changed
     files from a snapshot directory instead of the working tree, so the
-    staged bytes are exactly the ones the caller hashed.
+    staged bytes are exactly the ones the caller hashed. ``revision`` stages
+    that commit (detached) instead of ``HEAD``, as a tag build does.
     """
 
     repo = repository_root(repo)
-    head = _git(repo, "rev-parse", "HEAD").strip()
-    branch = _git(repo, "symbolic-ref", "--quiet", "--short", "HEAD", check=False).strip() or "detached"
+    if revision and worktree:
+        raise ContainerError("A worktree stage is always of HEAD.")
+    head = _git(repo, "rev-parse", "--verify", f"{revision or 'HEAD'}^{{commit}}").strip()
+    branch = "detached" if revision else (
+        _git(repo, "symbolic-ref", "--quiet", "--short", "HEAD", check=False).strip() or "detached")
     name = label or f"{repo.name}-{head[:12]}{'-worktree' if worktree else ''}"
     target = (dest or default_stage_root() / name).resolve()
     if target.exists():
@@ -750,11 +755,16 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
+def build_command(variant: str, kicad: str, log_prefix: str, keep: list[str] | tuple[str, ...] = ()) -> list[str]:
+    """The output build inside the container; shared by ``container build`` and local publication."""
+
+    command = ["python3", "-m", "boardwright", "build", "--variant", variant, "--kicad", kicad,
+               "--log-prefix", log_prefix]
+    return command + (["--keep", *keep] if keep else [])
+
+
 def _build(args: argparse.Namespace) -> int:
-    command = ["python3", "-m", "boardwright", "build", "--variant", args.variant, "--kicad", args.kicad,
-               "--log-prefix", args.log_prefix]
-    if args.keep:
-        command += ["--keep", *args.keep]
+    command = build_command(args.variant, args.kicad, args.log_prefix, args.keep)
     if args.workdir:
         return run_in_container(args.kicad, args.workdir, command)
     repo = repository_root(Path.cwd())
