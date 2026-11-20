@@ -238,6 +238,25 @@ class StoreTests(Case):
         self.assertIn("link or junction", str(caught.exception))
         self.assertEqual([], list(target.iterdir()))  # nothing written through the link
 
+    def test_an_entry_replaced_by_a_link_or_junction_is_reported(self) -> None:
+        self.store.ensure()
+        entry = self.store.freeze("candidates", "1.0.0", "a" * 64, {"file.txt": b"data\n"}).path
+        moved = self.base / "moved entry"
+        os.rename(entry, moved)  # the same checksummed content, now reached through a link
+        made = False
+        try:
+            os.symlink(moved, entry, target_is_directory=True)
+            made = True
+        except (OSError, NotImplementedError):
+            if os.name == "nt":
+                made = subprocess.run(["cmd", "/c", "mklink", "/J", str(entry), str(moved)],
+                                      capture_output=True).returncode == 0
+        if not made:
+            self.skipTest("cannot create a symbolic link or junction here")
+        problems = self.store.verify_entry(entry)
+        self.assertTrue(problems)
+        self.assertIn("link or junction", problems[0])
+
     def test_path_traversal_is_refused(self) -> None:
         self.store.ensure()
         for bad in ("..", "../x", "a/b", "a\\b", ".hidden", "", "x" * 200):

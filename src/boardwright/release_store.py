@@ -263,6 +263,10 @@ class ReleaseStore:
         """Problems with an entry: missing, extra or changed files, links."""
 
         problems: list[str] = []
+        try:
+            self._no_links(path)
+        except StoreError as exc:
+            return [str(exc)]
         sums = path / SUMS
         if not sums.is_file():
             return [f"{path}: {SUMS} is missing."]
