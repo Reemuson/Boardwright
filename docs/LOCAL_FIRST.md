@@ -308,6 +308,12 @@ DRC/ERC reports, and Gerbers/drills that differ only in timestamps and
 generator banners. The testbench board reports one DRC error in both builds
 (a design property, not a preview effect).
 
+Integration validated on GitHub Actions (`ubuntu-latest`, real Docker) by the
+ci-test preview-integration run `44711268100` at `6972067`: 106/106 checks,
+including C1 exclusion, the tracked-credential policy, approval isolation,
+output equivalence and source preservation (`AUDIT-2026-11.md`). Earlier runs
+`44685152330`, `44692377491` and `44708112597` failed.
+
 After the F1–F6 corrections (same project, warm cache):
 
 | Run | Elapsed | Build | Design rules (from the generated reports) |
