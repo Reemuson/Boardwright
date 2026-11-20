@@ -64,13 +64,15 @@ class PreviewTests(unittest.TestCase):
         self.assertIn("--repo owner/private", preview_manual_fallback(plan))
 
     def test_dispatch_preview_passes_configured_repo(self) -> None:
-        plan = build_preview_plan(_config())
         completed = subprocess_result(0, "", "")
 
+        # The plan records whether gh is available, so it is built under the
+        # same mock; built outside it, the test depended on the host having gh.
         with mock.patch("boardwright.preview._gh_command", return_value="gh"), mock.patch(
             "pathlib.Path.exists",
             return_value=True,
         ), mock.patch("subprocess.run", return_value=completed) as mocked_run:
+            plan = build_preview_plan(_config())
             dispatch_preview(plan, Path("."))
 
         command = mocked_run.call_args.args[0]
