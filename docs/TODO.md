@@ -281,20 +281,17 @@ Goal: make the generated README a useful hardware project front page.
 - [x] Release through the shared Docker build on the testbench: 0.1.6
       (`tooling`, A/2 and A reused) approved from held `44541045029`, published
       as a draft by the converted `release.yaml` (`AUDIT-2026-11.md`).
-- [ ] Make `container candidate` work on Windows hosts: the stage's `origin`
-      is a Windows path the container cannot query for the remote-tag check.
-      The 0.1.6 rehearsal needed a stage on `main` with `origin` set to itself.
-- [ ] Let `container compare` compare release-candidate builds. Both sides of
-      a prepare build record the release-preparation edits in
-      `source_modified`, so the comparison reports "build was made from
-      uncommitted changes" once per side even when the edits are identical.
-      Bind the prepared edits by content (for example a digest of the
-      prepared tree) rather than dropping the source-integrity check.
-- [ ] Derive the schematic cover release date from the release record, not
-      the commit date: held 0.1.6 built `d22180b` and showed 2026-11-20, the
-      tagged build of release commit `f0b3e3c` showed 2026-11-19 (the ledger
-      date). The review gate ignores dates, so the reviewed and published
-      covers can differ.
+- [x] `container candidate` works unmodified on Windows: release references
+      are pinned from the upstream on the host and read from a snapshot in
+      the container (`BUILD.md`).
+- [x] `container compare` accepts prepared release candidates only when both
+      carry the same verified release preparation (content and provenance);
+      other source modifications remain errors (`BUILD.md`).
+- [x] One authoritative release date: fixed at preparation (UTC), reused by
+      the approved run from the reviewed candidate, read by the drawings from
+      `release.env`; review-candidate schema 2 binds it (`SPEC.md`).
+- [ ] Live-verify the release-date and candidate fixes on the testbench
+      (held and approved prepare, publish) after review.
 - [ ] KiCad 10: make zone fills reproducible across hosts, and recognise the
       KiCad 10 drill header in a new manifest normaliser version.
 - [x] Fix `DRAFT` builds on boards with drill tables: `md_readme` configures

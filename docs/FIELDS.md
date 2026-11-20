@@ -72,8 +72,13 @@ Fields live under `.boardwright/project.yaml` `release:`.
 
 Release metadata must not be used as the formal drawing revision.
 
-KiBot also exposes `${RELEASE_DATE_NUM}` as the last Git commit date in
-`YYYY-MM-DD` form. It is a generated helper, not a controlled document field.
+In a prepared release, the drawings take `${RELEASE_DATE}` (`19-Nov-2026`)
+and `${RELEASE_DATE_NUM}` (`2026-11-19`) from `.boardwright/release.env`.
+`release --prepare --release-env` writes both from the one authoritative
+release date, which is also the ledger and CHANGELOG date (`SPEC.md`). Without
+a `release.env` date, for example on an unreleased build or a tag prepared
+before this rule, KiBot falls back to the last Git commit date. Neither is a
+controlled document field.
 
 ## Document Metadata
 
@@ -427,7 +432,7 @@ The GIT HASH cell on schematic worksheets shows `${GIT_HASH_SCH}`: the last
 commit that changed the schematic sources. It is not the release commit, the
 tag, or the merge commit on `main`; a documentation-only release that does not
 touch the schematic keeps the previous hash.
-| `${RELEASE_DATE_NUM}` | Last Git commit date in `YYYY-MM-DD` format. |
+| `${RELEASE_DATE_NUM}` | Release date from `release.env` in `YYYY-MM-DD` format; the last Git commit date when there is none. |
 | `${VARIANT}` | Current KiBot variant value. |
 | `${SHEET_LEGAL_NOTICE}` | Legal notice text expanded into worksheet templates. |
 | `${TEMPLATE_LOGO}` | Template logo path/text value passed into KiBot. |

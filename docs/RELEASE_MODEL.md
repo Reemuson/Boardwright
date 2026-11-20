@@ -205,9 +205,18 @@ drill-map PDFs.
 3. Dispatch again with identical inputs and `approved_review_run=<held run id>`.
    The run fails before committing unless:
    - the held run is a successful prepare run on `main` at the same commit;
-   - the source commit, every release input, the new ledger entry and all
+   - the source commit, every release input, the new ledger entry (including
+     its date), the release metadata files (ledger, CHANGELOG, revision tables
+     and variables, `project.yaml`, `release.env`, byte for byte) and all
      controlled outputs (`python -m boardwright.review_gate verify`) match the
      reviewed candidate.
+
+   Before building, the approved run reads the release date from the reviewed
+   candidate (`review_gate release-date`) and prepares with it. The ledger,
+   CHANGELOG and drawings therefore carry the reviewed date, whenever the
+   approval runs. The tagged publish build reads the same date from the
+   committed `release.env`. Candidates recorded before review-candidate
+   schema 2 cannot be approved and must be held again.
 
 The CLI `--dispatch` and the TUI do not pass these inputs yet. Use
 `gh workflow run` directly.

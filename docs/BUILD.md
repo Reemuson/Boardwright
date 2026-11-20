@@ -125,7 +125,7 @@ model cache is the Docker volume `boardwright-3d-k9` (or `-k10`).
 | --- | --- | --- |
 | `dev-preview.yaml` | `container build --workdir .` | Packaging, preview branch. |
 | `main-outputs.yaml` | `container build --workdir .` | Reviewed-SHA check, side-effect check, README snapshot commit. |
-| `prepare-release.yaml` | `container candidate --workdir .`: `release --prepare --release-env`, build, accepted manifest, `check-baseline` (on the host, with `GH_TOKEN`), review-candidate record | Tag-availability check, review hold and upload, approved-run checks, `review_gate verify`, commit, tag, dispatch. |
+| `prepare-release.yaml` | `container candidate --workdir .`: `release --prepare --release-env` (an approved run passes the reviewed `--release-date`), build, accepted manifest, `check-baseline` (on the host, with `GH_TOKEN`), review-candidate record | Tag-availability check, review hold and upload, approved-run checks, `review_gate verify`, commit, tag, dispatch. |
 | `release.yaml` | `container build --workdir .` | Refuse-overwrite check, `output_manifest verify`, packaging, publication. |
 | `kicad-compat.yaml` | `container build --workdir . --kicad 9` and `--kicad 10` | Manifest comparison. |
 
@@ -163,6 +163,7 @@ format) and `boardwright-build/record.json`:
 | Field | Content |
 | --- | --- |
 | `source_commit`, `source_modified`, `stage` | The commit built, tracked changes present before the build, and the local stage marker. |
+| `release_preparation` | For a prepared release: version, release date, commit and the SHA-256 of every file `release --prepare` wrote, as recorded by that command in `.git/` and verified by the build. A prepared file changed afterwards, or any other modification, stops the build. |
 | `boardwright_source` | `src/boardwright` and its Git tree ID. The build fails if Python imported Boardwright from anywhere other than the checkout being built. |
 | `image`, `image_id` | The pinned reference, and the local ID of the image that ran. Before every run the runner checks that Docker lists the pinned digest for that image. The ID's form depends on the Docker image store (Docker Desktop reports the manifest digest), so builds are compared on `image`. |
 | `tools` | `kicad-cli`, KiBot and Python versions from inside the container. |
@@ -180,7 +181,12 @@ python -m boardwright container compare <local stage> gh-evidence
 `compare` fails on any of:
 
 - a different source commit, variant, image or normaliser;
-- a working-tree (`--worktree`) or modified-source build;
+- a working-tree (`--worktree`) build;
+- a modified-source build, unless every modification belongs to a verified
+  release preparation and both builds carry the same one: same commit,
+  version, release date, file contents and project files. Root `*.kicad_pro`
+  files count only when they differ from the commit in nothing but
+  `text_variables`, which preparation syncs; any other change is an error;
 - a missing image identity;
 - a blocking difference in a controlled output (`missing`, `unexpected`,
   `changed`, `incomparable`).
@@ -222,6 +228,11 @@ python -m boardwright.output_manifest verify --root <stage>
 - The fonts are now installed where KiCad in the container sees them. Before,
   they went to the runner's home, outside the action's container. Drawing PDFs
   (informational) may therefore render differently from earlier CI builds.
-- A local `candidate` checks remote tags against the local repository the
-  stage was cloned from. Run `git fetch --tags` first. The CI run checks
-  GitHub.
+- A local `candidate` takes its release references from the upstream of the
+  repository it runs in, on the host. It lists the `origin` tags, fetches them
+  into the stage without forcing, and points the stage's `origin` at that URL.
+  The container reads the snapshot (`.git/boardwright-remote-refs.json`, named
+  by `BOARDWRIGHT_REMOTE_REFS`) for the remote-tag check, so a Windows-path or
+  credentialed remote is never contacted from inside it. The rehearsal stops if
+  the upstream cannot be listed, if a local tag differs from the upstream's, or
+  if the `origin` URL embeds credentials. The CI run checks GitHub directly.

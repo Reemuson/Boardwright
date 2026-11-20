@@ -431,6 +431,14 @@ example a `tooling`-only release) leaves that drawing's rows untouched and is
 recorded only in the release ledger and `CHANGELOG.md`. The title-block release
 version and date still update.
 
+A release has one authoritative date. `release --prepare` fixes it once: the
+UTC calendar date at preparation, or `--release-date YYYY-MM-DD`. It is
+written to the ledger entry, the CHANGELOG heading and `release.env`
+(`RELEASE_DATE`, `RELEASE_DATE_NUM`), and drawings read it from there, never
+from a commit timestamp. An approved prepare run reuses the reviewed
+candidate's date, and the review gate rejects any other date, so the held,
+approved and published drawings agree whatever the commit times or time zones.
+
 Release preparation applies the same rules to the schematic, fabrication and
 assembly drawings:
 

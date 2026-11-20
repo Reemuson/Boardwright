@@ -280,8 +280,7 @@ remain in `TODO.md`.
 
 Remaining:
 
-- `container candidate` on Windows hosts, and a `container compare` that can
-  compare release-candidate builds (`TODO.md`)
+- live verification of the release-date and candidate fixes on the testbench
 - commit-message standardisation (next workstream)
 
 ## Later
