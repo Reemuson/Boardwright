@@ -302,8 +302,11 @@ Goal: make the generated README a useful hardware project front page.
 - [x] Adopt the commit-message convention (`COMMITS.md`): generated release
       and accept commits carry trailers; suggestions and advisory notes in
       the CLI and TUI.
-- [ ] Install the commit-convention workflows on the testbench and observe a
-      live accept merge and release commit with the new messages.
+- [x] Install the commit-convention workflows on the testbench and observe a
+      live accept merge and README snapshot (run `44656451447`); release
+      commit trailers verified from the installed snippet (`AUDIT-2026-11.md`).
+- [ ] Observe a live release commit with `Source-Commit`/`Reviewed-Run` at the
+      next real release (not dispatched for message testing).
 - [ ] KiCad 10: make zone fills reproducible across hosts, and recognise the
       KiCad 10 drill header in a new manifest normaliser version.
 - [x] Fix `DRAFT` builds on boards with drill tables: `md_readme` configures

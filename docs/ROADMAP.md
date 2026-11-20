@@ -280,9 +280,9 @@ remain in `TODO.md`.
 
 Remaining:
 
-- approve and publish the held 0.1.7 candidate, which completes the live
-  verification of the release-date fix (`TODO.md`)
-- observe the new generated commit messages live (`COMMITS.md`)
+- 0.1.7 verified the release-date fix live, but its approved run failed at
+  the tag push and needed manual recovery (`AUDIT-2026-11.md`)
+- R1: let the prepare workflow handle a failed tag push itself
 
 ## Later
 
