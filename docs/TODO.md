@@ -313,8 +313,14 @@ Goal: make the generated README a useful hardware project front page.
       renders exist; staging errors are no longer swallowed.
 - [x] Local-first previews in the CLI and TUI, including uncommitted changes
       (`local_preview.py`, `LOCAL_FIRST.md` section 4).
-- [ ] Local release backend: candidate, review, approval, finalize, publish,
-      release store (`LOCAL_FIRST.md` section 5).
+- [x] Local release backend, first part: plan, candidate, review, approval,
+      status and recovery, release store (`LOCAL_FIRST.md` section 5.1a).
+- [ ] Local release finalisation (rebuild, review gate, release commit, annotated
+      tag, never pushed) and publication (rebuild from the tag, verify the
+      accepted manifest, package into the store); TUI release screen.
+- [ ] Two consecutive local releases end to end: a tooling-only release reusing
+      baselines and a fabrication change that re-issues; failures between the
+      commit, tag and package steps.
 - [x] Local-preview testbench integration: validated by run `44711268100`
       (106/106, ci-test `6972067`). Earlier runs failed: `44685152330` (87/88; C1),
       `44692377491` (91/92; substring check), `44708112597` (105/106; bytecode

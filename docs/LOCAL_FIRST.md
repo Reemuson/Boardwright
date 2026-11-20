@@ -4,10 +4,11 @@
 # Local-First Previews and Release Backends (design)
 
 Status: **in progress.** Implemented on `feat/local-first-backends`: backend
-selection (section 3), local previews (section 4) and the shared release
-engine (section 6, live-tested on the testbench). Local releases (section 5)
-are planned and must not be described as available until they are built and
-tested.
+selection (section 3), local previews (section 4, integration-validated) and
+the shared release engine (section 6, live-tested on the testbench). Local
+releases (section 5): plan, candidate, review, approval, status and recovery
+are implemented (5.4). Finalisation (release commit and tag) and publication
+are **not implemented yet**; a local release cannot be completed.
 
 ## 1. Decisions (owner, 2026-11-20)
 
@@ -405,6 +406,51 @@ A local release on a project that has a GitHub remote needs an explicit
 explicit action, and the GitHub draft release would then be built by
 `release.yaml` from that tag.
 
+### 5.1a Implemented so far (2026-11-20)
+
+`src/boardwright/local_release.py` and `src/boardwright/release_store.py`:
+
+```text
+boardwright release local plan      VERSION [--backend local]
+boardwright release local candidate VERSION --drawing-revision R --revision-description D
+                                    [--variant RELEASED] [--kind release] [--change-class C]
+                                    [--justification J] [--release-date YYYY-MM-DD] [--backend local]
+boardwright release local review    VERSION [--candidate ID] [--check RECORD]
+boardwright release local approve   VERSION --record RECORD [--candidate ID] [--backend local]
+boardwright release local status    [VERSION]
+boardwright release local recover
+```
+
+- Backend: selected once (`select_backend`); a usable GitHub remote is refused
+  without `--backend local`; nothing falls back after a failure.
+- Plan: clean tree (no tracked or untracked change), release branch, version
+  and local tag free, ledger valid and append-only, previous release tagged
+  locally.
+- Candidate: `container.stage` of the committed `HEAD` (purpose
+  `local-release-candidate`), the same steps as `prepare-release.yaml` through
+  `container.run_candidate_steps`; the plan's tag check reads a snapshot of the
+  local tags (the stage's `origin` is a fixed name nothing fetches from);
+  `check-baseline --local` refuses a reused baseline whose previous release
+  has no committed manifest (no GitHub fallback). Frozen as
+  `candidates/<version>/<sha256 of review_candidate.json>/` with the GitHub
+  artifact's file set, build records and `candidate.json`; refused if the
+  repository changed during the build.
+- Review: a draft `REVIEW-<version>-<id>.md` in the store's `drafts/`; the
+  record must repeat the candidate's version, id, source, manifest digest and
+  date, tick every item and end with `APPROVED: yes`.
+- Approval: one approved candidate per version; refused if the tag exists, the
+  version is published, the candidate or index was modified, or the record is
+  incomplete. `approval.json` as in step 4 plus `inputs`, `authenticated:
+  false` and `signing_configured` (a configured key is reported, never treated
+  as authentication). Repeating the same approval is a no-op.
+- Store: write-once entries (owned temporary, `SHA256SUMS`, read-only, rename);
+  path components validated; links and junctions refused; a directory with
+  unrelated files or another project's marker refused; the store must be
+  outside the project. `index.jsonl` is hash-chained and anchored by
+  `index.head`; each candidate is cross-checked against its index event.
+  `status` reports modified entries and interrupted writes; `recover` removes
+  interrupted writes only.
+
 ### 5.2 What is persisted where
 
 | Data | Location | Immutability |
@@ -474,8 +520,10 @@ Parity notes:
 - `boardwright preview` and `boardwright backends`: implemented, section 4.
   Saved uncommitted work is always included by policy; there is no
   `--committed` switch (commit or stash to preview a commit exactly).
-- `boardwright release <version> … [--backend …]`, with the local subcommands
-  `candidate`, `review`, `approve`, `finalize`, `publish` and `status`.
+- `boardwright release local …`: `plan`, `candidate`, `review`, `approve`,
+  `status` and `recover` are implemented (section 5.1a); `finalize` and
+  `publish` are planned. The TUI release screen does not offer local
+  releases yet.
 - `boardwright backends`: prints the selection for each operation and why
   (`select_backend` with no side effects).
 - TUI: the Preview action shows the selected backend and offers the override.
