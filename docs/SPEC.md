@@ -839,7 +839,8 @@ Current implemented TUI behavior:
 - action buttons use readable single-line labels so the rail remains readable
   at a glance on narrow terminals
 - Record updates `CHANGELOG.md`, writes revision-history variables, validates,
-  and suggests a commit message
+  and suggests a commit message in the `COMMITS.md` convention; Commit shows
+  advisory notes for a non-conforming subject but never refuses it
 - Commit requires the configured `dev` branch, requires a changelog entry for
   dirty work, validates, writes revision-history variables, commits, and pushes
   `origin/dev`

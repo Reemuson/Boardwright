@@ -280,8 +280,9 @@ remain in `TODO.md`.
 
 Remaining:
 
-- live verification of the release-date and candidate fixes on the testbench
-- commit-message standardisation (next workstream)
+- approve and publish the held 0.1.7 candidate, which completes the live
+  verification of the release-date fix (`TODO.md`)
+- observe the new generated commit messages live (`COMMITS.md`)
 
 ## Later
 

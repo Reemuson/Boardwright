@@ -290,8 +290,17 @@ Goal: make the generated README a useful hardware project front page.
 - [x] One authoritative release date: fixed at preparation (UTC), reused by
       the approved run from the reviewed candidate, read by the drawings from
       `release.env`; review-candidate schema 2 binds it (`SPEC.md`).
-- [ ] Live-verify the release-date and candidate fixes on the testbench
-      (held and approved prepare, publish) after review.
+- [x] Live-verify the fixes through a review-held candidate: ci-test 0.1.7,
+      held run `44644257445`, matched by a local candidate (`AUDIT-2026-11.md`).
+- [ ] Approve, tag and publish 0.1.7 (owner authorisation), then confirm the
+      approved run reuses the reviewed date and the publish build shows it.
+- [ ] Upload the bound revision-history CSVs with the held candidate
+      (done in Boardwright; install on the testbench after 0.1.7).
+- [x] Adopt the commit-message convention (`COMMITS.md`): generated release
+      and accept commits carry trailers; suggestions and advisory notes in
+      the CLI and TUI.
+- [ ] Install the commit-convention workflows on the testbench and observe a
+      live accept merge and release commit with the new messages.
 - [ ] KiCad 10: make zone fills reproducible across hosts, and recognise the
       KiCad 10 drill header in a new manifest normaliser version.
 - [x] Fix `DRAFT` builds on boards with drill tables: `md_readme` configures

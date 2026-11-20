@@ -18,6 +18,7 @@ Use this index to find the correct document for each task.
 | [`TODO.md`](TODO.md) | Open work and completed tasks. |
 | [`TESTBENCH.md`](TESTBENCH.md) | Isolated GitHub Actions test procedure. |
 | [`PROVENANCE.md`](PROVENANCE.md) | File origins, attribution, and licence boundaries. |
+| [`COMMITS.md`](COMMITS.md) | Commit-message convention, trailers and generated commits. |
 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Contribution and verification requirements. |
 
 Use `../LICENSE`, `../NOTICE.md`, `../THIRD_PARTY_NOTICES.md`, and `../LICENSES/` for legal terms and notices.
