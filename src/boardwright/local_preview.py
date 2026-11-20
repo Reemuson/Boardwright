@@ -261,18 +261,28 @@ def run_local_preview(
 ) -> dict:
     """Stage, build in the pinned container, record. Returns the preview record."""
 
-    from .build import BUILD_DIR
-    from .container import ContainerError, image_for, stage
+    from .stage_lock import stage_lock
 
     runner = runner or _container_runner
     variant = variant.upper()
+    repo = Path(_git(repo, "rev-parse", "--show-toplevel").strip())
+    workdir = preview_stage_dir(repo, variant, kicad)
+    # Held from before anything in the stage or the index can change until the
+    # outputs and the index are recorded (StageBusy if another run holds it).
+    with stage_lock(workdir, purpose=f"preview {variant}"):
+        return _run_locked(repo, variant, kicad, workdir, runner, echo, clock)
+
+
+def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Runner,
+                echo: Callable[[str], None], clock: Callable[[], float]) -> dict:
+    from .build import BUILD_DIR
+    from .container import ContainerError, image_for, stage
+
     plan = plan_source(repo)
-    repo = plan.repository
     if _git(repo, "ls-files", "--", LOCAL_OVERRIDES).strip():
         raise BoardwrightError(f"{LOCAL_OVERRIDES} is tracked by Git; it must stay local (untrack it) before previewing.")
     before = worktree_fingerprint(repo)
     started, start = _now(), clock()
-    workdir = preview_stage_dir(repo, variant, kicad)
     record: dict = {
         "schema": PREVIEW_SCHEMA,
         "purpose": "preview",

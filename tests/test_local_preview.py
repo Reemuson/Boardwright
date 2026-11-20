@@ -272,6 +272,24 @@ class LocalRunTests(PreviewTestCase):
         self.assertTrue(self.run_preview("CHECKED").ok)  # third run on the same state
 
 
+class LockTests(PreviewTestCase):
+    def test_busy_preview_does_not_touch_the_stage_or_the_index(self) -> None:
+        from boardwright.stage_lock import stage_lock
+
+        first = self.run_preview("CHECKED").record
+        index = local_preview.index_path(self.repo, "CHECKED", "9")
+        before = index.read_bytes()
+        stage_dir = Path(first["outputs"])
+        with stage_lock(stage_dir):  # another run holds this stage
+            outcome = self.run_preview("CHECKED")
+        self.assertFalse(outcome.ok)
+        self.assertIn("in use by", outcome.message)
+        self.assertEqual([], self.runner.calls)
+        self.assertEqual(before, index.read_bytes())
+        self.assertTrue((stage_dir / "Manufacturing" / "out.txt").is_file())
+        self.assertTrue(self.run_preview("DRAFT").ok)  # other variants are independent
+
+
 class SelectionTests(PreviewTestCase):
     def test_every_variant_defaults_to_local_for_every_remote(self) -> None:
         for remote in (GITHUB, NONE, GITHUB_NO_AUTH, GITHUB_UNREACHABLE):

@@ -1873,12 +1873,21 @@ def _build_textual_app():
         def action_generate_preview(self) -> None:
             if not self._require_action("Preview"):
                 return
+            if getattr(self, "_preview_running", False):
+                self.notify("A preview is already running; wait for it to finish.", severity="warning")
+                return
             self.push_screen(PreviewDispatchScreen(), self._generate_preview)
 
         def _generate_preview(self, choice: tuple[str, str] | None) -> None:
             if choice is None:
                 return
             variant, backend = choice
+            if getattr(self, "_preview_running", False):
+                self.notify("A preview is already running; wait for it to finish.", severity="warning")
+                return
+            # Cleared in _finish_preview_dispatch. The stage lock refuses a
+            # second run from another process (CLI or another TUI) as well.
+            self._preview_running = True
             self.ci_status = f"Preview {variant}: selecting backend..."
             self._render_state()
             Thread(target=self._run_preview, args=(variant, backend), daemon=True).start()
@@ -1891,8 +1900,8 @@ def _build_textual_app():
 
             try:
                 outcome = run_shared_preview(load_config(), variant, backend, progress)
-            except BoardwrightError as exc:
-                self.call_from_thread(self._finish_preview_dispatch, variant, str(exc))
+            except Exception as exc:  # always release the in-app guard
+                self.call_from_thread(self._finish_preview_dispatch, variant, str(exc) or type(exc).__name__)
                 return
             self.call_from_thread(self._finish_preview_dispatch, variant, None if outcome.ok else outcome.message,
                                   outcome.message)
@@ -1902,6 +1911,7 @@ def _build_textual_app():
             self._render_state()
 
         def _finish_preview_dispatch(self, variant: str, error: str | None, message: str = "") -> None:
+            self._preview_running = False
             if error:
                 self.ci_status = error
                 self._render_state()
