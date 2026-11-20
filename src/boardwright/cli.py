@@ -1214,7 +1214,7 @@ def _backends(args: argparse.Namespace) -> int:
         print(backends.format_selection(backends.select_backend(
             operation, remote=remote, docker=docker, variant=config.preview_variant, project_setting=setting)))
     print("Selection only; nothing was run. Local releases: `boardwright release local` (candidate, review, "
-          "approve, status; finalisation and publication are not implemented yet).")
+          "approve, finalize, publish, status, recover).")
     return 0
 
 

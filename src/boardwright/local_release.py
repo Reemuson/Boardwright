@@ -9,9 +9,10 @@ engine: ``container.candidate_steps`` (release preparation, build, manifest,
 baseline check, review candidate) in a stage of the clean, committed ``HEAD``,
 and ``review_gate`` for the candidate identity.
 
-Implemented here: plan, candidate, review, approve and status. Finalisation
-(release commit and tag) and publication are separate, later steps; nothing
-in this module commits, tags, pushes or publishes.
+Implemented here: plan, candidate, review, approve and the command line.
+Nothing in this module commits, tags, pushes or publishes: finalisation is
+``local_finalize``, publication ``local_publish``, status and recovery
+``local_recovery``.
 
 A local approval is labelled ``authority: local``, ``server_enforced:
 false``. The approver is the Git identity: asserted, not authenticated. A
@@ -526,10 +527,10 @@ def status_lines(store: ReleaseStore, version: str = "") -> list[str]:
     lines.append("Index: " + ("intact" if not index else "INCONSISTENT: " + "; ".join(index)))
     for path in store.abandoned():
         lines.append(f"Interrupted write: {path.name} (incomplete; `boardwright release local recover` removes it)")
-    for kind in ("candidates", "approvals", "releases"):
+    for kind in ("candidates", "approvals", "finalizations", "releases"):
         for entry in store.entries(kind, version):
             problems = store.verify_entry(entry.path)
-            label = entry.name[:12] if kind != "releases" else ""
+            label = entry.name[:12] if kind in ("candidates", "approvals") else ""
             lines.append(f"{kind[:-1]:9} {entry.version} {label}".rstrip()
                          + (": intact" if not problems else ": MODIFIED: " + "; ".join(problems[:3])))
     return lines
@@ -580,18 +581,33 @@ def main(argv: list[str]) -> int:
     p.add_argument("--record", type=Path, required=True)
     p.add_argument("--candidate", default="")
     p.add_argument("--backend", default="", choices=("", "auto", "local", "github"))
-    p = sub.add_parser("status", help="List candidates, approvals and releases, and check their integrity.")
+    p = sub.add_parser("finalize", help="Rebuild, verify against the approval, commit and tag (never pushed).")
+    p.add_argument("version")
+    p.add_argument("--sign", action="store_true", help="Sign the release commit and tag; fails if signing fails.")
+    p.add_argument("--backend", default="", choices=("", "auto", "local", "github"))
+    p = sub.add_parser("publish", help="Rebuild from the tag, verify, package into the release store.")
+    p.add_argument("version")
+    p.add_argument("--backend", default="", choices=("", "auto", "local", "github"))
+    p = sub.add_parser("status", help="Show each version's state, integrity and next step.")
     p.add_argument("version", nargs="?", default="")
-    sub.add_parser("recover", help="Remove interrupted (incomplete) store writes.")
+    p = sub.add_parser("recover", help="Complete interrupted steps that need no build; never resets or deletes.")
+    p.add_argument("version", nargs="?", default="")
     args = parser.parse_args(argv)
     try:
         config = load_config()
         store = _store(config)
         if args.command == "status":
-            print("\n".join(status_lines(store, args.version)))
+            from .local_recovery import status_lines as release_status_lines
+
+            print("\n".join(release_status_lines(Path(config.root), store, args.version)))
             return 0
         if args.command == "recover":
-            return recover(store)
+            from .local_recovery import recover as recover_release
+
+            if not store.exists():
+                print("No local release store; nothing to recover.")
+                return 0
+            return recover_release(config, store, args.version)
         if args.command == "review":
             if args.check:
                 _path, record, reviewed = load_candidate(store, args.version, args.candidate)
@@ -627,6 +643,16 @@ def main(argv: list[str]) -> int:
             return 0
         if args.command == "approve":
             approve(config, store, args.version, args.record, args.candidate)
+            return 0
+        if args.command == "finalize":
+            from .local_finalize import finalize
+
+            finalize(config, store, args.version, sign=args.sign)
+            return 0
+        if args.command == "publish":
+            from .local_publish import publish
+
+            publish(config, store, args.version)
             return 0
     except (BoardwrightError, container.ContainerError, OSError, json.JSONDecodeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
