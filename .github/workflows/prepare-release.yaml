@@ -291,6 +291,7 @@ jobs:
             .boardwright/releases.yaml
             .boardwright/release.env
             .boardwright/revision_history_variables.env
+            .boardwright/revision_history_*.csv
             .boardwright/document_revisions.yaml
             .boardwright/project.yaml
             CHANGELOG.md
