@@ -9,8 +9,9 @@ the shared release engine (section 6, live-tested on the testbench). Local
 releases (section 5): the full command-line lifecycle (plan, candidate,
 review, approval, finalisation, publication, status and recovery) is
 implemented (5.1a, 5.1b) and verified with pinned-Docker builds in disposable
-repositories only. Not yet: the TUI release screen, a real-project or
-testbench release, and the project matrix (section 8).
+repositories only; the TUI release screen (section 7.1) runs the same
+operations. Not yet: a real-project or testbench release (plan:
+`LOCAL_RELEASE_INTEGRATION.md`, not run) and the project matrix (section 8).
 
 ## 1. Decisions (owner, 2026-11-20)
 
@@ -480,7 +481,8 @@ The bundle is frozen before any ref changes, so every interruption can be
 completed without a rebuild. `finalize` resumes from the proven state (no
 rebuild once prepared) and must be resumed with the same `--sign` choice.
 `recover` does only build-free completions: remove interrupted store writes,
-append the event of a complete checksummed entry whose event was not written,
+append the event of a complete checksummed entry (candidate, approval,
+finalisation or release) whose event was not written,
 re-import the release commit from its bundle, and bring the working tree to
 the release commit after an interrupted branch advance (only when it still
 holds exactly the source tree). Refused, never repaired: a different tag, a
@@ -490,7 +492,10 @@ and nothing is pushed. The pending ref is kept as a record.
 
 Signing: `--sign` needs `user.signingkey` (refused before any build without
 it); a commit or tag that cannot be signed fails the step and nothing unsigned
-is made; signatures are checked with `git verify-commit` and `git tag -v`.
+is made; signatures are checked with `git verify-commit` and `git tag -v`
+when made and again on every later `finalize`, before `publish` and by
+`status`, so a signature that no longer verifies is reported, never shown as
+a signed release.
 `signing_configured` in `approval.json` and `signed` in `publish.json` report
 signing; the approval itself stays `authenticated: false`.
 
@@ -565,12 +570,56 @@ Parity notes:
   `--committed` switch (commit or stash to preview a commit exactly).
 - `boardwright release local …`: `plan`, `candidate`, `review`, `approve`,
   `finalize`, `publish`, `status` and `recover` are implemented (sections
-  5.1a and 5.1b). The TUI release screen does not offer local releases yet.
+  5.1a and 5.1b), in the CLI and the TUI (7.1).
 - `boardwright backends`: prints the selection for each operation and why
   (`select_backend` with no side effects).
 - TUI: the Preview action shows the selected backend and offers the override.
   The release screen shows "Local release (not server-enforced)" or "GitHub
   release". A failure shows the override needed; it never switches by itself.
+
+### 7.1 TUI local releases (implemented, 2026-11-21)
+
+`src/boardwright/local_release_ops.py` is the one dispatcher: `boardwright
+release local <op>` parses its arguments and calls `local_release_ops.run`;
+the TUI calls the same function with the same `LocalArgs`. Neither front end
+selects a backend, checks a precondition or decides what an operation does.
+
+- **Release** (`l`) first shows the backend: the project's default from
+  `select_backend` (remote inspected offline; Docker and GitHub access are
+  checked when an operation runs), with buttons "GitHub release" (disabled
+  when there is no GitHub remote) and "Local release (not server-enforced)".
+  Choosing local on a project whose default is GitHub is an explicit
+  `--backend local`. A refusal or failure is reported; nothing switches.
+- The local release screen shows each version's proven state from the store
+  and repository: stage, candidate id, source commit, release date, drawing
+  revision and the ledger's PCB, schematic, fabrication and assembly
+  revisions, baseline outcome (for example `fabrication A/2 reused; assembly
+  A reused`), the approval (local, not server-enforced, approver asserted,
+  not authenticated, signed or unsigned), release commit, package, problems,
+  interrupted steps and the next action. It offers Status, Plan, Candidate,
+  Review draft, Approve, Finalize (unsigned or signed), Publish and Recover.
+- Candidate, Approve, Finalize, Publish and Recover each need explicit
+  confirmation in a dialog that says what will be written and that it is not
+  undone; Cancel has the focus. Status and Plan run without one. Nothing is
+  approved, finalised, tagged or published automatically.
+- Operations run in a background thread with each progress line in the
+  status line, then a notification; failures and the outputs of Status, Plan,
+  Review and Recover open a report. One release or preview operation runs at
+  a time in the app; the release-store lock refuses a concurrent run from
+  another process. A running operation cannot be cancelled; quitting during
+  one needs a second `q`, and Status then shows the interrupted state for
+  Recover.
+- Read-only: the dashboard's release line (`local: 1.0.0 tagged | GitHub: …`),
+  the screen's summaries, Status and Plan never build, write, repair or
+  refresh the Git index (Boardwright's `git status` calls use
+  `--no-optional-locks`).
+
+Tests: `tests/test_tui_local_release.py` (mocked UI tests for the backend
+screen, confirmation and cancel, concurrency, quit guard, failure reporting
+and CLI/TUI parity of every operation; the real TUI app driven through the
+whole lifecycle, an interrupted finalisation resumed in a new session, a
+held store lock and the read-only views, in disposable repositories and
+stores).
 
 ## 8. Test plan
 

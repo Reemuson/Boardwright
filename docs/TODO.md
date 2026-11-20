@@ -319,8 +319,11 @@ Goal: make the generated README a useful hardware project front page.
       section 5.1b), verified with two consecutive pinned-Docker releases in a
       disposable repository (baseline reuse, then a new baseline) and with
       interruptions at every ref change.
-- [ ] TUI release screen for local releases ("Local release (not
-      server-enforced)").
+- [x] TUI release screen for local releases ("Local release (not
+      server-enforced)"), sharing `local_release_ops.run` with the CLI
+      (`LOCAL_FIRST.md` section 7.1).
+- [ ] Review the ci-test integration plan (`LOCAL_RELEASE_INTEGRATION.md`),
+      then write its driver script; nothing is installed on ci-test yet.
 - [ ] Local release on a real project or the testbench (needs owner review).
 - [x] Local-preview testbench integration: validated by run `44711268100`
       (106/106, ci-test `6972067`). Earlier runs failed: `44685152330` (87/88; C1),
