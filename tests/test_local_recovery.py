@@ -1,0 +1,142 @@
+# SPDX-License-Identifier: LicenseRef-Boardwright-Source-Available
+# Copyright (c) Ryan Hicks
+
+"""Crash consistency and recovery of local releases: every ref change interrupted and resumed."""
+
+from __future__ import annotations
+
+import unittest
+from unittest import mock
+
+from boardwright import local_finalize, local_publish, local_recovery
+from boardwright.local_release import LocalReleaseError
+from boardwright.release_store import ReleaseStore
+
+try:
+    from tests.local_release_fixtures import Case, Interrupted
+    from tests.test_local_release import _git, _write, snapshot
+except ImportError:  # unittest discover -s tests
+    from local_release_fixtures import Case, Interrupted
+    from test_local_release import _git, _write, snapshot
+
+class CrashRecoveryTests(Case):
+    """Interrupt immediately before and after every Git ref change, then resume."""
+
+    POINTS = ("before-import", "after-import", "before-branch", "after-branch", "after-worktree", "before-tag", "after-tag")
+
+    def interrupt_at(self, point: str):
+        hits = []
+
+        def maybe(name):
+            if name == point and not hits:
+                hits.append(name)
+                raise Interrupted(name)
+
+        return mock.patch.object(local_finalize, "checkpoint", side_effect=maybe)
+
+    def test_every_ref_change_can_be_interrupted_and_resumed(self) -> None:
+        for point in self.POINTS:
+            for resume in ("finalize", "recover-then-finalize"):
+                with self.subTest(point=point, resume=resume):
+                    self.tearDown()
+                    self.setUp()
+                    record = self.approved()
+                    before = snapshot(self.repo)
+                    with self.interrupt_at(point), self.assertRaises(Interrupted):
+                        self.finalize()
+                    state = self.state()
+                    self.assertFalse(state.problems, state.problems)
+                    self.assertNotEqual("published", state.stage)
+                    if point in ("before-import", "before-branch"):
+                        self.assertEqual(before, snapshot(self.repo))  # nothing visible changed yet
+                    if point == "after-branch":
+                        self.assertIn("working tree still holds the source tree", " ".join(state.recoverable))
+                    if resume == "recover-then-finalize":
+                        self.recover("1.0.0")
+                        self.assertFalse(self.state().recoverable)
+                    self.finalize()
+                    self.assert_finalised(record)
+                    self.assertEqual(2, len(_git(self.repo, "rev-list", "main").split()))  # source + release commit
+
+    def test_interrupt_between_record_and_event_is_recovered(self) -> None:
+        self.approved()
+        real = self.store.append_event
+
+        def drop_prepared(event):
+            if event.get("event") == "prepared":
+                raise Interrupted("after freeze, before event")
+            return real(event)
+
+        with mock.patch.object(ReleaseStore, "append_event", autospec=True,
+                               side_effect=lambda store, event: drop_prepared(event)):
+            with self.assertRaises(Interrupted):
+                self.finalize()
+        self.assertEqual(1, len(self.store.entries("finalizations")))
+        self.assertTrue(self.state().recoverable)
+        with self.assertRaisesRegex(LocalReleaseError, "index event"):
+            self.finalize()  # refused until recovered: an unrecorded entry is never trusted silently
+        self.recover()
+        self.assertIn("prepared", self.events())
+        self.finalize()
+        self.assertEqual("tagged", self.state().stage)
+
+    def test_a_branch_moved_after_preparation_is_refused_not_reset(self) -> None:
+        record = self.approved()
+        with self.interrupt_at("before-branch"), self.assertRaises(Interrupted):
+            self.finalize()
+        _write(self.repo / "board.kicad_pcb", "(kicad_pcb other work)\n")
+        _git(self.repo, "commit", "-q", "-am", "other work")
+        moved = self.head("main")
+        with self.assertRaisesRegex(LocalReleaseError, "never reset"):
+            self.finalize()
+        self.recover()
+        self.assertEqual(moved, self.head("main"))
+        self.assertEqual("", _git(self.repo, "tag"))
+        self.assertNotEqual(record["source_sha"], moved)
+
+    def test_a_conflicting_tag_after_preparation_is_refused(self) -> None:
+        self.approved()
+        with self.interrupt_at("before-tag"), self.assertRaises(Interrupted):
+            self.finalize()
+        _git(self.repo, "tag", "-a", "1.0.0", "-m", "other", "HEAD~1")
+        state = self.state()
+        self.assertTrue(any("points elsewhere" in p for p in state.problems))
+        with self.assertRaisesRegex(LocalReleaseError, "points elsewhere"):
+            self.finalize()
+        self.assertEqual(self.head("HEAD~1"), self.head("1.0.0^{commit}"))  # never deleted or moved
+
+    def test_lost_pending_ref_is_reimported_from_the_bundle(self) -> None:
+        self.approved()
+        with self.interrupt_at("after-import"), self.assertRaises(Interrupted):
+            self.finalize()
+        _git(self.repo, "update-ref", "-d", local_finalize.pending_ref("1.0.0"))
+        self.assertEqual("prepared", self.state().stage)
+        self.recover()
+        self.assertEqual("imported", self.state().stage)
+
+
+class PublicationRecoveryTests(Case):
+    def test_interrupted_publication_is_detected_and_recovered(self) -> None:
+        self.approved()
+        self.finalize()
+        with mock.patch.object(local_publish, "checkpoint",
+                               side_effect=lambda name: (_ for _ in ()).throw(Interrupted(name)) if name == "after-store" else None):
+            with self.assertRaises(Interrupted):
+                self.publish()
+        state = self.state()
+        self.assertTrue(state.recoverable, state)
+        self.recover()
+        self.assertEqual("published", self.state().stage)
+        self.assertEqual(1, self.events().count("published"))
+
+
+class CommandLineTests(Case):
+    def test_status_names_the_next_step(self) -> None:
+        self.approved()
+        lines = local_recovery.status_lines(self.repo, self.store)
+        self.assertTrue(any("Release 1.0.0: approved" in line for line in lines))
+        self.assertTrue(any("next: `boardwright release local finalize`" in line for line in lines))
+
+
+if __name__ == "__main__":
+    unittest.main()
