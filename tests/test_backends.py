@@ -206,6 +206,24 @@ class InspectionTests(unittest.TestCase):
             self.assertEqual(["git remote get-url"], run.calls)
             self.assertEqual("unsupported", classify_remote_url(url)[0])
 
+    def test_passwords_and_query_tokens_in_any_scheme_are_never_echoed(self) -> None:
+        for url in ("ssh://git:hunter2@github.com/o/r.git", "ssh://u:hunter2@gitlab.com/o/r",
+                    "ftp://a:hunter2@host/r", "https://github.com/o/r.git?token=hunter2",
+                    "https://github.com/o/r.git#hunter2"):
+            info, run = self._remote(CommandResult(0, url + "\n"))
+            for op in (Operation.RELEASE, Operation.PREVIEW):
+                for override in ("", "github", "local"):
+                    text = format_selection(pick(op, info, override=override)) + info.url + " ".join(info.problems)
+                    self.assertNotIn("hunter2", text, (url, op, override))
+            self.assertFalse(info.usable_github, url)
+            self.assertEqual(["git remote get-url"], run.calls, url)
+
+    def test_unsupported_remote_is_shown_without_secrets(self) -> None:
+        from boardwright.backends import redact_url
+        self.assertEqual("https://gitlab.com/o/r.git", redact_url("https://tok@gitlab.com/o/r.git?x=1"))
+        info, _ = self._remote(CommandResult(0, "https://gitlab.com/o/r.git\n"))
+        self.assertIn("https://gitlab.com/o/r.git", info.problems[0])
+
     def test_ssh_login_name_is_not_a_credential(self) -> None:
         self.assertEqual(("github", "o/r"), classify_remote_url("git@github.com:o/r.git"))
 

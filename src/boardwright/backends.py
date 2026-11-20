@@ -41,9 +41,28 @@ _GITHUB_URL = re.compile(
     r"^(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)"
     r"(?P<repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$"
 )
-# Any userinfo in an http(s) URL is a credential (a token alone is enough).
-# ssh "git@" is a login name, not a secret.
-_USERINFO = re.compile(r"^https?://[^/@]+@", re.IGNORECASE)
+# Credentials in a remote URL: any userinfo in http(s) (a token alone is
+# enough), a password in any scheme (``ssh://user:pw@``), or a query or
+# fragment (``?token=``). An ssh login name (``git@``) is not a secret.
+_HTTP_USERINFO = re.compile(r"^https?://[^/?#]*@", re.IGNORECASE)
+_PASSWORD = re.compile(r"^[a-z][a-z0-9+.-]*://[^/@?#]*:[^/@?#]*@", re.IGNORECASE)
+_SCHEME_AUTHORITY = re.compile(r"^(?P<scheme>[a-z][a-z0-9+.-]*://)(?:[^/@?#]*@)?(?P<rest>[^?#]*)", re.IGNORECASE)
+
+
+def has_credentials(url: str) -> bool:
+    url = url.strip()
+    return bool(_HTTP_USERINFO.match(url) or _PASSWORD.match(url)
+                or ("://" in url and ("?" in url or "#" in url)))
+
+
+def redact_url(url: str) -> str:
+    """The URL without userinfo, query or fragment: safe to print."""
+
+    url = url.strip()
+    match = _SCHEME_AUTHORITY.match(url)
+    if match:
+        return match["scheme"] + match["rest"]
+    return url.split("?", 1)[0].split("#", 1)[0]
 
 
 class Operation(Enum):
@@ -112,7 +131,7 @@ def classify_remote_url(url: str) -> tuple[str, str]:
     url = url.strip()
     if not url:
         return "none", ""
-    if _USERINFO.match(url):
+    if has_credentials(url):
         return "unsupported", ""
     match = _GITHUB_URL.match(url)
     if match:
@@ -125,7 +144,7 @@ def inspect_remote(root: Path, *, run: Runner = run_command, check_access: bool 
 
     got = run(["git", "remote", "get-url", "origin"], root)
     url = got.stdout.strip() if got.returncode == 0 else ""
-    if _USERINFO.match(url):
+    if has_credentials(url):
         # Checked before classification so the URL is never stored or echoed.
         return RemoteInfo("unsupported", "(credentials removed)",
                           problems=("the origin URL embeds credentials; remove them from the remote",))
@@ -133,7 +152,8 @@ def inspect_remote(root: Path, *, run: Runner = run_command, check_access: bool 
     if kind == "none":
         return RemoteInfo("none")
     if kind == "unsupported":
-        return RemoteInfo("unsupported", url, problems=(f"origin {url} is not a GitHub repository",))
+        shown = redact_url(url)
+        return RemoteInfo("unsupported", shown, problems=(f"origin {shown} is not a GitHub repository",))
     workflows = all((root / ".github" / "workflows" / name).is_file() for name in WORKFLOWS)
     problems: list[str] = []
     if not workflows:
