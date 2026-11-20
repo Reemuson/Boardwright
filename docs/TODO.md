@@ -295,8 +295,10 @@ Goal: make the generated README a useful hardware project front page.
 - [x] Approve, tag and publish 0.1.7 from replacement held run `44648605373`:
       the approved run reused the reviewed date and the published cover shows
       2026-11-20 (`AUDIT-2026-11.md`). Never approve `44644257445`.
-- [ ] Retry the tag push a bounded number of times in `prepare-release.yaml`
-      (audit R1: transient `remote rejected (failed)` during 0.1.7).
+- [x] Retry the tag push a bounded number of times in `prepare-release.yaml`
+      (audit R1): `boardwright.tag_push`, verified each attempt, never forced.
+- [ ] Observe R1's retry path live at the next real release (not dispatched
+      only to test it).
 - [x] Upload the bound revision-history CSVs with the held candidate, and
       accept an explicit `release_date` for held runs (testbench `349e174`).
 - [x] Adopt the commit-message convention (`COMMITS.md`): generated release

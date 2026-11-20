@@ -398,9 +398,21 @@ jobs:
           echo "::add-mask::$auth"
           export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
           version="$IN_VERSION"
+          release_commit="$(git rev-parse HEAD)"
           git tag -a "$version" -m "Release $version"
-          if ! git push origin "refs/tags/$version"; then
-            echo "::error::Release commit $(git rev-parse HEAD) is on main but tag $version was not pushed. Recover: git tag -a $version $(git rev-parse HEAD) -m 'Release $version' && git push origin $version, then dispatch release.yaml on the tag." >&2
+          # Bounded, verified retry (audit R1): transient push failures are
+          # retried after re-reading the remote; a tag already pointing at the
+          # release commit counts as pushed; conflicts and authentication
+          # failures stop at once. Never forced.
+          status=0
+          python -m boardwright.tag_push --tag "$version" --commit "$release_commit" --remote origin --branch main || status=$?
+          if (( status != 0 )); then
+            case "$status" in
+              3) reason="the remote already has a different tag $version" ;;
+              4) reason="authentication or permission failure" ;;
+              *) reason="the tag push did not succeed" ;;
+            esac
+            echo "::error::Release commit $release_commit is on main but tag $version was not pushed ($reason). Recover: git tag -a $version $release_commit -m 'Release $version' && git push origin refs/tags/$version, then dispatch release.yaml on the tag." >&2
             exit 1
           fi
 

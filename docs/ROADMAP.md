@@ -282,7 +282,7 @@ Remaining:
 
 - 0.1.7 verified the release-date fix live, but its approved run failed at
   the tag push and needed manual recovery (`AUDIT-2026-11.md`)
-- R1: let the prepare workflow handle a failed tag push itself
+- R1: confirm the bounded tag-push retry at the next real release
 
 ## Later
 
