@@ -37,7 +37,7 @@ from .local_finalize import (
     sync_worktree,
 )
 from .local_publish import PUBLISH_FILE, load_release
-from .local_release import LocalReleaseError, verify_approval
+from .local_release import APPROVAL_FILE, CANDIDATE_FILE, CANDIDATE_RECORD, LocalReleaseError, verify_approval
 from .release_store import ReleaseStore, sha256_file
 
 NEXT = {
@@ -75,15 +75,57 @@ def versions(store: ReleaseStore) -> list[str]:
     return sorted(names)
 
 
-def _missing_events(store: ReleaseStore, version: str) -> list[tuple[str, Path]]:
-    """Complete entries whose index event is missing (interrupted between rename and append)."""
+def _missing_events(store: ReleaseStore, version: str) -> list[dict]:
+    """The index events of complete, checksummed entries whose event was not written.
 
-    events = {(e.get("event"), e.get("version")) for e in store.events()}
-    missing = []
-    for kind, event, record in (("finalizations", "prepared", FINALIZE_FILE), ("releases", "published", PUBLISH_FILE)):
-        for entry in store.entries(kind, version):
-            if (event, version) not in events and not store.verify_entry(entry.path):
-                missing.append((event, entry.path / record))
+    An interruption between an entry's rename and its index append. Returned
+    in lifecycle order (candidate, approval, prepared, published) as the
+    events to append; an entry that is incomplete or inconsistent with its own
+    id is not offered (``status`` reports it as modified).
+    """
+
+    events = store.events()
+    have = {(e.get("event"), e.get("version"), e.get("candidate_id")) for e in events}
+    have_version = {(e.get("event"), e.get("version")) for e in events}
+    missing: list[dict] = []
+    for entry in store.entries("candidates", version):
+        if ("candidate", entry.version, entry.name) in have or store.verify_entry(entry.path):
+            continue
+        record = json.loads((entry.path / CANDIDATE_RECORD).read_text(encoding="utf-8"))
+        if sha256_file(entry.path / CANDIDATE_FILE) != entry.name or record.get("candidate_id") != entry.name \
+                or record.get("version") != entry.version:
+            continue
+        missing.append({"event": "candidate", "version": entry.version, "candidate_id": entry.name,
+                        "source_sha": record["source_sha"], "release_date": record.get("release_date"),
+                        "manifest_sha256": record.get("manifest_sha256"),
+                        "sums_sha256": sha256_file(entry.path / "SHA256SUMS")})
+    for entry in store.entries("approvals", version):
+        if ("approval", entry.version, entry.name) in have or store.verify_entry(entry.path):
+            continue
+        approval = json.loads((entry.path / APPROVAL_FILE).read_text(encoding="utf-8"))
+        if approval.get("candidate_id") != entry.name or approval.get("version") != entry.version:
+            continue
+        missing.append({"event": "approval", "version": entry.version, "candidate_id": entry.name,
+                        "review_record_sha256": approval.get("review_record_sha256"),
+                        "approver": approval.get("approver"),
+                        "approval_sha256": sha256_file(entry.path / APPROVAL_FILE)})
+    for entry in store.entries("finalizations", version):
+        if ("prepared", entry.version) in have_version or store.verify_entry(entry.path):
+            continue
+        record = json.loads((entry.path / FINALIZE_FILE).read_text(encoding="utf-8"))
+        missing.append({"event": "prepared", "version": entry.version, "candidate_id": record["candidate_id"],
+                        "release_commit": record["release_commit"],
+                        "finalize_sha256": sha256_file(entry.path / FINALIZE_FILE),
+                        "bundle_sha256": sha256_file(entry.path / "release.bundle")})
+    for entry in store.entries("releases", version):
+        if ("published", entry.version) in have_version or store.verify_entry(entry.path):
+            continue
+        record = json.loads((entry.path / PUBLISH_FILE).read_text(encoding="utf-8"))
+        if sha256_file(entry.path / record["zip"]) != record["zip_sha256"]:
+            continue
+        missing.append({"event": "published", "version": entry.version, "zip_sha256": record["zip_sha256"],
+                        "publish_sha256": sha256_file(entry.path / PUBLISH_FILE),
+                        "sums_sha256": sha256_file(entry.path / "SHA256SUMS")})
     return missing
 
 
@@ -91,8 +133,8 @@ def version_state(repo: Path, store: ReleaseStore, version: str) -> VersionState
     state = VersionState(version)
     if store.entries("candidates", version):
         state.stage, state.detail = "candidate", "candidate frozen; not approved"
-    for event, _path in _missing_events(store, version):
-        state.recoverable.append(f"the {event} entry is complete but its index event was not written")
+    for event in _missing_events(store, version):
+        state.recoverable.append(f"the {event['event']} entry is complete but its index event was not written")
     if state.recoverable:
         return state
     if store.entries("approvals", version):
@@ -149,17 +191,9 @@ def recover(config, store: ReleaseStore, version: str = "", *, echo=print) -> in
         if store.verify_index():
             raise LocalReleaseError("The release-store index is inconsistent: " + "; ".join(store.verify_index()))
         for name in [version] if version else versions(store):
-            for event, record_path in _missing_events(store, name):
-                record = json.loads(record_path.read_text(encoding="utf-8"))
-                extra = {"release_commit": record["release_commit"], "candidate_id": record["candidate_id"],
-                         "bundle_sha256": sha256_file(record_path.parent / "release.bundle")} if event == "prepared" \
-                    else {"zip_sha256": record["zip_sha256"], "sums_sha256": sha256_file(record_path.parent / "SHA256SUMS")}
-                if event == "published" and sha256_file(record_path.parent / record["zip"]) != record["zip_sha256"]:
-                    raise LocalReleaseError(f"The {name} package does not match its record; not recovered.")
-                store.append_event({"event": event, "version": name,
-                                    ("finalize_sha256" if event == "prepared" else "publish_sha256"): sha256_file(record_path),
-                                    **extra, "recovered": True})
-                echo(f"Recorded the missing {event} event for {name} (entry complete and checksummed).")
+            for event in _missing_events(store, name):
+                store.append_event({**event, "recovered": True})
+                echo(f"Recorded the missing {event['event']} event for {name} (entry complete and checksummed).")
             state = version_state(repo, store, name)
             if state.problems:
                 echo(f"{name}: not recovered: " + "; ".join(state.problems))

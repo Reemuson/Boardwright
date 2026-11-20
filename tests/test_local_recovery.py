@@ -80,6 +80,35 @@ class CrashRecoveryTests(Case):
         self.finalize()
         self.assertEqual("tagged", self.state().stage)
 
+    def test_candidate_and_approval_entries_without_events_are_recovered(self) -> None:
+        for lost in ("candidate", "approval"):
+            with self.subTest(lost=lost):
+                version = "1.0.0" if lost == "candidate" else "1.1.0"
+                if lost == "approval":
+                    _git(self.repo, "commit", "-q", "--allow-empty", "-m", "next")
+                real = ReleaseStore.append_event
+
+                def drop(store, event, lost=lost):
+                    if event.get("event") == lost:
+                        raise Interrupted("after freeze, before event")
+                    return real(store, event)
+
+                with mock.patch.object(ReleaseStore, "append_event", autospec=True, side_effect=drop):
+                    with self.assertRaises(Interrupted):
+                        self.approved(version)
+                state = self.state(version)
+                self.assertTrue(state.recoverable, state)
+                self.assertIn("recover", state.next_action)
+                self.recover(version)
+                self.assertIn(lost, self.events(version))
+                self.assertFalse(self.state(version).recoverable)
+                if lost == "candidate":
+                    self.approved(version)  # the same candidate, now approvable; no new entry
+                    self.assertEqual(1, len(self.store.entries("candidates", version)))
+                self.assertEqual("approved", self.state(version).stage)
+                if lost == "candidate":
+                    self.finalize(version)  # 1.1.0 needs 1.0.0 tagged first
+
     def test_a_branch_moved_after_preparation_is_refused_not_reset(self) -> None:
         record = self.approved()
         with self.interrupt_at("before-branch"), self.assertRaises(Interrupted):
