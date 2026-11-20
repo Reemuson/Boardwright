@@ -51,6 +51,47 @@ class SuggestionTests(unittest.TestCase):
         self.assertEqual("chore(pcb): move C12 away from U3", suggest_from_paths(["b.kicad_pcb"], "Move C12 away from U3"))
 
 
+class ChangedPathsTests(unittest.TestCase):
+    """Suggestions use the real paths Git reports, first file included."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="bw-paths-"))
+        git = lambda *a: subprocess.run(["git", "-C", str(self.tmp), *a], check=True, capture_output=True)
+        self.git = git
+        git("init", "-q", "-b", "main")
+        (self.tmp / ".github" / "workflows").mkdir(parents=True)
+        for name in (".github/workflows/a.yaml", "CHANGELOG.md", "Block Diagram.kicad_sch", "old.md"):
+            (self.tmp / name).write_text("x\n", encoding="utf-8", newline="\n")
+        git("add", "-A")
+        git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "base")
+
+    def tearDown(self) -> None:
+        _rmtree(self.tmp)
+
+    def _touch(self, name: str) -> None:
+        with (self.tmp / name).open("a", encoding="utf-8", newline="\n") as handle:
+            handle.write("y\n")
+
+    def test_single_unstaged_file_keeps_its_first_character(self) -> None:
+        from boardwright.commit_messages import suggest_commit_message
+        from boardwright.git_ops import changed_paths
+
+        self._touch(".github/workflows/a.yaml")
+        self.assertEqual([".github/workflows/a.yaml"], changed_paths(self.tmp))
+        self.assertEqual("ci(workflows): update GitHub workflows", suggest_commit_message(self.tmp))
+        subprocess.run(["git", "-C", str(self.tmp), "checkout", "-q", "--", "."], check=True)
+        self._touch("CHANGELOG.md")
+        self.assertEqual("docs(changelog): update the changelog", suggest_commit_message(self.tmp))
+
+    def test_paths_with_spaces_and_renames(self) -> None:
+        from boardwright.git_ops import changed_paths
+
+        self._touch("Block Diagram.kicad_sch")
+        self.git("mv", "old.md", "new.md")
+        (self.tmp / "untracked file.txt").write_text("z\n", encoding="utf-8")
+        self.assertEqual({"Block Diagram.kicad_sch", "new.md", "untracked file.txt"}, set(changed_paths(self.tmp)))
+
+
 class AdvisoryTests(unittest.TestCase):
     def test_conforming_subjects_have_no_notes(self) -> None:
         for subject in (
