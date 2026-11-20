@@ -315,6 +315,9 @@ Goal: make the generated README a useful hardware project front page.
       (`local_preview.py`, `LOCAL_FIRST.md` section 4).
 - [ ] Local release backend: candidate, review, approval, finalize, publish,
       release store (`LOCAL_FIRST.md` section 5).
+- [x] Local-preview testbench integration (run `44685152330`, `AUDIT-2026-11.md`).
+- [ ] C1: apply the preview source policy to `container build --worktree` (it
+      stages untracked `.env` and unrelated files).
 - [ ] Project matrix tests and local-vs-GitHub preview benchmark.
 - [x] T1: test helpers support Python 3.11; full suite green on 3.11 and 3.12
       (Linux) and Windows.
