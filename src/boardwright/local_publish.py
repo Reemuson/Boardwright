@@ -26,7 +26,7 @@ import subprocess
 from pathlib import Path
 
 from . import container
-from .local_finalize import checkpoint, finalize_state, load_finalization
+from .local_finalize import checkpoint, finalize_state, load_finalization, signature_problems
 from .local_release import LocalReleaseError, ReleaseRequest, verify_approval
 from .release_store import ReleaseStore, safe_name, sha256_bytes, sha256_file
 from .stage_lock import stage_lock
@@ -125,6 +125,9 @@ def publish(config, store: ReleaseStore, version: str, *, runner=None, echo=prin
         if state.stage != "tagged":
             raise LocalReleaseError(f"Release {version} is not finalised ({state.detail}); run finalize first.")
         _fpath, finalization = load_finalization(store, version)
+        unsigned = signature_problems(repo, version, finalization)
+        if unsigned:
+            raise LocalReleaseError("Nothing was published: " + " ".join(unsigned))
         commit = finalization["release_commit"]
         approval_bytes = (store.entry_path("approvals", version, record["candidate_id"]) / "approval.json").read_bytes()
         request = ReleaseRequest(**record["request"])

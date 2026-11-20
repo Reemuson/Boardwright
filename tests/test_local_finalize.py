@@ -128,6 +128,14 @@ class FinalizeTests(Case):
         with self.assertRaisesRegex(LocalReleaseError, "started with --sign"):
             local_finalize.finalize(self.config, self.store, "1.0.0", sign=False, runner=self.engine,
                                     host_runner=self.engine.host, echo=self.out.append)
+        # A signature that stops verifying is never reported as a signed release.
+        allowed.write_text("", encoding="utf-8")
+        with self.assertRaisesRegex(LocalReleaseError, "does not verify"):
+            self.finalize(sign=True)
+        self.assertTrue(any("does not verify" in p for p in self.state().problems))
+        with self.assertRaisesRegex(LocalReleaseError, "Nothing was published"):
+            self.publish()
+        self.assertEqual([], self.store.entries("releases"))
 
 
 if __name__ == "__main__":

@@ -145,6 +145,21 @@ def verify_release_commit(repo: Path, commit: str, record: dict, approval_bytes:
     return problems
 
 
+def signature_problems(repo: Path, version: str, record: dict) -> list[str]:
+    """For a signed finalisation: the release commit and (if present) the tag must verify, every time."""
+
+    if not record.get("signed"):
+        return []
+    problems = []
+    if _git(repo, "verify-commit", record["release_commit"], check=False).returncode != 0:
+        problems.append(f"The signed release commit {record['release_commit'][:12]} does not verify "
+                        "(git verify-commit); check the signing configuration.")
+    if _rev(repo, f"refs/tags/{version}") and _git(repo, "tag", "-v", version, check=False).returncode != 0:
+        problems.append(f"The signed tag {version} does not verify (git tag -v); check the signing configuration. "
+                        "It is never deleted automatically.")
+    return problems
+
+
 def finalize_state(repo: Path, store: ReleaseStore, version: str) -> FinalizeState:
     """The proven finalisation state; raises on a conflict."""
 
@@ -394,6 +409,9 @@ def finalize(config, store: ReleaseStore, version: str, *, sign: bool = False, r
         if state.stage != "tagged" or _rev(repo, f"refs/heads/{finalization['branch']}") is None:
             raise LocalReleaseError(f"Finalisation did not reach the tagged state ({state.detail}).")
         _record_events(store, version, finalization, state)
+        problems = signature_problems(repo, version, finalization)
+        if problems:
+            raise LocalReleaseError(" ".join(problems))
     echo(f"Finalised {version}: release commit {finalization['release_commit'][:12]} on {finalization['branch']}, "
          f"annotated tag {version}{' (signed)' if sign else ' (unsigned)'}.")
     echo("Local approval: not server-enforced; the approver is asserted, not authenticated. The tag was not pushed.")

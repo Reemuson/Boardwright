@@ -33,7 +33,9 @@ from .local_finalize import (
     _rev,
     finalize_state,
     import_release_commit,
+    load_finalization,
     pending_ref,
+    signature_problems,
     sync_worktree,
 )
 from .local_publish import PUBLISH_FILE, load_release
@@ -152,6 +154,9 @@ def version_state(repo: Path, store: ReleaseStore, version: str) -> VersionState
         state.problems.append(str(exc))
         return state
     state.stage, state.detail = finalized.stage, finalized.detail
+    if finalized.stage in ("advanced", "tagged"):
+        found = load_finalization(store, version)
+        state.problems.extend(signature_problems(repo, version, found[1]) if found else [])
     if finalized.stage == "prepared":
         state.recoverable.append("the release commit is recorded but not imported")
     if finalized.stage in ("advanced", "tagged") and _rev(repo, "HEAD") == finalized.release_commit:
