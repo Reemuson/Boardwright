@@ -19,6 +19,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_revision_model import Project, _rmtree  # noqa: E402
 
+from boardwright.release_date import parse_release_date, release_env_lines  # noqa: E402
+from boardwright.release_ledger import load_ledger  # noqa: E402
+
+
+def write_release_env(root: Path) -> None:
+    """release.env as release --prepare --release-env writes it (date = ledger date)."""
+
+    when = parse_release_date(load_ledger(root)[-1].date)
+    lines = ["RELEASE_VERSION=1.0.0", "RELEASE_VARIANT=RELEASED", "RELEASE_KIND=draft", *release_env_lines(when)]
+    text = "".join(line + "\n" for line in lines)
+    (root / ".boardwright" / "release.env").write_text(text, encoding="utf-8", newline="\n")
+
 from boardwright.output_manifest import build_manifest  # noqa: E402
 from boardwright.review_gate import CANDIDATE_FILE, build_candidate, verify_candidate  # noqa: E402
 
@@ -40,6 +52,7 @@ class ReviewGateTests(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="bw-review-"))
         self.project = Project(self.tmp)
         self.project.release("1.0.0", "A.0", justification="Initial")
+        write_release_env(self.tmp)
         self.gerber = self.tmp / "Manufacturing" / "Fabrication" / "Gerbers" / "b-F_Cu.gbr"
         self.gerber.parent.mkdir(parents=True)
         self.gerber.write_text("%TF.CreationDate,2026-01-01*%\nX1Y1D02*\n", encoding="utf-8")

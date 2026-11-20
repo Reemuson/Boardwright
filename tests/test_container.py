@@ -41,7 +41,7 @@ class CandidateTests(unittest.TestCase):
     def _args(self):
         return container.main.__globals__["argparse"].Namespace(
             version="1.2.3", variant="RELEASED", kind="draft", drawing_revision="B", revision_description="d",
-            change_class="documentation", justification="j", kicad="9",
+            change_class="documentation", justification="j", kicad="9", release_date="",
         )
 
     def test_candidate_runs_the_prepare_release_sequence_and_never_publishes(self) -> None:
