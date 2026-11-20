@@ -34,7 +34,9 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import sys
+import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -232,37 +234,106 @@ def identity_json(root: Path, tag: str) -> str:
 
 
 PROTECTED = COPY_SET + (".git", ".boardwright", ".github", "src", "boardwright_resources")
+_REPARSE_POINT = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT: Windows symlinks and junctions
+
+
+class PackagingError(ValueError):
+    """The package cannot be built safely; nothing was removed or published."""
+
+
+def is_link(path: Path) -> bool:
+    """A symbolic link, or on Windows any reparse point (junctions included)."""
+
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return False
+    if stat.S_ISLNK(info.st_mode):
+        return True
+    return bool(getattr(info, "st_file_attributes", 0) & _REPARSE_POINT)
+
+
+def package_inputs(root: Path, tag: str) -> list[Path]:
+    """The copy-set entries present in ``root``."""
+
+    return [root / name for name in COPY_SET + (source_zip_name(tag),) if is_link(root / name) or (root / name).exists()]
+
+
+def find_links(paths: list[Path]) -> list[Path]:
+    """Every link at or below ``paths``; linked directories are not entered."""
+
+    found: list[Path] = []
+    for top in paths:
+        if is_link(top):
+            found.append(top)
+            continue
+        if not top.is_dir():
+            continue
+        for dirpath, dirnames, filenames in os.walk(top, followlinks=False):
+            for name in sorted(dirnames + filenames):
+                if is_link(Path(dirpath) / name):
+                    found.append(Path(dirpath) / name)
+            dirnames[:] = [d for d in dirnames if not is_link(Path(dirpath) / d)]
+    return found
+
+
+def check_inputs(root: Path, tag: str) -> list[Path]:
+    """Refuse links in the package inputs (fail closed, LOCAL_FIRST.md section 6).
+
+    A link would be packaged as whatever it points at, or, for a linked
+    directory, as an empty directory; neither is a controlled output.
+    """
+
+    inputs = package_inputs(root, tag)
+    links = find_links(inputs)
+    if links:
+        shown = ", ".join(path.relative_to(root).as_posix() for path in links[:10])
+        more = f" (and {len(links) - 10} more)" if len(links) > 10 else ""
+        raise PackagingError(f"release inputs contain symbolic links or junctions: {shown}{more}")
+    return inputs
 
 
 def check_release_dir(root: Path, release_dir: Path) -> None:
     """Refuse a release directory whose removal would delete project files.
 
-    ``collect_assets`` recreates the directory, so it must not be the project
-    root, one of its ancestors, or a source the package is copied from.
+    The directory is recreated, so it must not be (or resolve, through any
+    link or junction on its path, to) the project root, one of its ancestors,
+    or project content. It must not be a link itself.
     """
 
+    if is_link(release_dir):
+        raise PackagingError(f"release directory {release_dir} is a symbolic link or junction")
     root, target = root.resolve(), release_dir.resolve()
     if target == root or target in root.parents:
-        raise ValueError(f"release directory {release_dir} would remove the project")
+        raise PackagingError(f"release directory {release_dir} would remove the project")
     if root in target.parents:
         top = target.relative_to(root).parts[0]
         if top in PROTECTED:
-            raise ValueError(f"release directory {release_dir} is inside project content ({top})")
+            raise PackagingError(f"release directory {release_dir} is inside project content ({top})")
+
+
+def _remove(path: Path) -> None:
+    if is_link(path) or path.is_file():
+        path.unlink()
+    elif path.is_dir():
+        shutil.rmtree(path)
 
 
 def collect_assets(root: Path, tag: str, release_dir: Path) -> None:
-    """Fill ``release_dir`` (recreated) as the workflow's copy step did."""
+    """Copy the package inputs into ``release_dir`` (recreated).
+
+    Destination and inputs are checked before anything is removed.
+    """
 
     check_release_dir(root, release_dir)
-    if release_dir.exists():
-        shutil.rmtree(release_dir)
+    inputs = check_inputs(root, tag)
+    _remove(release_dir)
     release_dir.mkdir(parents=True)
-    for name in COPY_SET + (source_zip_name(tag),):
-        source = root / name
-        if source.is_symlink() or source.is_file():
-            shutil.copy2(source, release_dir / name, follow_symlinks=False)
-        elif source.is_dir():
-            shutil.copytree(source, release_dir / name, symlinks=True)
+    for source in inputs:
+        if source.is_dir():
+            shutil.copytree(source, release_dir / source.name, symlinks=True)
+        else:
+            shutil.copy2(source, release_dir / source.name, follow_symlinks=False)
     if (root / ".boardwright" / "releases.yaml").is_file():
         (release_dir / "RELEASE_IDENTITY.json").write_text(identity_json(root, tag), encoding="utf-8", newline="\n")
     accepted = root / ".boardwright" / "accepted_manifest.json"
@@ -279,8 +350,12 @@ def zip_members(release_dir: Path, arcroot: str) -> list[tuple[str, Path | None]
         rel = Path(dirpath).relative_to(release_dir).as_posix()
         base = arcroot if rel == "." else f"{arcroot}/{rel}"
         for name in dirnames:
+            if is_link(Path(dirpath) / name):
+                raise PackagingError(f"link in the release directory: {base}/{name}")
             members.append((f"{base}/{name}/", None))
         for name in sorted(filenames):
+            if is_link(Path(dirpath) / name):
+                raise PackagingError(f"link in the release directory: {base}/{name}")
             members.append((f"{base}/{name}", Path(dirpath) / name))
     return members
 
@@ -296,18 +371,53 @@ def write_zip(release_dir: Path, zip_path: Path, arcroot: str | None = None) -> 
                 entry.external_attr = (0o40755 << 16) | 0x10  # Unix dir mode, MS-DOS directory flag
                 archive.writestr(entry, b"")
             else:
-                archive.write(source, name)  # zip -r follows symlinks, as here
+                archive.write(source, name)
     return zip_path
 
 
 def build_package(root: Path, tag: str, *, release_dir: Path | None = None, zip_path: Path | None = None) -> Package:
+    """Build the package fail-closed.
+
+    Inputs and destinations are checked before anything is removed. Stale
+    outputs (the release directory and zip of an earlier attempt) are removed
+    next, so a failure can never leave an old package looking current. The new
+    package is built in a temporary sibling directory and moved into place
+    only when the manifest and zip are complete; on failure the temporary
+    files are removed and no package exists.
+    """
+
     release_dir = release_dir or root / DEFAULT_RELEASE_DIR
     zip_path = zip_path or root / release_zip_name(tag)
-    collect_assets(root, tag, release_dir)
-    manifest = write_manifest(release_dir)
-    write_zip(release_dir, zip_path)
-    files = manifest.read_text(encoding="utf-8", errors="surrogateescape").count("\n")
-    return Package(release_dir, manifest, zip_path, files)
+    check_release_dir(root, release_dir)
+    check_release_dir(root, zip_path)
+    check_inputs(root, tag)
+    for stale in (release_dir, zip_path):
+        _remove(stale)
+    release_dir.parent.mkdir(parents=True, exist_ok=True)
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix=f".{release_dir.name}.", dir=release_dir.parent))
+    staged_dir = work / release_dir.name
+    handle, staged_name = tempfile.mkstemp(prefix=f".{zip_path.name}.", dir=zip_path.parent)
+    os.close(handle)
+    staged_zip = Path(staged_name)
+    try:
+        collect_assets(root, tag, staged_dir)
+        manifest_bytes = manifest_text(staged_dir).encode("utf-8", "surrogateescape")
+        (staged_dir / "MANIFEST.txt").write_bytes(manifest_bytes)
+        write_zip(staged_dir, staged_zip, arcroot=release_dir.name)
+        os.replace(staged_dir, release_dir)
+        os.replace(staged_zip, zip_path)
+    except BaseException:
+        # The directory may have been moved into place before the zip failed
+        # to move: remove it so no partial package remains.
+        if not zip_path.exists():
+            _remove(release_dir)
+        raise
+    finally:
+        _remove(work)
+        _remove(staged_zip)
+    files = manifest_bytes.count(b"\n")
+    return Package(release_dir, release_dir / "MANIFEST.txt", zip_path, files)
 
 
 # ---------------------------------------------------------------- CLI

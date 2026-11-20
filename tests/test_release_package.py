@@ -287,6 +287,167 @@ class ReviewHardeningTests(unittest.TestCase):
         self.assertIsNone(release_package.board_images(self.root)[0])
 
 
+def _snapshot(root: Path) -> dict[str, bytes]:
+    """Every regular file in the project except package outputs."""
+
+    out = {}
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        rel = Path(dirpath).relative_to(root)
+        if rel.parts and rel.parts[0].startswith(("boardwright-release", ".boardwright-release")):
+            dirnames[:] = []
+            continue
+        for name in filenames:
+            path = Path(dirpath) / name
+            if not release_package.is_link(path) and not name.startswith(("boardwright-1.2.0-release", ".boardwright-1.2.0-release")):
+                out[(rel / name).as_posix()] = path.read_bytes()
+    return out
+
+
+class FailClosedTests(unittest.TestCase):
+    """Links in inputs or destinations, and failures mid-build (LOCAL_FIRST.md section 6)."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix="bw-failclosed-"))
+        self.root = self.base / "project"
+        make_workspace(self.root)
+        self.elsewhere = self.base / "elsewhere"
+        _write(self.elsewhere / "secret.txt", "outside the project\n")
+
+    def tearDown(self) -> None:
+        # Unlink links first so rmtree never follows a junction.
+        for dirpath, dirnames, filenames in os.walk(self.base, followlinks=False):
+            for name in dirnames + filenames:
+                path = Path(dirpath) / name
+                if release_package.is_link(path):
+                    os.rmdir(path) if path.is_dir() and os.name == "nt" else os.unlink(path)
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _symlink(self, target: Path, link: Path) -> None:
+        try:
+            os.symlink(target, link, target_is_directory=target.is_dir())
+        except (OSError, NotImplementedError) as exc:  # Windows without privilege; always runs on Linux
+            self.skipTest(f"cannot create symlinks here: {exc}")
+
+    def _junction(self, target: Path, link: Path) -> None:
+        if os.name != "nt":
+            self.skipTest("junctions are Windows-only")
+        done = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True, text=True)
+        if done.returncode != 0:
+            self.skipTest(f"cannot create a junction: {done.stderr or done.stdout}")
+
+    def _assert_refused_cleanly(self, before: dict[str, bytes], **kwargs) -> release_package.PackagingError:
+        with self.assertRaises(release_package.PackagingError) as caught:
+            release_package.build_package(self.root, TAG, **kwargs)
+        self.assertEqual(before, _snapshot(self.root))
+        self.assertEqual("outside the project\n", (self.elsewhere / "secret.txt").read_text(encoding="utf-8"))
+        self.assertFalse((self.root / release_package.release_zip_name(TAG)).exists())
+        self.assertFalse((self.root / "boardwright-release").exists())
+        self.assertEqual([], [p.name for p in self.root.iterdir() if p.name.startswith(".boardwright-")])
+        return caught.exception
+
+    def test_symlinked_file_in_an_input_tree_is_refused(self) -> None:
+        self._symlink(self.elsewhere / "secret.txt", self.root / "Manufacturing" / "link.txt")
+        before = _snapshot(self.root)
+        error = self._assert_refused_cleanly(before)
+        self.assertIn("Manufacturing/link.txt", str(error))
+        self.assertNotIn("outside the project", str(error))
+
+    def test_symlinked_directory_in_an_input_tree_is_refused(self) -> None:
+        self._symlink(self.elsewhere, self.root / "Reports" / "linked")
+        error = self._assert_refused_cleanly(_snapshot(self.root))
+        self.assertIn("Reports/linked", str(error))
+
+    def test_symlinked_top_level_input_is_refused(self) -> None:
+        shutil.rmtree(self.root / "KiRI")
+        self._symlink(self.elsewhere, self.root / "KiRI")
+        self.assertIn("KiRI", str(self._assert_refused_cleanly(_snapshot(self.root))))
+
+    def test_junction_in_an_input_tree_is_refused(self) -> None:
+        self._junction(self.elsewhere, self.root / "HTML" / "junction")
+        self.assertIn("HTML/junction", str(self._assert_refused_cleanly(_snapshot(self.root))))
+
+    def test_release_dir_that_is_a_link_to_project_content_is_refused(self) -> None:
+        for make in (self._symlink, self._junction):
+            with self.subTest(make=make.__name__):
+                link = self.root / "boardwright-release"
+                try:
+                    make(self.root / "Manufacturing", link)
+                except unittest.SkipTest:
+                    continue
+                before = _snapshot(self.root)
+                with self.assertRaises(release_package.PackagingError):
+                    release_package.build_package(self.root, TAG, release_dir=link)
+                self.assertEqual(before, _snapshot(self.root))
+                self.assertTrue((self.root / "Manufacturing" / "Zed.txt").is_file())
+                os.rmdir(link) if os.name == "nt" else os.unlink(link)
+
+    def test_release_dir_below_a_linked_ancestor_is_refused(self) -> None:
+        for make in (self._symlink, self._junction):
+            with self.subTest(make=make.__name__):
+                link = self.root / "out"
+                try:
+                    make(self.root / "Manufacturing", link)
+                except unittest.SkipTest:
+                    continue
+                (self.root / "Manufacturing" / "pkg").mkdir()
+                _write(self.root / "Manufacturing" / "pkg" / "keep.txt", "keep\n")
+                with self.assertRaises(release_package.PackagingError):
+                    release_package.build_package(self.root, TAG, release_dir=link / "pkg")
+                self.assertEqual("keep\n", (self.root / "Manufacturing" / "pkg" / "keep.txt").read_text(encoding="utf-8"))
+                shutil.rmtree(self.root / "Manufacturing" / "pkg")
+                os.rmdir(link) if os.name == "nt" else os.unlink(link)
+
+    def test_refusal_leaves_an_earlier_package_untouched(self) -> None:
+        first = release_package.build_package(self.root, TAG)
+        zip_bytes = first.zip_path.read_bytes()
+        self._symlink(self.elsewhere / "secret.txt", self.root / "Testing" / "link.txt")
+        with self.assertRaises(release_package.PackagingError):
+            release_package.build_package(self.root, TAG)
+        self.assertEqual(zip_bytes, first.zip_path.read_bytes())  # checked before anything is removed
+
+    def test_failure_while_zipping_leaves_no_package_and_no_temporaries(self) -> None:
+        release_package.build_package(self.root, TAG)
+        before = _snapshot(self.root)
+        from unittest import mock
+
+        with mock.patch.object(release_package, "write_zip", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                release_package.build_package(self.root, TAG)
+        self.assertEqual(before, _snapshot(self.root))
+        self.assertFalse((self.root / release_package.release_zip_name(TAG)).exists())
+        self.assertFalse((self.root / "boardwright-release").exists())
+        self.assertEqual([], [p.name for p in self.root.iterdir() if p.name.startswith(".boardwright-")])
+
+    def test_failure_moving_the_zip_removes_the_moved_directory(self) -> None:
+        from unittest import mock
+
+        real = os.replace
+        calls = []
+
+        def flaky(src, dst):
+            calls.append(dst)
+            if len(calls) == 2:
+                raise OSError("rename failed")
+            return real(src, dst)
+
+        with mock.patch.object(release_package.os, "replace", side_effect=flaky):
+            with self.assertRaises(OSError):
+                release_package.build_package(self.root, TAG)
+        self.assertFalse((self.root / "boardwright-release").exists())
+        self.assertFalse((self.root / release_package.release_zip_name(TAG)).exists())
+        self.assertEqual([], [p.name for p in self.root.iterdir() if p.name.startswith(".boardwright-")])
+
+    def test_success_replaces_an_earlier_package_completely(self) -> None:
+        release_package.build_package(self.root, TAG)
+        _write(self.root / "boardwright-release" / "stray.txt", "old\n")
+        (self.root / "Reports" / "drc.txt").unlink()
+        package = release_package.build_package(self.root, TAG)
+        self.assertFalse((package.release_dir / "stray.txt").exists())
+        self.assertNotIn("drc.txt", package.manifest.read_text(encoding="utf-8"))
+        with zipfile.ZipFile(package.zip_path) as archive:
+            self.assertNotIn("boardwright-release/Reports/drc.txt", archive.namelist())
+
+
 class NotesUnitTests(unittest.TestCase):
     def test_local_notes_use_relative_images(self) -> None:
         root = Path(tempfile.mkdtemp(prefix="bw-notes-"))

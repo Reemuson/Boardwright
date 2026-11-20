@@ -295,6 +295,9 @@ Parity notes:
   a staging error (for example, an ignored `README.md`) fails the step
   instead of being swallowed. This is the one intended difference from the
   legacy shell.
+- Packaging is fail-closed: symbolic links and junctions in the inputs are
+  refused, the release directory is never a link or project content, and a
+  failure leaves no package (audit, fail-closed correction).
 - Running the legacy shell on Windows needs three meaning-preserving test
   shims (Git for Windows `sha256sum` binary mode, its `awk` dynamic-regex
   escapes, and CRLF from Windows Python). The runner needs none.
