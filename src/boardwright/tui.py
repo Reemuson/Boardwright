@@ -440,9 +440,12 @@ def _build_textual_app():
             background: {SURFACE_DARK};
         }
 
+        LocalReleaseScreen #dialog, LocalReleaseReportScreen #dialog {
+            height: 90%;
+        }
+
         #local_release_body, #local_release_report_body {
-            height: auto;
-            max-height: 60vh;
+            height: 1fr;
         }
 
         #review_status {
@@ -1246,7 +1249,8 @@ def _build_textual_app():
                                  value="unsigned", id="local_sign")
                     for label, op in self.OPERATIONS:
                         yield Button(label, id=f"local_op_{op}")
-                yield Button("Close", id="local_release_close")
+                    # Inside the scrollable body: never clipped by the dialog on a short terminal.
+                    yield Button("Close", id="local_release_close")
 
         def collect(self) -> "local_release_ops.LocalArgs":
             def value(name: str) -> str:
@@ -1307,7 +1311,7 @@ def _build_textual_app():
                 yield Label(self.title_text, classes="section-title")
                 with VerticalScroll(id="local_release_report_body"):
                     yield Static(self.text, id="local_release_report")
-                yield Button("Close", id="close_local_release_report")
+                    yield Button("Close", id="close_local_release_report")
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
             self.dismiss(None)

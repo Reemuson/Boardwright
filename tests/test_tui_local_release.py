@@ -39,6 +39,9 @@ def _needs_textual(test):
     return unittest.skipUnless(tui.textual_available(), "Textual is not installed")(test)
 
 
+LONG_TEXT = "\n".join(f"line {n}" for n in range(80))
+
+
 async def _idle(app, pilot, seconds: float = 60.0) -> None:
     for _ in range(int(seconds / 0.05)):
         await pilot.pause(0.05)
@@ -175,17 +178,17 @@ class SharedEngineTests(unittest.TestCase):
 class ScreenTests(unittest.TestCase):
     """UI behaviour with every operation mocked: nothing irreversible runs."""
 
-    def run_app(self, body, overview_remote=NO_REMOTE):
+    def run_app(self, body, overview_remote=NO_REMOTE, size=(110, 40), summaries=("Store: test", [])):
         async def check() -> None:
             app = tui._build_textual_app()()
             real_overview = local_release_ops.backend_overview
             with mock.patch.object(local_release_ops, "backend_overview",
                                    side_effect=lambda config, **kw: real_overview(
                                        config, inspect_remote=overview_remote)), \
-                    mock.patch.object(local_release_ops, "summaries", return_value=("Store: test", [])), \
+                    mock.patch.object(local_release_ops, "summaries", return_value=summaries), \
                     mock.patch.object(tui, "run_shared_local_release", return_value=0) as run, \
                     mock.patch.object(tui, "dispatch_workflow_action") as dispatch:
-                async with app.run_test(size=(110, 40)) as pilot:
+                async with app.run_test(size=size) as pilot:
                     await pilot.pause(0.2)
                     await body(app, pilot, run)
                 dispatch.assert_not_called()  # a local operation never dispatches GitHub
@@ -248,6 +251,36 @@ class ScreenTests(unittest.TestCase):
             self.assertEqual(3, run.call_count)  # status and plan need no confirmation
 
         self.run_app(body)
+
+    def test_close_buttons_are_reachable_on_short_terminals(self) -> None:
+        for size in ((82, 26), (120, 45)):
+            with self.subTest(size=size):
+                async def body(app, pilot, run):
+                    # Each screen opened the app's own way, with content longer than the terminal.
+                    opened = {
+                        "#local_release_close": app.open_local_release,
+                        "#close_local_release_report": lambda: app._finish_local_release(
+                            "status", LocalArgs(version="1.0.0"), 0, LONG_TEXT),
+                    }
+                    for button, open_screen in opened.items():
+                        open_screen()
+                        for _ in range(50):
+                            await pilot.pause(0.1)
+                            if app.screen.query(button):
+                                break
+                        await pilot.pause(0.5)  # every widget mounted
+                        name = type(app.screen).__name__
+                        widget = app.screen.query_one(button)
+                        widget.scroll_visible(animate=False)
+                        await pilot.pause(0.3)
+                        dialog = app.screen.query_one("#dialog").region
+                        self.assertTrue(dialog.contains_region(widget.region), (button, widget.region, dialog))
+                        self.assertTrue(await pilot.click(button))
+                        await pilot.pause(0.3)
+                        self.assertNotEqual(name, type(app.screen).__name__)
+                    run.assert_not_called()
+
+                self.run_app(body, size=size, summaries=("Store: test\n" + LONG_TEXT, []))
 
     def test_concurrent_operations_are_refused_in_the_app(self) -> None:
         async def body(app, pilot, run):
