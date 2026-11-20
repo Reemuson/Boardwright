@@ -232,6 +232,15 @@ stage's `.git`) and an index entry
 | `outputs`, `evidence` | Stage directory and its `boardwright-build/` |
 | `status`, `exit_status`, `error`, `started_at`, `finished_at`, `elapsed_seconds` | |
 | `identity` | `VARIANT@<staged tree>`, plus `(dirty, base <commit>)` when not clean |
+| `cleared_outputs` | Generated trees and files removed from the stage before the build (path, file count, tracked) |
+| `dependencies` | References checked per kind, unresolved ones with reasons, `complete` |
+| `design_rules` | Per generated report: DRC violations, errors, warnings, excluded, unconnected pads, footprint errors; ERC messages, errors, warnings, excluded; KiBot's DRC error count. A missing or unparseable report is `unknown`, never zero |
+
+Build completion and design rules are separate: the CLI prints `Build:` and
+then the DRC and ERC lines; the TUI notification is a warning, not a success,
+when a completed preview has design-rule errors or unknown results. Design
+rules are read from the reports only; no build check or release gate is
+relaxed.
 
 A dirty preview is never identified by the base commit alone. A preview is
 stale when the source digest, the pinned image or the outputs no longer

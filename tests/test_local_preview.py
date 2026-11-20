@@ -604,6 +604,46 @@ class SourceCompletenessTests(PreviewTestCase):
         self.assertTrue(self.run_preview("CHECKED").record["dependencies"]["complete"])
 
 
+class DesignRuleReportingTests(PreviewTestCase):
+    """F3: build completion and DRC/ERC results are reported separately."""
+
+    class ReportingRunner(FakeRunner):
+        def __call__(self, kicad, workdir, command):
+            from test_design_rules import ERC_REPORT, drc_report
+
+            status = super().__call__(kicad, workdir, command)
+            _write(workdir / "Reports" / "report_board-drc.rpt", drc_report())
+            _write(workdir / "Reports" / "report_board-erc.rpt", ERC_REPORT)
+            _write(workdir / "kibot_preview.log", "ERROR:DRC errors: 1 (kibot.gs - gs.py:935)\n")
+            return status
+
+    def test_completed_build_with_drc_errors_is_not_reported_as_clean(self) -> None:
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).parent))
+        outcome = self.run_preview("CHECKED", runner=self.ReportingRunner())
+        self.assertTrue(outcome.ok)  # the build completed
+        self.assertIs(True, outcome.rule_errors)
+        self.assertIn("build completed, outputs generated; design-rule errors: DRC 1 error(s)/28 violation(s)",
+                      outcome.message)
+        lines = local_preview.format_record(outcome.record)
+        self.assertEqual("  Build: completed, outputs generated", lines[1])
+        self.assertIn("28 violation(s): 1 error(s), 26 warning(s), 1 excluded", lines[2])
+        self.assertIn("ERC (Reports/report_board-erc.rpt): 4 message(s): 0 error(s), 4 warning(s)", lines[3])
+        self.assertEqual("  KiBot reported 1 DRC error(s)", lines[4])
+
+    def test_missing_reports_are_unknown(self) -> None:
+        outcome = self.run_preview("DRAFT")  # FakeRunner writes no reports
+        self.assertIsNone(outcome.rule_errors)
+        self.assertIn("design rules unknown", outcome.message)
+
+    def test_failed_build_does_not_evaluate_design_rules(self) -> None:
+        record = self.run_preview("CHECKED", runner=FakeRunner(status=1)).record
+        lines = local_preview.format_record(record)
+        self.assertEqual("  Build: FAILED, no usable outputs", lines[1])
+        self.assertIn("not evaluated", lines[2])
+
+
 class LockTests(PreviewTestCase):
     def test_busy_preview_does_not_touch_the_stage_or_the_index(self) -> None:
         from boardwright.stage_lock import stage_lock

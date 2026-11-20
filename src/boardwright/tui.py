@@ -103,8 +103,13 @@ def local_preview_summary(root) -> str:
         return f"local previews unavailable: {exc}"
     if not statuses:
         return "no local previews"
+    from . import design_rules
+
     return "; ".join(
-        f"{s.variant} {s.state} ({s.record.get('identity', '?')})" for s in statuses
+        f"{s.variant} {s.state} ({s.record.get('identity', '?')}"
+        + (f"; {design_rules.headline(s.record.get('design_rules'))}" if s.record.get("status") == "succeeded" else "")
+        + ")"
+        for s in statuses
     )
 
 def _legal_profile_options(
@@ -1903,14 +1908,18 @@ def _build_textual_app():
             except Exception as exc:  # always release the in-app guard
                 self.call_from_thread(self._finish_preview_dispatch, variant, str(exc) or type(exc).__name__)
                 return
+            # A completed build with design-rule errors, or unknown results,
+            # is a warning, never a plain success.
+            severity = "information" if outcome.rule_errors is False or outcome.record is None else "warning"
             self.call_from_thread(self._finish_preview_dispatch, variant, None if outcome.ok else outcome.message,
-                                  outcome.message)
+                                  outcome.message, severity)
 
         def _preview_progress(self, line: str) -> None:
             self.ci_status = line.splitlines()[0][:160] if line else self.ci_status
             self._render_state()
 
-        def _finish_preview_dispatch(self, variant: str, error: str | None, message: str = "") -> None:
+        def _finish_preview_dispatch(self, variant: str, error: str | None, message: str = "",
+                                     severity: str = "information") -> None:
             self._preview_running = False
             if error:
                 self.ci_status = error
@@ -1920,7 +1929,7 @@ def _build_textual_app():
             self.state = collect_dashboard_state()
             self.ci_status = message or f"Preview {variant} finished."
             self._render_state()
-            self.notify(self.ci_status)
+            self.notify(self.ci_status, severity=severity)
 
         def action_project_info(self) -> None:
             self.push_screen(ProjectInfoScreen(), self._save_project_info)
