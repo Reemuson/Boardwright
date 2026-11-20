@@ -548,10 +548,6 @@ def recover(store: ReleaseStore, echo=print) -> int:
 
 # -- command line ------------------------------------------------------------
 
-def _store(config) -> ReleaseStore:
-    return ReleaseStore.for_project(Path(config.root), config.project)
-
-
 def main(argv: list[str]) -> int:
     from .config import load_config
 
@@ -593,68 +589,14 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("recover", help="Complete interrupted steps that need no build; never resets or deletes.")
     p.add_argument("version", nargs="?", default="")
     args = parser.parse_args(argv)
+    # One dispatcher for the CLI and the TUI (local_release_ops.run): parity by construction.
+    from .local_release_ops import LocalArgs, run
+
+    fields = {name: getattr(args, name) for name in LocalArgs.__dataclass_fields__ if hasattr(args, name)}
     try:
         config = load_config()
-        store = _store(config)
-        if args.command == "status":
-            from .local_recovery import status_lines as release_status_lines
-
-            print("\n".join(release_status_lines(Path(config.root), store, args.version)))
-            return 0
-        if args.command == "recover":
-            from .local_recovery import recover as recover_release
-
-            if not store.exists():
-                print("No local release store; nothing to recover.")
-                return 0
-            return recover_release(config, store, args.version)
-        if args.command == "review":
-            if args.check:
-                _path, record, reviewed = load_candidate(store, args.version, args.candidate)
-                problems = check_review(args.check.read_text(encoding="utf-8"), record, reviewed)
-                for problem in problems:
-                    print(f"ERROR {problem}")
-                print("Review record is complete and bound to the candidate." if not problems else "Review record refused.")
-                return 1 if problems else 0
-            draft = write_review_draft(store, args.version, args.candidate)
-            print(f"Review draft: {draft}")
-            print("Inspect the frozen candidate, tick every item, set the last line to `APPROVED: yes`, then run "
-                  f"`boardwright release local approve {args.version} --record <file>`.")
-            return 0
-        selection = select_local_backend(config, args.backend)
-        print(f"Release backend: local ({selection.reason}). Local approval is not server-enforced; "
-              "local tags are never pushed.")
-        if args.command == "plan":
-            result = plan(config, args.version, store)
-            for note in result.notes:
-                print(f"note: {note}")
-            for problem in result.problems:
-                print(f"ERROR {problem}")
-            print("Plan OK: a candidate can be built from HEAD " + result.head[:12] if not result.problems
-                  else "Plan refused.")
-            return 1 if result.problems else 0
-        if args.command == "candidate":
-            request = ReleaseRequest(
-                version=args.version, drawing_revision=args.drawing_revision,
-                revision_description=args.revision_description, variant=args.variant, kind=args.kind,
-                change_classes=args.change_class, justification=args.justification,
-                release_date=args.release_date, kicad=args.kicad)
-            build_candidate(config, request, store)
-            return 0
-        if args.command == "approve":
-            approve(config, store, args.version, args.record, args.candidate)
-            return 0
-        if args.command == "finalize":
-            from .local_finalize import finalize
-
-            finalize(config, store, args.version, sign=args.sign)
-            return 0
-        if args.command == "publish":
-            from .local_publish import publish
-
-            publish(config, store, args.version)
-            return 0
-    except (BoardwrightError, container.ContainerError, OSError, json.JSONDecodeError) as exc:
+    except (BoardwrightError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    return 2
+    return run(config, args.command, LocalArgs(**fields), echo=print,
+               error=lambda line: print(line, file=sys.stderr))
