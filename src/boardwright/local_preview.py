@@ -359,6 +359,10 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
             # be the planned base plus the snapshot.
             raise BoardwrightError(f"HEAD moved while staging ({plan.base_commit[:12]} -> "
                                    f"{str(marker.get('head'))[:12]}); run the preview again.")
+        record["cleared_outputs"] = clear_generated_outputs(workdir)
+        for item in record["cleared_outputs"]:
+            echo(f"[preview] cleared {item['path']} from the stage ({item['files']} file(s), "
+                 f"{'tracked' if item['tracked'] else 'untracked'}); the build regenerates it")
         staged_commit = _git(workdir, "rev-parse", "HEAD").strip()
         record["source"]["staged_commit"] = staged_commit
         record["source"]["staged_tree"] = _git(workdir, "rev-parse", "HEAD^{tree}").strip()
@@ -401,6 +405,49 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
         _write_json(workdir / ".git" / PREVIEW_RECORD, record)
     _write_json(index, record)
     return record
+
+
+def generated_paths() -> tuple[str, ...]:
+    """Output trees and generated tracked files a build writes (never sources)."""
+
+    from .build import GENERATED_TRACKED
+    from .ci_cleanup import OUTPUT_DIRS
+
+    return tuple(OUTPUT_DIRS) + tuple(GENERATED_TRACKED)
+
+
+def clear_generated_outputs(stage_dir: Path) -> list[dict]:
+    """Remove previously generated outputs from the stage copy before the build.
+
+    A branch may track generated outputs (accepted outputs, README.md,
+    renders). Left in the stage, a failed build or a variant that does not
+    regenerate one of them would present the committed files as this
+    preview's outputs. Only the stage is changed, never the working tree; the
+    removal is committed in the stage so the staged tree records it.
+    """
+
+    from .container import _remove_tree
+
+    cleared = []
+    tracked_paths = []
+    for path in generated_paths():
+        target = stage_dir / path
+        if not (target.exists() or target.is_symlink()):
+            continue
+        files = sum(1 for p in target.rglob("*") if p.is_file()) if target.is_dir() else 1
+        tracked = bool(_git(stage_dir, "ls-files", "--", path).strip())
+        cleared.append({"path": path, "files": files, "tracked": tracked})
+        if tracked:
+            tracked_paths.append(path)
+        if target.is_dir() and not target.is_symlink():
+            _remove_tree(target)
+        else:
+            target.unlink()
+    if tracked_paths:
+        _git(stage_dir, "rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", *tracked_paths)
+        _git(stage_dir, "-c", "user.name=Boardwright stage", "-c", "user.email=stage@boardwright.invalid",
+             "commit", "--quiet", "--no-verify", "-m", "Clear generated outputs before the local preview build")
+    return cleared
 
 
 def _write_evidence_marker(record: dict) -> None:
@@ -588,7 +635,9 @@ def format_record(record: dict) -> list[str]:
         f"  Base commit: {source.get('base_commit', '')}" + (" + uncommitted changes" if source.get("dirty") else " (clean)"),
         f"  Staged source: tree {source.get('staged_tree', '?')}, digest {source.get('source_digest', '')[:16]}",
         f"  Toolchain: {toolchain.get('image', '')}" + (f" ({toolchain['image_id']})" if toolchain.get("image_id") else ""),
-        f"  Outputs: {record.get('outputs', '')}",
+        (f"  Outputs: {record.get('outputs', '')}" if record.get("status") == "succeeded" else
+         f"  Outputs: none usable ({record.get('status')}; the stage holds only this run's partial output): "
+         f"{record.get('outputs', '')}"),
         f"  Evidence: {record.get('evidence', '')}",
     ]
     if record.get("elapsed_seconds") is not None:

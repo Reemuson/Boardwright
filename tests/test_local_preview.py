@@ -213,7 +213,10 @@ class LocalRunTests(PreviewTestCase):
         source = record["source"]
         self.assertFalse(source["dirty"])
         self.assertEqual(_git(self.repo, "rev-parse", "HEAD").strip(), source["base_commit"])
-        self.assertEqual(source["base_commit"], source["staged_commit"])  # clean: the commit itself
+        # Clean: the base commit plus only the stage-side removal of generated
+        # files (README.md is tracked here), recorded as cleared outputs.
+        self.assertEqual([{"path": "README.md", "files": 1, "tracked": True}], record["cleared_outputs"])
+        self.assertEqual(source["base_commit"], _git(Path(record["outputs"]), "rev-parse", "HEAD~1").strip())
         self.assertEqual(local_preview_image("9"), record["toolchain"]["image"])
         self.assertEqual("sha256:feed", record["toolchain"]["image_id"])
         self.assertEqual("preview", record["build_record_stage"]["purpose"])
@@ -463,6 +466,42 @@ class EvidenceSeparationTests(PreviewTestCase):
         state = PreviewState("ready", "boardwright-preview-CHECKED", record["source"]["base_commit"], run=None)
         with self.assertRaises(BoardwrightError):
             mark_preview_reviewed(SimpleNamespace(root=self.repo), state)
+
+
+class GeneratedOutputTests(PreviewTestCase):
+    """F6: previously generated outputs never survive into a preview's stage."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        for path, text in (("Manufacturing/Gerbers/old-F_Cu.gbr", "G04 old*\n"), ("Schematic/old.pdf", "%PDF old"),
+                           ("Reports/old-drc.rpt", "old\n"), ("assets/renders/old_top.png", "png")):
+            _write(self.repo / path, text)
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "accepted outputs (tracked)")
+        self.before = snapshot(self.repo)
+
+    def test_tracked_outputs_are_cleared_from_the_stage_only(self) -> None:
+        record = self.run_preview("DRAFT").record
+        staged = self.runner.staged  # what the build saw
+        for old in ("Manufacturing/Gerbers/old-F_Cu.gbr", "Schematic/old.pdf", "Reports/old-drc.rpt",
+                    "assets/renders/old_top.png", "README.md"):
+            self.assertNotIn(old, staged)
+        cleared = {item["path"]: item for item in record["cleared_outputs"]}
+        self.assertEqual({"Manufacturing", "Schematic", "Reports", "README.md", "assets/renders"}, set(cleared))
+        self.assertTrue(all(item["tracked"] for item in cleared.values()))
+        self.assertEqual(self.before, snapshot(self.repo))  # the working tree keeps them
+        tree = _git(Path(record["outputs"]), "ls-tree", "-r", "--name-only", "HEAD")
+        self.assertNotIn("Schematic/old.pdf", tree)  # the staged identity records the removal
+
+    def test_failed_build_cannot_present_old_outputs(self) -> None:
+        record = self.run_preview("CHECKED", runner=FakeRunner(status=2)).record
+        outputs = Path(record["outputs"])
+        self.assertFalse((outputs / "Manufacturing" / "Gerbers" / "old-F_Cu.gbr").exists())
+        self.assertFalse((outputs / "Schematic" / "old.pdf").exists())
+        text = "\n".join(local_preview.format_record(record))
+        self.assertIn("Outputs: none usable (failed", text)
+        self.assertIsNone(local_preview.latest_outputs(self.repo))
+        self.assertEqual("failed", local_preview.preview_status(self.repo)[0].state)
 
 
 class LockTests(PreviewTestCase):
