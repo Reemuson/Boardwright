@@ -504,6 +504,106 @@ class GeneratedOutputTests(PreviewTestCase):
         self.assertEqual("failed", local_preview.preview_status(self.repo)[0].state)
 
 
+class SourceCompletenessTests(PreviewTestCase):
+    """F4: submodules, file types, referenced images, non-ASCII names, dependencies."""
+
+    def test_submodule_is_refused_not_silently_omitted(self) -> None:
+        sha = _git(self.repo, "rev-parse", "HEAD").strip()
+        _git(self.repo, "update-index", "--add", "--cacheinfo", f"160000,{sha},libs/shared lib")
+        _git(self.repo, "commit", "-q", "-m", "add submodule")
+        outcome = self.run_preview("CHECKED")
+        self.assertFalse(outcome.ok)
+        self.assertIn("Git submodules (libs/shared lib)", outcome.message)
+        self.assertEqual([], self.runner.calls)
+        self.assertFalse(local_preview.index_dir(self.repo).exists())
+
+    def test_gitmodules_alone_is_refused(self) -> None:
+        _write(self.repo / ".gitmodules", '[submodule "kicad-libs"]\n\tpath = kicad-libs\n\turl = https://example.invalid/l.git\n')
+        _git(self.repo, "add", ".gitmodules")
+        _git(self.repo, "commit", "-q", "-m", "declare submodule")
+        outcome = self.run_preview("CHECKED")
+        self.assertFalse(outcome.ok)
+        self.assertIn("kicad-libs", outcome.message)
+
+    def test_extended_project_file_types(self) -> None:
+        names = ["db/parts.kicad_dbl", "db/vendor.kicad_httplib", "3d/a.stpz", "3d/b.wrz", "3d/c.igs", "3d/d.IGES"]
+        for name in names:
+            _write(self.repo / name, "x\n")
+        included = {c.path for c in local_preview.plan_source(self.repo).included}
+        self.assertEqual(set(names), included)
+
+    def test_untracked_images_only_when_referenced(self) -> None:
+        _write(self.repo / ".boardwright" / "project.yaml", "project: {name: board}\nassets: {logo: assets/logos/new logo.png}\n")
+        _write(self.repo / "assets" / "logos" / "new logo.png", b"\x89PNG logo")
+        _write(self.repo / "docs" / "notes.md", "![stack-up](figures/stackup.svg)\n")
+        _write(self.repo / "docs" / "figures" / "stackup.svg", "<svg/>")
+        _write(self.repo / "photo of desk.jpg", b"\xff\xd8 private")
+        _write(self.repo / "assets" / "secret-badge.png", b"\x89PNG")
+        _write(self.repo / "README.md", "# board\n![](assets/secret-badge.png)\n")
+        plan = local_preview.plan_source(self.repo)
+        included = {c.path for c in plan.included}
+        excluded = dict(plan.excluded)
+        self.assertIn("assets/logos/new logo.png", included)
+        self.assertIn("docs/figures/stackup.svg", included)
+        self.assertEqual("untracked image not referenced by a KiCad or project file", excluded["photo of desk.jpg"])
+        self.assertEqual("looks like a credential", excluded["assets/secret-badge.png"])
+
+    def test_non_ascii_file_names(self) -> None:
+        _write(self.repo / "Größe.kicad_sym", "(kicad_symbol_lib v1)\n")
+        _write(self.repo / "Ünterblatt.kicad_sch", "(kicad_sch old)\n")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "non-ascii names")
+        _write(self.repo / "Größe.kicad_sym", "(kicad_symbol_lib v2)\n")      # modified, tracked
+        (self.repo / "Ünterblatt.kicad_sch").unlink()                        # deleted, tracked
+        _write(self.repo / "Schaltplan ü 電源.kicad_sch", "(kicad_sch new)\n")  # untracked
+        before = snapshot(self.repo)
+        record = self.run_preview("CHECKED").record
+        self.assertEqual(before, snapshot(self.repo))
+        included = {c["path"] for c in record["source"]["included"]}
+        self.assertEqual({"Größe.kicad_sym", "Schaltplan ü 電源.kicad_sch"}, included)
+        self.assertEqual(["Ünterblatt.kicad_sch"], record["source"]["deleted"])
+        staged = Path(record["outputs"])
+        self.assertEqual("(kicad_symbol_lib v2)\n", (staged / "Größe.kicad_sym").read_text(encoding="utf-8"))
+        self.assertTrue((staged / "Schaltplan ü 電源.kicad_sch").is_file())
+        self.assertFalse((staged / "Ünterblatt.kicad_sch").exists())
+
+    def test_dependency_report(self) -> None:
+        _write(self.repo / "3d" / "present.step", "step")
+        _write(self.repo / "lib" / "parts.pretty" / "R.kicad_mod", "(footprint R)\n")
+        _write(self.repo / "board.kicad_pcb", "\n".join([
+            "(kicad_pcb",
+            '  (model "${KICAD9_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0603.step")',
+            '  (model "${KIPRJMOD}/3d/present.step")',
+            '  (model "${KIPRJMOD}/3d/missing.step")',
+            '  (model "C:\\\\Users\\\\someone\\\\models\\\\x.wrl")',
+            '  (model "${MYLIBS}/y.step")',
+            '  (model "${KICAD8_3DMODEL_DIR}/z.step")',
+            ")", ""]))
+        _write(self.repo / "fp-lib-table", "\n".join([
+            "(fp_lib_table",
+            '  (lib (name "parts")(type "KiCad")(uri "${KIPRJMOD}/lib/parts.pretty"))',
+            '  (lib (name "corp")(type "KiCad")(uri "/srv/libs/corp.pretty"))',
+            ")", ""]))
+        record = self.run_preview("CHECKED").record
+        dependencies = record["dependencies"]
+        self.assertFalse(dependencies["complete"])
+        reasons = {d["reference"]: d["reason"] for d in dependencies["unresolved"]}
+        self.assertEqual("missing from the staged project", reasons["${KIPRJMOD}/3d/missing.step"])
+        self.assertEqual("absolute path outside the project", reasons["C:\\\\Users\\\\someone\\\\models\\\\x.wrl"])
+        self.assertIn("MYLIBS", reasons["${MYLIBS}/y.step"])
+        self.assertIn("another KiCad version", reasons["${KICAD8_3DMODEL_DIR}/z.step"])
+        self.assertEqual("absolute path outside the project", reasons["/srv/libs/corp.pretty"])
+        self.assertNotIn("${KIPRJMOD}/3d/present.step", reasons)
+        self.assertNotIn("${KICAD9_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0603.step", reasons)
+        self.assertNotIn("${KIPRJMOD}/lib/parts.pretty", reasons)
+        self.assertEqual({"3d-model": 6, "footprint-library": 2, "symbol-library": 0}, dependencies["checked"])
+        text = "\n".join(local_preview.format_record(record))
+        self.assertIn("not a complete reproduction", text)
+
+    def test_complete_dependencies_are_reported_as_complete(self) -> None:
+        self.assertTrue(self.run_preview("CHECKED").record["dependencies"]["complete"])
+
+
 class LockTests(PreviewTestCase):
     def test_busy_preview_does_not_touch_the_stage_or_the_index(self) -> None:
         from boardwright.stage_lock import stage_lock

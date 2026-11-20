@@ -192,10 +192,24 @@ Source policy for uncommitted work:
 | Source | Included |
 | --- | --- |
 | Modified or deleted tracked files | Yes, as saved on disk, except `.boardwright/local.yaml`, `*.kicad_prl`, `*-backups/`, `*.lck`, `fp-info-cache`, `_autosave-*`, `*.bak`, `*~` |
-| Untracked KiCad sources (`*.kicad_sch`, `*.kicad_pcb`, `*.kicad_pro`, `*.kicad_sym`, `*.kicad_mod`, `*.kicad_wks`, `*.kicad_dru`, `fp-lib-table`, `sym-lib-table`, `*.step`, `*.stp`, `*.wrl`) | Yes, unless the name looks like a credential |
+| Untracked KiCad sources (`*.kicad_sch`, `*.kicad_pcb`, `*.kicad_pro`, `*.kicad_sym`, `*.kicad_mod`, `*.kicad_wks`, `*.kicad_dru`, `*.kicad_dbl`, `*.kicad_httplib`, `fp-lib-table`, `sym-lib-table`, `*.step`, `*.stp`, `*.stpz`, `*.wrl`, `*.wrz`, `*.igs`, `*.iges`) | Yes, unless the name looks like a credential |
+| Untracked images (`*.png`, `*.jpg`, `*.jpeg`, `*.svg`, `*.bmp`) | Only when a KiCad file, `.boardwright/project.yaml`, a KiBot YAML or a project Markdown file names the image's path (repository-relative, relative to the naming file, or `${KIPRJMOD}/…`), and the name does not look like a credential |
 | Untracked names like credentials (`.env*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `.netrc`, `.git-credentials`, `*credential*`, `*secret*`, `*token*`, `*.kdbx`) | Never |
 | Other untracked files | No; listed as excluded. `git add -N <file>` includes one |
 | Ignored files (including `.boardwright/local.yaml`) | Never |
+
+Git submodules (gitlinks, or paths in `.gitmodules`) are refused: their
+content cannot be reproduced in the stage, and building without it would omit
+those libraries silently. Nothing is built.
+
+After staging, the staged project's `(model …)` paths and project library
+table `(uri …)` entries are classified: `${KICAD<N>_…_DIR}` of the pinned KiCad
+version resolves to the image's stock libraries; `${KIPRJMOD}` and relative
+paths must exist in the stage; other KiCad versions' variables, other
+environment variables and absolute paths are reported as unresolved. The
+record's `dependencies.complete` is then false and the CLI and TUI say the
+preview is not a complete reproduction. Libraries referenced only by nickname
+through a user's global tables are not detectable here (ERC reports them).
 
 `--plan` prints the included, deleted and excluded files. A tracked
 `local.yaml` is refused. `local.yaml` therefore never reaches a preview, a

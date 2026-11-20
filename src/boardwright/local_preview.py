@@ -37,6 +37,7 @@ import fnmatch
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -67,8 +68,14 @@ ALWAYS_EXCLUDED = (
 # Untracked files that are project sources and may be included.
 UNTRACKED_PROJECT_PATTERNS = (
     "*.kicad_sch", "*.kicad_pcb", "*.kicad_pro", "*.kicad_sym", "*.kicad_mod", "*.kicad_wks", "*.kicad_dru",
-    "fp-lib-table", "sym-lib-table", "*.step", "*.stp", "*.wrl",
+    "*.kicad_dbl", "*.kicad_httplib", "fp-lib-table", "sym-lib-table",
+    "*.step", "*.stp", "*.stpz", "*.wrl", "*.wrz", "*.igs", "*.iges",
 )
+# Untracked images are included only when a project file names their path
+# (a worksheet or title-block logo, a render, a documentation figure).
+IMAGE_PATTERNS = ("*.png", "*.jpg", "*.jpeg", "*.svg", "*.bmp")
+REFERENCE_SOURCES = ("*.kicad_sch", "*.kicad_pcb", "*.kicad_pro", "*.kicad_wks", "*.md",
+                     ".boardwright/project.yaml", "boardwright_resources/*.yaml")
 # Never included when untracked, whatever the extension (matched on the file name, case-insensitively).
 CREDENTIAL_PATTERNS = (
     ".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa*", "id_ed25519*", "id_ecdsa*",
@@ -154,6 +161,34 @@ def _read_bytes(path: Path) -> bytes:
     return path.read_bytes()
 
 
+def _reference_texts(repo: Path, untracked: set[str]) -> list[tuple[str, str]]:
+    """(path, text) of every file that may name an image: tracked or eligible untracked."""
+
+    tracked = [p for p in _git(repo, "ls-files", "-z").split("\0") if p]
+    candidates = [p for p in tracked + sorted(untracked)
+                  if _matches(p, REFERENCE_SOURCES) and not _matches(p, CREDENTIAL_PATTERNS + ALWAYS_EXCLUDED)]
+    texts = []
+    for path in candidates:
+        try:
+            texts.append((path, (repo / path).read_text(encoding="utf-8", errors="replace")))
+        except OSError:
+            continue
+    return texts
+
+
+def _referenced(repo: Path, image: str, references: list[tuple[str, str]]) -> bool:
+    """Whether some project file names ``image`` by its repository path or by a path relative to itself."""
+
+    for source, text in references:
+        if source == image:
+            continue
+        relative = os.path.relpath(image, start=str(PurePosixPath(source).parent) or ".").replace(os.sep, "/")
+        for form in {image, relative, "./" + relative, "${KIPRJMOD}/" + image}:
+            if form in text:
+                return True
+    return False
+
+
 def plan_source(repo: Path, snapshot: Path | None = None) -> SourcePlan:
     """Apply the source policy to the working tree (read-only).
 
@@ -169,6 +204,7 @@ def plan_source(repo: Path, snapshot: Path | None = None) -> SourcePlan:
     untracked = {p for p in _git(repo, "ls-files", "-z", "--others", "--exclude-standard").split("\0") if p}
     included: list[SourceChange] = []
     excluded: list[tuple[str, str]] = []
+    references = _reference_texts(repo, untracked)
     for path in sorted(modified - deleted):
         if _matches(path, ALWAYS_EXCLUDED):
             excluded.append((path, "per-user or private file"))
@@ -181,6 +217,13 @@ def plan_source(repo: Path, snapshot: Path | None = None) -> SourcePlan:
             excluded.append((path, "per-user or private file"))
         elif _matches(path, CREDENTIAL_PATTERNS):
             excluded.append((path, "looks like a credential"))
+        elif _matches(path, IMAGE_PATTERNS):
+            if not _referenced(repo, path, references):
+                excluded.append((path, "untracked image not referenced by a KiCad or project file"))
+            elif (repo / path).is_symlink() or not (repo / path).is_file():
+                excluded.append((path, "not a regular file"))
+            else:
+                included.append(SourceChange(path, "untracked", _read_once(repo, path, snapshot)))
         elif not _matches(path, UNTRACKED_PROJECT_PATTERNS):
             excluded.append((path, "untracked and not a KiCad project file"))
         elif (repo / path).is_symlink() or not (repo / path).is_file():
@@ -304,6 +347,12 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
 
     if _git(repo, "ls-files", "--", LOCAL_OVERRIDES).strip():
         raise BoardwrightError(f"{LOCAL_OVERRIDES} is tracked by Git; it must stay local (untrack it) before previewing.")
+    submodules = submodule_paths(repo)
+    if submodules:
+        raise BoardwrightError(
+            "This project uses Git submodules (" + ", ".join(submodules) + "). A local preview cannot reproduce "
+            "submodule content in its stage, and building without it would silently omit those libraries; "
+            "nothing was built. Vendor the library into the project, or build where submodules are checked out.")
     started, start = _now(), clock()
     # Snapshot integrity (the stage is the source of truth):
     # 1. fingerprint the tree; 2. read every included file once into a
@@ -360,6 +409,9 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
             raise BoardwrightError(f"HEAD moved while staging ({plan.base_commit[:12]} -> "
                                    f"{str(marker.get('head'))[:12]}); run the preview again.")
         record["cleared_outputs"] = clear_generated_outputs(workdir)
+        record["dependencies"] = scan_dependencies(workdir, kicad)
+        for item in record["dependencies"]["unresolved"]:
+            echo(f"[preview] warning: unresolved {item['kind']} {item['reference']} in {item['file']}: {item['reason']}")
         for item in record["cleared_outputs"]:
             echo(f"[preview] cleared {item['path']} from the stage ({item['files']} file(s), "
                  f"{'tracked' if item['tracked'] else 'untracked'}); the build regenerates it")
@@ -405,6 +457,85 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
         _write_json(workdir / ".git" / PREVIEW_RECORD, record)
     _write_json(index, record)
     return record
+
+
+def submodule_paths(repo: Path) -> list[str]:
+    """Gitlinks in the index, plus any path declared in .gitmodules."""
+
+    paths = []
+    for entry in _git(repo, "ls-files", "-s", "-z").split("\0"):
+        if entry.startswith("160000 "):
+            paths.append(entry.split("\t", 1)[1])
+    if (repo / ".gitmodules").is_file():
+        listed = _git(repo, "config", "-f", ".gitmodules", "--get-regexp", r"^submodule\..*\.path$", check=False)
+        paths += [line.split(" ", 1)[1] for line in listed.splitlines() if " " in line]
+        if not paths:
+            paths.append(".gitmodules")
+    return sorted(set(paths))
+
+
+_MODEL = re.compile(r'\(model\s+"((?:[^"\\]|\\.)*)"')
+_URI = re.compile(r'\(uri\s+"((?:[^"\\]|\\.)*)"')
+_VAR = re.compile(r"^\$\{([A-Za-z0-9_]+)\}")
+
+
+def _classify(reference: str, kind: str, source: str, stage_dir: Path, kicad: str) -> dict | None:
+    """None when the reference resolves in the stage or the pinned image; else why it may not."""
+
+    stock = {f"KICAD{kicad}_3DMODEL_DIR", f"KICAD{kicad}_FOOTPRINT_DIR", f"KICAD{kicad}_SYMBOL_DIR"}
+    value = reference.replace("\\", "/")
+    match = _VAR.match(value)
+    if match:
+        name = match.group(1)
+        if name in stock:
+            return None  # provided by the pinned image's stock libraries
+        if name == "KIPRJMOD":
+            relative = value[match.end():].lstrip("/")
+            if (stage_dir / relative).exists():
+                return None
+            return {"kind": kind, "reference": reference, "file": source, "reason": "missing from the staged project"}
+        if name.startswith("KICAD") and name.endswith(("_3DMODEL_DIR", "_FOOTPRINT_DIR", "_SYMBOL_DIR")):
+            return {"kind": kind, "reference": reference, "file": source,
+                    "reason": f"stock library of another KiCad version; may not resolve with KiCad {kicad}"}
+        return {"kind": kind, "reference": reference, "file": source,
+                "reason": f"environment variable {name} is not defined in the build container"}
+    if re.match(r"^[A-Za-z]:/", value) or value.startswith("/") or value.startswith("~"):
+        return {"kind": kind, "reference": reference, "file": source, "reason": "absolute path outside the project"}
+    if (stage_dir / PurePosixPath(source).parent / value).exists() or (stage_dir / value).exists():
+        return None
+    return {"kind": kind, "reference": reference, "file": source, "reason": "missing from the staged project"}
+
+
+def scan_dependencies(stage_dir: Path, kicad: str) -> dict:
+    """3D models and library tables the staged project names, and those that may not resolve.
+
+    Only what can be detected reliably from the staged files: ``(model ...)``
+    paths in boards and ``(uri ...)`` entries in project library tables.
+    Libraries named only by nickname (resolved through a user's global
+    tables) are not visible here; ERC reports those.
+    """
+
+    checked = {"3d-model": 0, "footprint-library": 0, "symbol-library": 0}
+    unresolved: list[dict] = []
+    seen = set()
+    sources = [(p, "3d-model", _MODEL) for p in stage_dir.rglob("*.kicad_pcb")]
+    sources += [(p, "footprint-library", _URI) for p in stage_dir.rglob("fp-lib-table")]
+    sources += [(p, "symbol-library", _URI) for p in stage_dir.rglob("sym-lib-table")]
+    for path, kind, pattern in sources:
+        if ".git" in path.relative_to(stage_dir).parts:
+            continue
+        source = path.relative_to(stage_dir).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for reference in pattern.findall(text):
+            if (kind, reference) in seen:
+                continue
+            seen.add((kind, reference))
+            checked[kind] += 1
+            problem = _classify(reference, kind, source, stage_dir, kicad)
+            if problem:
+                unresolved.append(problem)
+    return {"checked": checked, "unresolved": unresolved[:100], "unresolved_count": len(unresolved),
+            "complete": not unresolved}
 
 
 def generated_paths() -> tuple[str, ...]:
@@ -648,6 +779,12 @@ def format_record(record: dict) -> list[str]:
         lines.append(f"  Deleted: {', '.join(source['deleted'])}")
     if source.get("excluded"):
         lines.append(f"  Excluded: {', '.join(e['path'] + ' (' + e['reason'] + ')' for e in source['excluded'])}")
+    dependencies = record.get("dependencies")
+    if dependencies and not dependencies.get("complete", True):
+        lines.append(f"  Dependencies: {dependencies.get('unresolved_count')} unresolved reference(s); "
+                     "outputs may be incomplete and this is not a complete reproduction")
+        lines += [f"    - {d['kind']} {d['reference']} ({d['file']}): {d['reason']}"
+                  for d in dependencies.get("unresolved", [])[:10]]
     if record.get("experimental_toolchain"):
         lines.append("  KiCad 10 is experimental.")
     if record.get("error"):
