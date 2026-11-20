@@ -295,6 +295,23 @@ DRC/ERC reports, and Gerbers/drills that differ only in timestamps and
 generator banners. The testbench board reports one DRC error in both builds
 (a design property, not a preview effect).
 
+After the F1–F6 corrections (same project, warm cache):
+
+| Run | Elapsed | Build | Design rules (from the generated reports) |
+| --- | --- | --- | --- |
+| Clean CHECKED | 188.5 s | completed | DRC 28 violations: 1 error, 26 warnings, 1 excluded; 0 unconnected; 0 footprint errors; ERC 0 errors, 4 warnings; KiBot 1 DRC error |
+| Clean DRAFT | 110.6 s | completed | unknown (DRAFT generates no DRC/ERC reports) |
+| Dirty CHECKED | 183.2 s | completed | as clean CHECKED |
+| Dirty DRAFT | 110.3 s | completed | unknown |
+
+The working tree was byte-identical after every run. DRAFT now takes about
+50 s longer because the renders are regenerated: before F6 the committed
+renders stayed in the stage and were shown as the preview's output. Dirty
+CHECKED vs the earlier direct build of the same inputs: 49/49 controlled
+outputs, 0 blocking differences, the same 36 nondeterministic byte
+differences; the staged trees differ only by the six cleared generated files
+(`README.md`, four renders, `.gitkeep`).
+
 ## 5. Local releases
 
 The local release is the GitHub release flow with the server replaced by the
