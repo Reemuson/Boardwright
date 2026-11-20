@@ -156,7 +156,10 @@ class CheckBaselineTests(unittest.TestCase):
     def write_outputs(self, files: dict[str, str]) -> None:
         for name, text in files.items():
             (self.root / name).parent.mkdir(parents=True, exist_ok=True)
-            (self.root / name).write_text(text, encoding="utf-8")
+            # LF on every platform: the published package is LF, so unchanged
+            # files are byte-identical here (Windows text mode once made them
+            # differ only in line endings and hid a counting defect).
+            (self.root / name).write_text(text, encoding="utf-8", newline="\n")
 
     def check(self, fetch) -> tuple[int, str]:
         out, err = io.StringIO(), io.StringIO()
