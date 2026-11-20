@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import stat
 import subprocess
 import tempfile
@@ -353,7 +354,8 @@ def _remove_test_tree(path: Path) -> None:
         function(target)
 
     if path.exists():
-        shutil.rmtree(path, onexc=retry)
+        # onexc needs Python 3.12; onerror (3.11) takes the same callback here.
+        shutil.rmtree(path, **({"onexc": retry} if sys.version_info >= (3, 12) else {"onerror": retry}))
 
 
 if __name__ == "__main__":
