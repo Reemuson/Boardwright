@@ -5,7 +5,9 @@
 
 Policy (``docs/LOCAL_FIRST.md`` section 3):
 
-- ``DRAFT`` and ``CHECKED`` previews build locally, even when GitHub is usable.
+- Every preview variant (``DRAFT``, ``CHECKED``, ``PRELIMINARY``,
+  ``RELEASED``) builds locally by default, even when GitHub is usable. A
+  preview is never release evidence.
 - Releases use GitHub when the project has a usable GitHub remote, and run
   locally when there is no remote.
 - An explicit override (``--backend``) beats the project setting
@@ -32,14 +34,16 @@ from typing import Callable, Sequence
 
 Runner = Callable[[Sequence[str], Path], "CommandResult"]
 
-PREVIEW_LOCAL_VARIANTS = ("DRAFT", "CHECKED")
+PREVIEW_VARIANTS = ("DRAFT", "CHECKED", "PRELIMINARY", "RELEASED")
 SETTINGS = ("auto", "local", "github")
 WORKFLOWS = ("prepare-release.yaml", "release.yaml", "dev-preview.yaml")
 _GITHUB_URL = re.compile(
-    r"^(?:https://(?:[^@/]+@)?github\.com/|ssh://git@github\.com/|git@github\.com:)"
+    r"^(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)"
     r"(?P<repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$"
 )
-_USERINFO = re.compile(r"^[a-z][a-z0-9+.-]*://[^/@]*:[^/@]*@", re.IGNORECASE)
+# Any userinfo in an http(s) URL is a credential (a token alone is enough).
+# ssh "git@" is a login name, not a secret.
+_USERINFO = re.compile(r"^https?://[^/@]+@", re.IGNORECASE)
 
 
 class Operation(Enum):
@@ -108,6 +112,8 @@ def classify_remote_url(url: str) -> tuple[str, str]:
     url = url.strip()
     if not url:
         return "none", ""
+    if _USERINFO.match(url):
+        return "unsupported", ""
     match = _GITHUB_URL.match(url)
     if match:
         return "github", match["repo"]
@@ -119,12 +125,13 @@ def inspect_remote(root: Path, *, run: Runner = run_command, check_access: bool 
 
     got = run(["git", "remote", "get-url", "origin"], root)
     url = got.stdout.strip() if got.returncode == 0 else ""
+    if _USERINFO.match(url):
+        # Checked before classification so the URL is never stored or echoed.
+        return RemoteInfo("unsupported", "(credentials removed)",
+                          problems=("the origin URL embeds credentials; remove them from the remote",))
     kind, repository = classify_remote_url(url)
     if kind == "none":
         return RemoteInfo("none")
-    if _USERINFO.match(url):
-        return RemoteInfo(kind, "(credentials removed)", repository,
-                          problems=("the origin URL embeds credentials; remove them from the remote",))
     if kind == "unsupported":
         return RemoteInfo("unsupported", url, problems=(f"origin {url} is not a GitHub repository",))
     workflows = all((root / ".github" / "workflows" / name).is_file() for name in WORKFLOWS)
@@ -214,11 +221,11 @@ def select_backend(
         return github(f"explicit {source} setting: github")
 
     if operation is Operation.PREVIEW:
-        if variant.upper() in PREVIEW_LOCAL_VARIANTS:
-            return local(f"{variant.upper()} previews build locally by default")
-        if remote.usable_github:
-            return github(f"{variant.upper() or 'this'} preview builds on GitHub by default when GitHub is usable")
-        return local("no usable GitHub remote; previews build locally")
+        name = variant.upper()
+        if name and name not in PREVIEW_VARIANTS:
+            return Selection(operation, None, source, "invalid variant",
+                             (f"variant {variant!r} is not one of {', '.join(PREVIEW_VARIANTS)}",))
+        return local(f"{name or 'all'} previews build locally by default (never release evidence)")
 
     if remote.kind == "none":
         return local("the project has no remote: releases are local")

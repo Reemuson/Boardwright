@@ -48,10 +48,19 @@ class PreviewDefaultTests(unittest.TestCase):
         self.assertIsNone(s.backend)
         self.assertIn("--backend github", s.problems[0])
 
-    def test_other_variants_use_usable_github_else_local(self) -> None:
-        self.assertEqual(Backend.GITHUB, pick(Operation.PREVIEW, GITHUB, variant="RELEASED").backend)
-        self.assertEqual(Backend.LOCAL, pick(Operation.PREVIEW, NONE, variant="RELEASED").backend)
-        self.assertEqual(Backend.LOCAL, pick(Operation.PREVIEW, OTHER, variant="PRELIMINARY").backend)
+    def test_every_variant_is_local_by_default_even_with_usable_github(self) -> None:
+        # Owner decision 1 (2026-11-20): all preview variants default to local Docker.
+        for remote in (GITHUB, NONE, OTHER, GITHUB_NO_AUTH):
+            for variant in ("DRAFT", "CHECKED", "PRELIMINARY", "RELEASED", ""):
+                s = pick(Operation.PREVIEW, remote, variant=variant)
+                self.assertEqual(Backend.LOCAL, s.backend, (remote.kind, variant))
+
+    def test_github_preview_only_by_explicit_choice(self) -> None:
+        s = pick(Operation.PREVIEW, GITHUB, variant="RELEASED", override="github")
+        self.assertEqual((Backend.GITHUB, "override"), (s.backend, s.source))
+
+    def test_unknown_preview_variant_is_refused(self) -> None:
+        self.assertIsNone(pick(Operation.PREVIEW, GITHUB, variant="FINAL").backend)
 
 
 class ReleaseDefaultTests(unittest.TestCase):
@@ -186,6 +195,19 @@ class InspectionTests(unittest.TestCase):
         self.assertNotIn("secret", info.url + " ".join(info.problems))
         self.assertFalse(info.usable_github)
         self.assertEqual(["git remote get-url"], run.calls)
+
+    def test_token_only_userinfo_is_a_credential(self) -> None:
+        for url in ("https://ghp_abcdef123@github.com/o/r.git", "https://tok3n@gitlab.com/o/r.git"):
+            info, run = self._remote(CommandResult(0, url + "\n"))
+            text = format_selection(pick(Operation.RELEASE, info)) + info.url + " ".join(info.problems)
+            self.assertNotIn("ghp_abcdef123", text)
+            self.assertNotIn("tok3n", text)
+            self.assertFalse(info.usable_github)
+            self.assertEqual(["git remote get-url"], run.calls)
+            self.assertEqual("unsupported", classify_remote_url(url)[0])
+
+    def test_ssh_login_name_is_not_a_credential(self) -> None:
+        self.assertEqual(("github", "o/r"), classify_remote_url("git@github.com:o/r.git"))
 
     def test_unsupported_remote_is_not_queried_with_gh(self) -> None:
         info, run = self._remote(CommandResult(0, "https://gitlab.com/o/r.git\n"))
