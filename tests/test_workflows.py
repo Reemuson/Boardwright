@@ -142,7 +142,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('"--release-env"', candidate)
         self.assertIn("Build curated source archive", release)
         self.assertIn("boardwright-${{ github.ref_name }}-source.zip", release)
-        self.assertIn("Curated source package", release)
+        package = Path("src/boardwright/release_package.py").read_text(encoding="utf-8")
+        self.assertIn("Curated source package", package)
+        self.assertIn("COPY_SET + (source_zip_name(tag),)", package)
         self.assertIn("RELEASE_INCLUDE_SOURCE_ARCHIVE", release)
 
     def test_preview_runs_are_explicitly_dispatched(self) -> None:
@@ -204,17 +206,20 @@ class WorkflowTests(unittest.TestCase):
     def test_prepare_release_force_adds_ignored_release_metadata(self) -> None:
         text = Path(".github/workflows/prepare-release.yaml").read_text(encoding="utf-8")
 
-        self.assertIn(
-            "git add -f .boardwright/revision_history_variables.env .boardwright/release.env",
-            text,
-        )
-        self.assertIn("git add CHANGELOG.md .boardwright/project.yaml .boardwright/document_revisions.yaml", text)
+        # Staging moved to the shared module (docs/LOCAL_FIRST.md section 6).
+        self.assertIn("python -m boardwright.release_commit", text)
+        module = Path("src/boardwright/release_commit.py").read_text(encoding="utf-8")
+        self.assertIn('".boardwright/revision_history_variables.env", ".boardwright/release.env"', module)
+        self.assertIn('"CHANGELOG.md", ".boardwright/project.yaml", ".boardwright/document_revisions.yaml"', module)
+        self.assertIn('_git(root, "add", "-f", *group)', module)
 
     def test_release_notes_do_not_duplicate_tag_heading(self) -> None:
         text = Path(".github/workflows/release.yaml").read_text(encoding="utf-8")
 
+        module = Path("src/boardwright/release_package.py").read_text(encoding="utf-8")
+        self.assertIn("python -m boardwright.release_package notes", text)
         self.assertNotIn('echo "# ${tag}"', text)
-        self.assertIn('echo "Generated \\`${RELEASE_VARIANT}\\` package', text)
+        self.assertIn('out = [f"Generated `{variant}` package for `{repository}`.\\n", "\\n"]', module)
 
     def test_prepare_release_can_dispatch_draft_release(self) -> None:
         prepare = Path(".github/workflows/prepare-release.yaml").read_text(encoding="utf-8")

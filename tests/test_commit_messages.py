@@ -120,9 +120,17 @@ def _steps(workflow: str) -> dict[str, dict]:
 
 
 def _commit_command(script: str) -> str:
-    start = script.index("# Trailers")
+    """The workflow lines from the reviewed-run URL to the release commit."""
+
+    start = script.index('reviewed_run_url=""')
     end = script.index("git push", start)
     return script[start:end]
+
+
+RELEASE_FILES = ("CHANGELOG.md", ".boardwright/project.yaml", ".boardwright/document_revisions.yaml",
+                 ".boardwright/revision_history_variables.env", ".boardwright/release.env",
+                 ".boardwright/releases.yaml", ".boardwright/accepted_manifest.json",
+                 ".boardwright/review_candidate.json", "README.md")
 
 
 @unittest.skipUnless(shutil.which("bash"), "needs bash (Git Bash on Windows)")
@@ -148,8 +156,15 @@ class GeneratedCommitTests(unittest.TestCase):
         return dict(line.split(": ", 1) for line in parsed.splitlines())
 
     def _release_snippet(self) -> str:
+        # The release files the shared module stages (src/boardwright/release_commit.py).
+        for name in RELEASE_FILES:
+            path = self.tmp / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("x\n", encoding="utf-8")
         script = _steps("prepare-release.yaml")["Commit accepted release state"]["run"]
-        return 'version="0.1.7"; variant="RELEASED"\n' + _commit_command(script)
+        src = Path(__file__).resolve().parents[1] / "src"
+        return (f'export PYTHONPATH="{src.as_posix()}"\n'
+                'version="0.1.7"; variant="RELEASED"\n' + _commit_command(script))
 
     def test_approved_release_commit_names_source_and_reviewed_run(self) -> None:
         env = {"BOARDWRIGHT_SOURCE_SHA": "f" * 40, "IN_APPROVED_REVIEW_RUN": "44644257445",

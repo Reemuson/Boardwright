@@ -3,16 +3,17 @@
 
 # Local-First Previews and Release Backends (design)
 
-Status: **design for review.** Only backend selection (`backends.py`,
-section 3) is implemented on `feat/local-first-backends`. Everything else here
-is planned and must not be described as available until it is built and
-tested.
+Status: **design for review.** Implemented on `feat/local-first-backends`
+(unpushed, not yet installed on the testbench): backend selection
+(`backends.py`, section 3) and the shared release engine (`release_package.py`,
+`release_commit.py`, section 6). Local previews and local releases are planned
+and must not be described as available until they are built and tested.
 
 ## 1. Decisions (owner, 2026-11-20)
 
 | Topic | Decision |
 | --- | --- |
-| Preview default | `DRAFT` and `CHECKED` previews build locally in Docker, even when GitHub is available. |
+| Preview default | Every preview variant (`DRAFT`, `CHECKED`, `PRELIMINARY`, `RELEASED`) builds locally in Docker, even when GitHub is available. A preview is never release evidence. |
 | Uncommitted changes | Local previews may include them through isolated staging (`container stage --worktree`). The developer's working tree is never modified, and such a build is never release evidence. |
 | Release default | A usable GitHub remote means GitHub. No remote means a fully local release. |
 | Overrides | Explicit backend overrides for previews and releases. |
@@ -20,6 +21,11 @@ tested.
 | Unsupported remotes | Refused explicitly (for example GitLab, a self-hosted server or a filesystem path); never assumed to be GitHub. |
 | Candidates | A local candidate never substitutes for a GitHub held candidate and never satisfies `approved_review_run`. |
 | Local releases | Fully supported: candidate, review, approval, immutable metadata, baseline verification, checksummed package, ledger. Local approval provenance is labelled as local and claims no server enforcement. |
+| Local tags | A local release never pushes its tag, even when a remote exists. Pushing is a separate, explicit action. |
+| Release store | `~/.boardwright/releases/<project-id>/` by default, configurable; `<project-id>` must be collision-resistant (not the bare project name). |
+| Publication | Local publication rebuilds from the approved annotated tag and verifies the controlled outputs against the tagged manifest. |
+| Approval signing | Unsigned local approval is allowed and is labelled as unauthenticated. Optional cryptographic signing (Git commit and tag signing) is supported. |
+| Package identity | The original release package and its checksum are preserved. Reproducible controlled outputs (`MANIFEST.txt`, accepted manifest) are not claimed to give a byte-identical zip. |
 | One engine | Both backends run the same Boardwright build and release-model code. |
 
 ## 2. Architecture
@@ -111,10 +117,9 @@ itself.
 
 | Operation | Override / project setting | Remote | Docker | Result |
 | --- | --- | --- | --- | --- |
-| Preview, `DRAFT`/`CHECKED` | auto | any | available | **local** |
-| Preview, `DRAFT`/`CHECKED` | auto | any | unavailable | refused: "Docker unavailable; use `--backend github` to build on GitHub" |
-| Preview, `PRELIMINARY`/`RELEASED` | auto | usable GitHub | any | github |
-| Preview, `PRELIMINARY`/`RELEASED` | auto | none or unsupported | available | local |
+| Preview, any variant | auto | any | available | **local** |
+| Preview, any variant | auto | any | unavailable | refused: "Docker unavailable; use `--backend github` to build on GitHub" (hint only when GitHub is usable) |
+| Preview, unknown variant | any | any | any | refused |
 | Release | auto | usable GitHub | any | **github** |
 | Release | auto | none | available | **local** |
 | Release | auto | none | unavailable | refused (Docker required) |
@@ -124,6 +129,9 @@ itself.
 | any | `local` | any | unavailable | refused |
 | any | `github` | usable GitHub | any | github |
 | any | `github` | anything else | any | refused |
+
+An `origin` URL with any http(s) userinfo (a password, or a token alone) is
+treated as a credential: it is refused, never stored and never printed.
 
 "Usable GitHub" means: an `origin` URL on `github.com` (https or ssh), `gh`
 installed and authenticated, the repository readable, and the Boardwright
@@ -268,6 +276,25 @@ The extraction must produce a byte-identical `MANIFEST.txt` and identical zip
 member lists for an existing release. It is tested against the published
 0.1.7 package before any workflow changes are installed on the testbench.
 
+**Done (2026-11-20).** The workflow shell is frozen in
+`tests/fixtures/legacy_release_steps/` and `tests/test_release_package.py`
+runs it beside the modules (and beside the new workflow steps) on synthetic
+projects. Against the published 0.1.7 package (inputs: the tagged source with
+the published generated outputs) the module gives a byte-identical
+`MANIFEST.txt` (358 entries), `RELEASE_IDENTITY.json` and
+`ACCEPTED_OUTPUT_MANIFEST.json`, the same 392 zip members and release notes
+identical to the published body; the zip bytes differ, as expected. Not yet
+exercised by a live GitHub run.
+
+Parity notes:
+
+- `release_commit` keeps a legacy quirk: when there are no
+  `assets/renders/*.png`, `git add README.md assets/renders/*.png` fails as a
+  whole, so `README.md` is not staged. Kept for parity; recorded as audit E1.
+- Running the legacy shell on Windows needs three meaning-preserving test
+  shims (Git for Windows `sha256sum` binary mode, its `awk` dynamic-regex
+  escapes, and CRLF from Windows Python). The runner needs none.
+
 ## 7. CLI and TUI
 
 - `boardwright preview [--variant V] [--backend auto|local|github] [--worktree|--committed]`.
@@ -303,15 +330,12 @@ member lists for an existing release. It is tested against the published
    download). Five runs each, cold and warm 3D cache, reported as median and
    range.
 
-## 10. Questions for the owner
+## 10. Owner answers (2026-11-20)
 
-1. A local release on a GitHub project (explicit `--backend local`): should
-   its tag ever be pushed automatically, or always by hand? The design above
-   says by hand.
-2. Release store default location: `~/.boardwright/releases/<project-id>/`
-   (proposed), or inside the project directory but ignored?
-3. Local publish rebuilds from the tag, a third build as on GitHub (about
-   4 minutes). Keep this for parity (proposed), or package the approved
-   build's outputs after `output_manifest verify`?
-4. Signing: require a signing key for local approvals, or record unsigned
-   approvals as such (proposed)?
+1. Local release tags are never pushed automatically, even with a remote.
+2. The release store defaults to `~/.boardwright/releases/<project-id>/`,
+   configurable, with a collision-resistant project identity.
+3. Local publication rebuilds from the approved annotated tag and verifies the
+   controlled outputs.
+4. Unsigned local approvals are allowed and labelled unauthenticated; optional
+   signing is supported.

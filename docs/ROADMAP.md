@@ -286,11 +286,11 @@ Remaining:
 
 ## Milestone 9: Local-First Previews And Release Backends
 
-Status: design in review (`LOCAL_FIRST.md`); backend selection implemented on
-`feat/local-first-backends`.
+Status: design in review (`LOCAL_FIRST.md`); backend selection and the shared
+release engine implemented on `feat/local-first-backends` (not yet live).
 
-- `DRAFT`/`CHECKED` previews in local Docker by default, including uncommitted
-  changes through isolated staging
+- all preview variants in local Docker by default, including uncommitted
+  changes through isolated staging; never release evidence
 - releases on GitHub when a usable GitHub remote exists, fully local without
   a remote; explicit overrides; no silent backend switching
 - one release engine: packaging and the release commit move from workflow

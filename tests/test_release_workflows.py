@@ -38,8 +38,12 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
     def test_prepare_commits_ledger_and_manifest(self) -> None:
         commit = next(s for s in _steps("prepare-release.yaml") if s.get("name") == "Commit accepted release state")
-        self.assertIn(".boardwright/releases.yaml", commit["run"])
-        self.assertIn(".boardwright/accepted_manifest.json", commit["run"])
+        self.assertIn("python -m boardwright.release_commit", commit["run"])
+        self.assertIn("git push origin HEAD:main", commit["run"])
+        from boardwright import release_commit
+        forced = [path for group in release_commit.FORCED for path in group]
+        self.assertIn(".boardwright/releases.yaml", forced)
+        self.assertIn(".boardwright/accepted_manifest.json", forced)
         names = [s.get("name") for s in _steps("prepare-release.yaml")]
         # check-baseline, the manifest and the review record are part of the
         # shared candidate command (order guarded in test_container).
@@ -58,8 +62,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertLess(names.index("Choose KiBot variant and output set"), names.index("Build release outputs in the pinned container"))
         self.assertLess(names.index("Build release outputs in the pinned container"), names.index("Verify outputs match the accepted release state"))
         collect = next(s for s in _steps("release.yaml") if s.get("name") == "Collect release assets")
-        self.assertIn("sha256sum", collect["run"])
-        self.assertIn("RELEASE_IDENTITY.json", collect["run"])
+        self.assertIn("python -m boardwright.release_package collect", collect["run"])
+        self.assertIn('--release-dir "$RELEASE_DIR"', collect["run"])
+        module = (WORKFLOWS.parents[1] / "src" / "boardwright" / "release_package.py").read_text(encoding="utf-8")
+        self.assertIn("RELEASE_IDENTITY.json", module)
+        self.assertIn("MANIFEST.txt", module)
 
     def test_builds_use_the_shared_container_command_only(self) -> None:
         for workflow in WORKFLOWS.glob("*.yaml"):

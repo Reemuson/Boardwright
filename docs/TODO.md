@@ -299,9 +299,15 @@ Goal: make the generated README a useful hardware project front page.
       (audit R1): `boardwright.tag_push`, verified each attempt, never forced.
 - [ ] Observe R1's retry path live at the next real release (not dispatched
       only to test it).
-- [x] Backend selection policy and inspection (`backends.py`, `LOCAL_FIRST.md` section 3).
-- [ ] Extract release packaging and the release-commit step into shared Python
-      (`LOCAL_FIRST.md` section 6), proven against the 0.1.7 package.
+- [x] Backend selection policy and inspection (`backends.py`, `LOCAL_FIRST.md` section 3);
+      all preview variants local by default, token-only remote URLs refused.
+- [x] Extract release packaging and the release-commit step into shared Python
+      (`release_package.py`, `release_commit.py`), proven against the 0.1.7
+      package and the frozen workflow shell (`LOCAL_FIRST.md` section 6).
+- [ ] Install the extracted workflows on boardwright-ci-test after review and
+      observe them in a real release (with R1).
+- [ ] Audit E1: decide whether the release commit should stage `README.md`
+      when there are no renders (legacy parity kept).
 - [ ] Local-first previews in the CLI and TUI, including uncommitted changes.
 - [ ] Local release backend: candidate, review, approval, finalize, publish,
       release store (`LOCAL_FIRST.md` section 5).
