@@ -644,6 +644,86 @@ class DesignRuleReportingTests(PreviewTestCase):
         self.assertIn("not evaluated", lines[2])
 
 
+class TemporaryOwnershipTests(PreviewTestCase):
+    """S1: snapshots and new stages live in owned, unique temporaries."""
+
+    def _baseline(self) -> tuple[Path, bytes]:
+        record = self.run_preview("CHECKED").record
+        index = local_preview.index_path(self.repo, "CHECKED", "9")
+        return Path(record["outputs"]), index.read_bytes()
+
+    def _temporaries(self, workdir: Path) -> list[str]:
+        return sorted(p.name for p in workdir.parent.glob(f".{workdir.name}.*"))
+
+    def _assert_previous_preserved(self, workdir: Path, index_bytes: bytes) -> None:
+        self.assertTrue((workdir / "Manufacturing" / "out.txt").is_file())
+        self.assertEqual(index_bytes, local_preview.index_path(self.repo, "CHECKED", "9").read_bytes())
+        self.assertEqual([], self._temporaries(workdir))
+
+    def test_unrelated_directory_at_the_old_snapshot_path_is_untouched(self) -> None:
+        workdir = local_preview.preview_stage_dir(self.repo, "CHECKED", "9")
+        old_path = workdir.with_name(workdir.name + ".snapshot")
+        _write(old_path / "my notes.txt", "user data\n")
+        lookalike = workdir.parent / f".{workdir.name}.snapshot-abc123"  # no owner marker
+        _write(lookalike / "keep.txt", "also user data\n")
+        self.assertTrue(self.run_preview("CHECKED").ok)
+        self.assertTrue(self.run_preview("CHECKED").ok)
+        self.assertEqual("user data\n", (old_path / "my notes.txt").read_text(encoding="utf-8"))
+        self.assertEqual("also user data\n", (lookalike / "keep.txt").read_text(encoding="utf-8"))
+
+    def test_exceptions_during_source_planning_keep_the_previous_preview(self) -> None:
+        from boardwright.errors import BoardwrightError
+
+        workdir, index_bytes = self._baseline()
+        _write(self.repo / "board.kicad_sch", "(kicad_sch (edit))\n")
+        for exc in (BoardwrightError("planning failed"), OSError("disk read error")):
+            with self.subTest(exc=type(exc).__name__), \
+                    mock.patch.object(local_preview, "plan_source", side_effect=exc):
+                try:
+                    outcome = self.run_preview("CHECKED")
+                    self.assertFalse(outcome.ok)
+                except OSError:
+                    pass  # not a BoardwrightError: propagates, after clean-up
+                self.assertEqual([], self.runner.calls)
+                self._assert_previous_preserved(workdir, index_bytes)
+
+    def test_interrupt_during_planning_cleans_up(self) -> None:
+        workdir, index_bytes = self._baseline()
+        with mock.patch.object(local_preview, "plan_source", side_effect=KeyboardInterrupt), \
+                self.assertRaises(KeyboardInterrupt):
+            self.run_preview("CHECKED")
+        self._assert_previous_preserved(workdir, index_bytes)
+
+    def test_staging_failure_keeps_the_previous_preview(self) -> None:
+        from boardwright import container
+
+        workdir, index_bytes = self._baseline()
+        with mock.patch.object(container, "stage", side_effect=container.ContainerError("clone failed")):
+            outcome = self.run_preview("CHECKED")
+        self.assertFalse(outcome.ok)
+        self.assertIn("clone failed", outcome.message)
+        self._assert_previous_preserved(workdir, index_bytes)
+
+    def test_abandoned_owned_temporaries_are_removed_and_others_kept(self) -> None:
+        workdir, _ = self._baseline()
+        abandoned = local_preview._owned_temporary(workdir, "snapshot")  # a killed run's leftovers
+        _write(abandoned / "board.kicad_sch", "stale")
+        other_stage = local_preview.preview_stage_dir(self.repo, "DRAFT", "9")
+        foreign = local_preview._owned_temporary(other_stage, "snapshot")
+        self.assertTrue(self.run_preview("CHECKED").ok)
+        self.assertFalse(abandoned.exists())
+        self.assertTrue(foreign.exists())  # another stage's, possibly in use
+
+    def test_non_stage_directory_at_the_stage_path_is_refused(self) -> None:
+        workdir = local_preview.preview_stage_dir(self.repo, "CHECKED", "9")
+        _write(workdir / "important.txt", "not a stage\n")
+        outcome = self.run_preview("CHECKED")
+        self.assertFalse(outcome.ok)
+        self.assertIn("not a Boardwright stage", outcome.message)
+        self.assertEqual("not a stage\n", (workdir / "important.txt").read_text(encoding="utf-8"))
+        self.assertEqual([], self._temporaries(workdir))
+
+
 class LockTests(PreviewTestCase):
     def test_busy_preview_does_not_touch_the_stage_or_the_index(self) -> None:
         from boardwright.stage_lock import stage_lock

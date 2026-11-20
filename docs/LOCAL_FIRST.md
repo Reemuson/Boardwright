@@ -182,6 +182,13 @@ Behaviour:
   working tree. `<project-key>` is the checkout's name plus a hash of its
   absolute path. A repeated preview of the same variant replaces that stage.
   The in-container command is the same as `container build`'s.
+- The snapshot and the new stage are built in uniquely named, owner-marked
+  temporary directories beside the stage (`mkdtemp`), under the stage lock,
+  and swapped into place only when staging succeeded; any earlier failure
+  leaves the previous completed preview and its index entry unchanged.
+  Temporaries are removed in `finally`; one left by a killed run is removed by
+  the next run of the same stage only when it carries that stage's owner
+  marker. No directory is removed by path alone.
 - The working tree is fingerprinted (HEAD, status, the bytes of every
   non-ignored file and `local.yaml`) before and after. Boardwright never
   writes to it; a difference (for example, a save in KiCad during the build)

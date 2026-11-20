@@ -354,19 +354,42 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
             "submodule content in its stage, and building without it would silently omit those libraries; "
             "nothing was built. Vendor the library into the project, or build where submodules are checked out.")
     started, start = _now(), clock()
-    # Snapshot integrity (the stage is the source of truth):
-    # 1. fingerprint the tree; 2. read every included file once into a
-    # snapshot, hashing those bytes; 3. fingerprint again. A difference means
-    # the tree changed while it was read (for example a KiCad save writing
-    # several files), so nothing is staged and the previous preview is kept.
-    snapshot = workdir.with_name(workdir.name + ".snapshot")
-    _remove_dir(snapshot)
-    before = worktree_fingerprint(repo)
-    plan = plan_source(repo, snapshot=snapshot)
-    if worktree_fingerprint(repo) != before:
-        _remove_dir(snapshot)
-        raise BoardwrightError("The working tree changed while the preview was reading it (a save in KiCad?). "
-                               "Nothing was built and the previous preview is unchanged; run the preview again.")
+    index = index_path(repo, variant, kicad)
+    # Everything up to the swap works in Boardwright-owned temporary
+    # directories beside the stage; a failure leaves the previous completed
+    # preview (stage and index entry) exactly as it was.
+    _remove_abandoned_temporaries(workdir)
+    snapshot = _owned_temporary(workdir, "snapshot")
+    staging = _owned_temporary(workdir, "staging")
+    try:
+        # Snapshot integrity (the stage is the source of truth): 1. fingerprint
+        # the tree; 2. read every included file once into the snapshot,
+        # hashing those bytes; 3. fingerprint again. A difference means the
+        # tree changed while it was read (for example a KiCad save writing
+        # several files), so nothing is staged.
+        before = worktree_fingerprint(repo)
+        plan = plan_source(repo, snapshot=snapshot)
+        if worktree_fingerprint(repo) != before:
+            raise BoardwrightError("The working tree changed while the preview was reading it (a save in KiCad?). "
+                                   "Nothing was built and the previous preview is unchanged; run the preview again.")
+        new_stage = staging / workdir.name
+        stage(repo, worktree=plan.dirty, dest=new_stage, purpose="preview",
+              changes=([c.path for c in plan.included], list(plan.deleted)), copy_from=snapshot)
+        marker = json.loads((new_stage / ".git" / "boardwright-stage").read_text(encoding="utf-8"))
+        if marker.get("head") != plan.base_commit:
+            # A commit or checkout happened while staging: the stage would not
+            # be the planned base plus the snapshot.
+            raise BoardwrightError(f"HEAD moved while staging ({plan.base_commit[:12]} -> "
+                                   f"{str(marker.get('head'))[:12]}); nothing was built and the previous preview "
+                                   "is unchanged; run the preview again.")
+        cleared = clear_generated_outputs(new_stage)
+        dependencies = scan_dependencies(new_stage, kicad)
+        _swap_into_place(new_stage, workdir)
+    except (ContainerError, subprocess.CalledProcessError, OSError) as exc:
+        raise BoardwrightError(f"Staging failed: {exc}. Nothing was built and the previous preview is unchanged.") from exc
+    finally:
+        _remove_owned(snapshot, workdir)
+        _remove_owned(staging, workdir)
     record: dict = {
         "schema": PREVIEW_SCHEMA,
         "purpose": "preview",
@@ -390,31 +413,19 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
         "toolchain": {"image": image_for(kicad).reference},
         "outputs": str(workdir),
         "evidence": str(workdir / BUILD_DIR),
+        "cleared_outputs": cleared,
+        "dependencies": dependencies,
     }
     echo(f"[preview] {variant} local (KiCad {kicad}) from {plan.base_commit[:12]}"
          + (f" + {len(plan.included)} changed, {len(plan.deleted)} deleted file(s)" if plan.dirty else " (clean)"))
     for path, reason in plan.excluded:
         echo(f"[preview] excluded {path}: {reason}")
-    index = index_path(repo, variant, kicad)
+    for item in dependencies["unresolved"]:
+        echo(f"[preview] warning: unresolved {item['kind']} {item['reference']} in {item['file']}: {item['reason']}")
+    for item in cleared:
+        echo(f"[preview] cleared {item['path']} from the stage ({item['files']} file(s), "
+             f"{'tracked' if item['tracked'] else 'untracked'}); the build regenerates it")
     try:
-        try:
-            stage(repo, worktree=plan.dirty, dest=workdir, purpose="preview",
-                  changes=([c.path for c in plan.included], list(plan.deleted)), copy_from=snapshot)
-        finally:
-            _remove_dir(snapshot)
-        marker = json.loads((workdir / ".git" / "boardwright-stage").read_text(encoding="utf-8"))
-        if marker.get("head") != plan.base_commit:
-            # A commit or checkout happened while staging: the stage would not
-            # be the planned base plus the snapshot.
-            raise BoardwrightError(f"HEAD moved while staging ({plan.base_commit[:12]} -> "
-                                   f"{str(marker.get('head'))[:12]}); run the preview again.")
-        record["cleared_outputs"] = clear_generated_outputs(workdir)
-        record["dependencies"] = scan_dependencies(workdir, kicad)
-        for item in record["dependencies"]["unresolved"]:
-            echo(f"[preview] warning: unresolved {item['kind']} {item['reference']} in {item['file']}: {item['reason']}")
-        for item in record["cleared_outputs"]:
-            echo(f"[preview] cleared {item['path']} from the stage ({item['files']} file(s), "
-                 f"{'tracked' if item['tracked'] else 'untracked'}); the build regenerates it")
         staged_commit = _git(workdir, "rev-parse", "HEAD").strip()
         record["source"]["staged_commit"] = staged_commit
         record["source"]["staged_tree"] = _git(workdir, "rev-parse", "HEAD^{tree}").strip()
@@ -603,11 +614,79 @@ def _write_evidence_marker(record: dict) -> None:
     })
 
 
-def _remove_dir(path: Path) -> None:
-    if path.exists():
+TEMP_OWNER = ".boardwright-temporary"
+
+
+def _owned_temporary(workdir: Path, kind: str) -> Path:
+    """A new, uniquely named directory beside the stage, marked as Boardwright's.
+
+    ``mkdtemp`` creates it atomically and never reuses an existing path, so a
+    run never adopts another run's (or anyone's) directory.
+    """
+
+    import tempfile
+
+    workdir.parent.mkdir(parents=True, exist_ok=True)
+    path = Path(tempfile.mkdtemp(prefix=f".{workdir.name}.{kind}-", dir=workdir.parent))
+    (path / TEMP_OWNER).write_text(json.dumps({"stage": workdir.name, "kind": kind, "pid": os.getpid()}) + "\n",
+                                   encoding="utf-8")
+    return path
+
+
+def _is_owned_temporary(path: Path, workdir: Path) -> bool:
+    marker = path / TEMP_OWNER
+    if path.is_symlink() or not marker.is_file() or marker.is_symlink():
+        return False
+    try:
+        return json.loads(marker.read_text(encoding="utf-8")).get("stage") == workdir.name
+    except (OSError, ValueError):
+        return False
+
+
+def _remove_owned(path: Path, workdir: Path) -> None:
+    """Remove a temporary directory only when it carries this stage's owner marker."""
+
+    if path.exists() and _is_owned_temporary(path, workdir):
         from .container import _remove_tree
 
         _remove_tree(path)
+
+
+def _remove_abandoned_temporaries(workdir: Path) -> None:
+    """Temporaries left by a killed run of this stage (the stage lock is held)."""
+
+    from .container import _remove_tree
+
+    for kind in ("snapshot", "staging", "retired"):
+        for path in workdir.parent.glob(f".{workdir.name}.{kind}-*"):
+            if _is_owned_temporary(path, workdir):
+                _remove_tree(path)
+
+
+def _swap_into_place(new_stage: Path, workdir: Path) -> None:
+    """Replace the previous stage with the new one; refuse anything not a stage."""
+
+    from .container import STAGE_MARKER, _remove_tree
+
+    if workdir.exists() or workdir.is_symlink():
+        if workdir.is_symlink() or not (workdir / ".git" / STAGE_MARKER).is_file():
+            raise BoardwrightError(f"{workdir} exists and is not a Boardwright stage; refusing to replace it.")
+        retired = _owned_temporary(workdir, "retired")
+        old = retired / "previous"
+        try:
+            os.replace(workdir, old)
+        except OSError as exc:
+            _remove_tree(retired)
+            raise BoardwrightError(f"Cannot replace the previous preview in {workdir} ({exc}); a file in it may be "
+                                   "open in another program. The previous preview is unchanged.") from exc
+        try:
+            os.replace(new_stage, workdir)
+        except OSError:
+            os.replace(old, workdir)  # put the previous preview back
+            raise
+        _remove_tree(retired)
+    else:
+        os.replace(new_stage, workdir)
 
 
 def preview_identity(record: dict) -> str:
