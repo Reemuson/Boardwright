@@ -653,7 +653,8 @@ class TemporaryOwnershipTests(PreviewTestCase):
         return Path(record["outputs"]), index.read_bytes()
 
     def _temporaries(self, workdir: Path) -> list[str]:
-        return sorted(p.name for p in workdir.parent.glob(f".{workdir.name}.*"))
+        return sorted(p.name for p in workdir.parent.glob(".bw-*")
+                      if local_preview._is_owned_temporary(p, workdir))
 
     def _assert_previous_preserved(self, workdir: Path, index_bytes: bytes) -> None:
         self.assertTrue((workdir / "Manufacturing" / "out.txt").is_file())
@@ -664,7 +665,7 @@ class TemporaryOwnershipTests(PreviewTestCase):
         workdir = local_preview.preview_stage_dir(self.repo, "CHECKED", "9")
         old_path = workdir.with_name(workdir.name + ".snapshot")
         _write(old_path / "my notes.txt", "user data\n")
-        lookalike = workdir.parent / f".{workdir.name}.snapshot-abc123"  # no owner marker
+        lookalike = workdir.parent / ".bw-snapshot-abc123"  # the current name pattern, but no owner marker
         _write(lookalike / "keep.txt", "also user data\n")
         self.assertTrue(self.run_preview("CHECKED").ok)
         self.assertTrue(self.run_preview("CHECKED").ok)
@@ -713,6 +714,25 @@ class TemporaryOwnershipTests(PreviewTestCase):
         self.assertTrue(self.run_preview("CHECKED").ok)
         self.assertFalse(abandoned.exists())
         self.assertTrue(foreign.exists())  # another stage's, possibly in use
+
+    def test_staging_path_is_not_longer_than_the_stage_path(self) -> None:
+        # Windows MAX_PATH: a nested stage under a name repeating the stage name
+        # doubled the path and broke git clone ("Filename too long").
+        from boardwright import container
+
+        long_repo = make_project(self.base / ("A very long project directory name " * 3).strip())
+        seen = []
+        real = container.stage
+
+        def capture(*args, **kwargs):
+            seen.append(kwargs["dest"])
+            return real(*args, **kwargs)
+
+        with mock.patch.object(container, "stage", side_effect=capture):
+            outcome = self.run_preview("CHECKED", config=self.config(root=long_repo))
+        self.assertTrue(outcome.ok, outcome.message)
+        workdir = local_preview.preview_stage_dir(long_repo, "CHECKED", "9")
+        self.assertLessEqual(len(str(seen[0])), len(str(workdir)))
 
     def test_non_stage_directory_at_the_stage_path_is_refused(self) -> None:
         workdir = local_preview.preview_stage_dir(self.repo, "CHECKED", "9")

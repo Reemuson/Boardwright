@@ -372,7 +372,7 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
         if worktree_fingerprint(repo) != before:
             raise BoardwrightError("The working tree changed while the preview was reading it (a save in KiCad?). "
                                    "Nothing was built and the previous preview is unchanged; run the preview again.")
-        new_stage = staging / workdir.name
+        new_stage = staging / "s"
         stage(repo, worktree=plan.dirty, dest=new_stage, purpose="preview",
               changes=([c.path for c in plan.included], list(plan.deleted)), copy_from=snapshot)
         marker = json.loads((new_stage / ".git" / "boardwright-stage").read_text(encoding="utf-8"))
@@ -627,7 +627,10 @@ def _owned_temporary(workdir: Path, kind: str) -> Path:
     import tempfile
 
     workdir.parent.mkdir(parents=True, exist_ok=True)
-    path = Path(tempfile.mkdtemp(prefix=f".{workdir.name}.{kind}-", dir=workdir.parent))
+    # Short names: a nested stage under a name repeating the stage name
+    # doubled the path length and broke clones on Windows (MAX_PATH).
+    # Ownership comes from the marker's stage name, never from the name.
+    path = Path(tempfile.mkdtemp(prefix=f".bw-{kind}-", dir=workdir.parent))
     (path / TEMP_OWNER).write_text(json.dumps({"stage": workdir.name, "kind": kind, "pid": os.getpid()}) + "\n",
                                    encoding="utf-8")
     return path
@@ -658,7 +661,7 @@ def _remove_abandoned_temporaries(workdir: Path) -> None:
     from .container import _remove_tree
 
     for kind in ("snapshot", "staging", "retired"):
-        for path in workdir.parent.glob(f".{workdir.name}.{kind}-*"):
+        for path in workdir.parent.glob(f".bw-{kind}-*"):
             if _is_owned_temporary(path, workdir):
                 _remove_tree(path)
 
@@ -672,7 +675,7 @@ def _swap_into_place(new_stage: Path, workdir: Path) -> None:
         if workdir.is_symlink() or not (workdir / ".git" / STAGE_MARKER).is_file():
             raise BoardwrightError(f"{workdir} exists and is not a Boardwright stage; refusing to replace it.")
         retired = _owned_temporary(workdir, "retired")
-        old = retired / "previous"
+        old = retired / "s"
         try:
             os.replace(workdir, old)
         except OSError as exc:
