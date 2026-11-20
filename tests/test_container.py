@@ -223,6 +223,28 @@ class StageTests(unittest.TestCase):
 GERBER = "%TF.GenerationSoftware,KiCad,Pcbnew,9.0.7*%\n%TF.CreationDate,{date}*%\n%TF.ProjectId,b,62,{rev}*%\nX{x}Y0D02*\n"
 
 
+class NonAsciiPathStageTests(unittest.TestCase):
+    """Git prints paths as UTF-8; decoding them with the Windows code page broke staging."""
+
+    def test_stage_from_a_path_with_spaces_and_non_ascii_characters(self) -> None:
+        tmp = Path(tempfile.mkdtemp(prefix="bw stage \u00e9 \u00fc "))
+        try:
+            repo = tmp / "Ryan's board \u00fc"
+            repo.mkdir()
+            _git(repo, "init", "-q", "-b", "main")
+            _git(repo, "config", "user.name", "t")
+            _git(repo, "config", "user.email", "t@example.invalid")
+            (repo / "board.kicad_pcb").write_bytes(b"(kicad_pcb)\n")
+            _git(repo, "add", ".")
+            _git(repo, "commit", "-q", "-m", "init")
+            (repo / "board.kicad_pcb").write_bytes(b"(kicad_pcb changed)\n")
+            self.assertEqual(repo.resolve(), container.repository_root(repo).resolve())
+            target = stage(repo, worktree=True, dest=tmp / "stage \u00e9")
+            self.assertEqual(b"(kicad_pcb changed)\n", (target / "board.kicad_pcb").read_bytes())
+        finally:
+            _rmtree(tmp)
+
+
 class CompareTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp(prefix="bw-compare-"))

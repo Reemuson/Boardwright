@@ -198,7 +198,7 @@ def repository_credentials(workdir: Path) -> list[str]:
     build step. Returns the offending config keys (never their values).
     """
 
-    completed = subprocess.run(["git", "config", "--local", "--list"], cwd=workdir, capture_output=True, text=True)
+    completed = subprocess.run(["git", "config", "--local", "--list"], cwd=workdir, capture_output=True, text=True, encoding="utf-8", errors="surrogateescape")
     found = []
     for line in completed.stdout.splitlines():
         key, _, value = line.partition("=")
@@ -257,7 +257,7 @@ def foreign_owned(workdir: Path) -> list[str]:
 
 
 def _git(root: Path, *args: str, check: bool = True) -> str:
-    completed = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+    completed = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="surrogateescape")
     if check and completed.returncode != 0:
         raise ContainerError(f"git {' '.join(args)} failed: {completed.stderr.strip()}")
     return completed.stdout
@@ -368,7 +368,7 @@ def pin_release_refs(repo: Path, target: Path) -> Path:
         )
     if _URL_USERINFO.search(url):
         raise ContainerError("The `origin` URL embeds credentials; refusing to copy it into the stage.")
-    listing = subprocess.run(["git", "ls-remote", "--tags", url], cwd=repo, capture_output=True, text=True, timeout=120)
+    listing = subprocess.run(["git", "ls-remote", "--tags", url], cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="surrogateescape", timeout=120)
     if listing.returncode != 0:
         raise ContainerError(f"Cannot list the upstream's tags ({url}): {listing.stderr.strip()}")
     tags = {}
@@ -378,7 +378,7 @@ def pin_release_refs(repo: Path, target: Path) -> Path:
             tags[ref[len("refs/tags/"):]] = sha
     fetched = subprocess.run(
         ["git", "fetch", "--no-tags", url, "refs/tags/*:refs/tags/*"],
-        cwd=target, capture_output=True, text=True, timeout=600,
+        cwd=target, capture_output=True, text=True, encoding="utf-8", errors="surrogateescape", timeout=600,
     )
     if fetched.returncode != 0:
         detail = [line.strip() for line in fetched.stderr.splitlines() if "rejected" in line or line.startswith(("error", "fatal"))]
