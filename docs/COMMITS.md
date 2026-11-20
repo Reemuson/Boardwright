@@ -56,9 +56,19 @@ End with optional trailers, one per line, in a final paragraph:
 | `Source-Commit:` | The full SHA a generated commit was made from. |
 | `Reviewed-Run:` | URL of the held prepare run an approved release matched. |
 | `Refs:` | Audit finding, issue or TODO item (`Refs: F17`). |
-| `Provenance:` | Origin of copied or adapted material (`PROVENANCE.md`). |
+| `Provenance:` | Origin of copied or adapted material, or the audit context of a change (`PROVENANCE.md`). |
+| `Co-authored-by:` | Optional attribution, where a contribution should be credited. |
 
-Commits carry no AI-tool attribution or co-author lines for tools.
+Write `Provenance:` the same way every time: the origin first, then a
+reference in parentheses when there is one, one trailer per origin:
+
+```text
+Provenance: KDT_Hierarchical_KiBot template (nguyen-v, upstream 1f2e3d4)
+Provenance: November 2026 audit (finding F16)
+```
+
+Attribution is optional. Add it where it is appropriate; it is never
+required, and the advisory checks do not look for it.
 
 ## Generated commits
 
