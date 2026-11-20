@@ -245,6 +245,48 @@ class WorkflowWiringTests(unittest.TestCase):
             shutil.rmtree(base, ignore_errors=True)
 
 
+class ReviewHardeningTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="bw-harden-"))
+        make_workspace(self.root)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_release_dir_that_would_delete_project_content_is_refused(self) -> None:
+        for bad in (self.root, self.root.parent, self.root / "Manufacturing", self.root / "assets" / "pkg",
+                    self.root / ".git", self.root / ".boardwright"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                release_package.collect_assets(self.root, TAG, bad)
+        self.assertTrue((self.root / "Manufacturing" / "Zed.txt").is_file())
+        release_package.collect_assets(self.root, TAG, self.root / "boardwright-release")
+        outside = Path(tempfile.mkdtemp(prefix="bw-store-"))
+        try:
+            release_package.collect_assets(self.root, TAG, outside / "pkg")  # e.g. a release store
+        finally:
+            shutil.rmtree(outside, ignore_errors=True)
+
+    def test_zip_directory_entries_are_marked_as_directories(self) -> None:
+        package = release_package.build_package(self.root, TAG)
+        with zipfile.ZipFile(package.zip_path) as archive:
+            dirs = [i for i in archive.infolist() if i.filename.endswith("/")]
+            self.assertTrue(dirs)
+            for info in dirs:
+                self.assertTrue(info.is_dir())
+                self.assertEqual(0x10, info.external_attr & 0x10, info.filename)
+            self.assertIsNone(archive.testzip())
+            names = archive.namelist()
+            self.assertEqual(len(names), len(set(names)))
+            self.assertEqual("boardwright-release/", names[0])
+
+    @unittest.skipIf(os.name == "nt", "symlinks need privileges on Windows")
+    def test_symlinked_render_is_not_chosen(self) -> None:
+        renders = self.root / "assets" / "renders"
+        (renders / "FIC-100A-angled_top.png").unlink()
+        os.symlink(renders / "FIC-100A-angled_bottom.png", renders / "a_top.png")
+        self.assertIsNone(release_package.board_images(self.root)[0])
+
+
 class NotesUnitTests(unittest.TestCase):
     def test_local_notes_use_relative_images(self) -> None:
         root = Path(tempfile.mkdtemp(prefix="bw-notes-"))

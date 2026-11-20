@@ -72,7 +72,8 @@ def _render(root: Path, pattern: str) -> Path | None:
         return None
     names = sorted(
         f"assets/renders/{p.name}" for p in renders.iterdir()
-        if p.is_file() and fnmatch.fnmatch(p.name.lower(), f"*{pattern}*.png")
+        # find -type f: regular files only, symlinks excluded.
+        if p.is_file() and not p.is_symlink() and fnmatch.fnmatch(p.name.lower(), f"*{pattern}*.png")
     )
     return root / names[0] if names else None
 
@@ -230,9 +231,29 @@ def identity_json(root: Path, tag: str) -> str:
     return (json.dumps(record[0].as_dict(), indent=2) if record else "{}") + "\n"
 
 
+PROTECTED = COPY_SET + (".git", ".boardwright", ".github", "src", "boardwright_resources")
+
+
+def check_release_dir(root: Path, release_dir: Path) -> None:
+    """Refuse a release directory whose removal would delete project files.
+
+    ``collect_assets`` recreates the directory, so it must not be the project
+    root, one of its ancestors, or a source the package is copied from.
+    """
+
+    root, target = root.resolve(), release_dir.resolve()
+    if target == root or target in root.parents:
+        raise ValueError(f"release directory {release_dir} would remove the project")
+    if root in target.parents:
+        top = target.relative_to(root).parts[0]
+        if top in PROTECTED:
+            raise ValueError(f"release directory {release_dir} is inside project content ({top})")
+
+
 def collect_assets(root: Path, tag: str, release_dir: Path) -> None:
     """Fill ``release_dir`` (recreated) as the workflow's copy step did."""
 
+    check_release_dir(root, release_dir)
     if release_dir.exists():
         shutil.rmtree(release_dir)
     release_dir.mkdir(parents=True)
@@ -271,7 +292,9 @@ def write_zip(release_dir: Path, zip_path: Path, arcroot: str | None = None) -> 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, source in zip_members(release_dir, arcroot):
             if source is None:
-                archive.writestr(zipfile.ZipInfo(name), b"")
+                entry = zipfile.ZipInfo(name)
+                entry.external_attr = (0o40755 << 16) | 0x10  # Unix dir mode, MS-DOS directory flag
+                archive.writestr(entry, b"")
             else:
                 archive.write(source, name)  # zip -r follows symlinks, as here
     return zip_path
