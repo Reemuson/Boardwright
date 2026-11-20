@@ -448,6 +448,95 @@ class FailClosedTests(unittest.TestCase):
             self.assertNotIn("boardwright-release/Reports/drc.txt", archive.namelist())
 
 
+class DestinationOwnershipTests(unittest.TestCase):
+    """Destinations are replaced only when Boardwright made them."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp(prefix="bw-owner-"))
+        self.root = self.base / "project"
+        make_workspace(self.root)
+        _write(self.root / "docs" / "notes.md", "user notes\n")
+        _init_repo(self.root)
+        subprocess.run(["git", "add", "-A"], cwd=self.root, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-q", "-m", "project"], cwd=self.root, check=True, capture_output=True)
+        self.before = _snapshot(self.root)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _refused(self, text: str, **kwargs) -> None:
+        with self.assertRaises(release_package.PackagingError) as caught:
+            release_package.build_package(self.root, TAG, **kwargs)
+        self.assertIn(text, str(caught.exception))
+        self.assertEqual(self.before, _snapshot(self.root))
+
+    def test_zip_destination_on_a_tracked_file_is_refused(self) -> None:
+        self._refused("tracked by Git", zip_path=self.root / "CHANGELOG.md")
+        self.assertEqual(CHANGELOG, (self.root / "CHANGELOG.md").read_text(encoding="utf-8"))
+
+    def test_zip_destination_must_be_a_zip_and_owned(self) -> None:
+        _write(self.base / "notes.txt", "keep\n")
+        self._refused("must end in .zip", zip_path=self.base / "notes.txt")
+        with zipfile.ZipFile(self.base / "foreign.zip", "w") as archive:
+            archive.writestr("user.txt", "user data")
+        self._refused("not a Boardwright release package", zip_path=self.base / "foreign.zip")
+        with zipfile.ZipFile(self.base / "foreign.zip") as archive:
+            self.assertEqual(["user.txt"], archive.namelist())
+        _write(self.root / "vendor.zip", b"PK\x05\x06" + b"\x00" * 18)  # tracked zip
+        subprocess.run(["git", "add", "vendor.zip"], cwd=self.root, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-q", "-m", "vendor"], cwd=self.root, check=True, capture_output=True)
+        self.before = _snapshot(self.root)
+        self._refused("tracked by Git", zip_path=self.root / "vendor.zip")
+
+    def test_release_dir_on_an_unrelated_project_directory_is_refused(self) -> None:
+        self._refused("tracked by Git", release_dir=self.root / "docs")
+        _write(self.root / "scratch" / "mine.txt", "untracked user file\n")
+        self.before = _snapshot(self.root)
+        self._refused("not created by Boardwright", release_dir=self.root / "scratch")
+        self.assertEqual("untracked user file\n", (self.root / "scratch" / "mine.txt").read_text(encoding="utf-8"))
+
+    def test_release_dir_on_an_external_directory_with_user_files_is_refused(self) -> None:
+        external = self.base / "Documents"
+        _write(external / "thesis.docx", b"user document")
+        self._refused("not created by Boardwright", release_dir=external)
+        self.assertEqual(b"user document", (external / "thesis.docx").read_bytes())
+
+    def test_overlapping_destinations_are_refused(self) -> None:
+        store = self.base / "store"
+        self._refused("overlaps", release_dir=store / "pkg", zip_path=store / "pkg" / "p.zip")
+        self._refused("overlaps", release_dir=store / "pkg.zip", zip_path=store / "pkg.zip")
+        self._refused("overlaps", release_dir=store / "a.zip" / "pkg", zip_path=store / "a.zip")
+        self.assertFalse(store.exists() and any(store.rglob("*")))
+
+    def test_boardwright_owned_destinations_are_replaced(self) -> None:
+        for release_dir, zip_path in ((None, None), (self.base / "store" / "1.2.0", self.base / "store" / "1.2.0.zip")):
+            with self.subTest(release_dir=release_dir):
+                kwargs = {"release_dir": release_dir, "zip_path": zip_path} if release_dir else {}
+                first = release_package.build_package(self.root, TAG, **kwargs)
+                self.assertTrue(release_package.owns_release_dir(first.release_dir))
+                self.assertTrue(release_package.owns_zip(first.zip_path))
+                _write(first.release_dir / "stale.txt", "from an earlier run\n")
+                second = release_package.build_package(self.root, TAG, **kwargs)
+                self.assertFalse((second.release_dir / "stale.txt").exists())
+        self.assertEqual(self.before, _snapshot(self.root))
+
+    def test_empty_existing_directory_is_accepted(self) -> None:
+        (self.base / "empty").mkdir()
+        release_package.build_package(self.root, TAG, release_dir=self.base / "empty", zip_path=self.base / "e.zip")
+
+    def test_marker_is_not_package_content(self) -> None:
+        package = release_package.build_package(self.root, TAG)
+        self.assertTrue((package.release_dir / release_package.OWNER_MARKER).is_file())
+        self.assertNotIn(release_package.OWNER_MARKER, package.manifest.read_text(encoding="utf-8"))
+        with zipfile.ZipFile(package.zip_path) as archive:
+            self.assertFalse(any(release_package.OWNER_MARKER in n for n in archive.namelist()))
+
+    def test_default_destinations_are_unchanged(self) -> None:
+        package = release_package.build_package(self.root, TAG)
+        self.assertEqual(self.root / "boardwright-release", package.release_dir)
+        self.assertEqual(self.root / "boardwright-1.2.0-release.zip", package.zip_path)
+
+
 class NotesUnitTests(unittest.TestCase):
     def test_local_notes_use_relative_images(self) -> None:
         root = Path(tempfile.mkdtemp(prefix="bw-notes-"))

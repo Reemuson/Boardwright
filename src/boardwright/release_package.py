@@ -35,6 +35,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import zipfile
@@ -202,6 +203,8 @@ def _walk_files(top: Path) -> list[str]:
         rel = Path(dirpath).relative_to(top).as_posix()
         prefix = "./" if rel == "." else f"./{rel}/"
         for name in filenames:
+            if prefix == "./" and name == OWNER_MARKER:
+                continue  # ownership marker: not package content
             if not os.path.islink(os.path.join(dirpath, name)):
                 found.append(prefix + name)
     return found
@@ -293,23 +296,86 @@ def check_inputs(root: Path, tag: str) -> list[Path]:
     return inputs
 
 
-def check_release_dir(root: Path, release_dir: Path) -> None:
-    """Refuse a release directory whose removal would delete project files.
+# Ownership: a destination is replaced only when Boardwright made it.
+OWNER_MARKER = ".boardwright-package-owner"
+OWNER_TEXT = "boardwright.release_package schema=1\n"
+ZIP_COMMENT = b"boardwright.release_package schema=1"
 
-    The directory is recreated, so it must not be (or resolve, through any
-    link or junction on its path, to) the project root, one of its ancestors,
-    or project content. It must not be a link itself.
+
+def _tracked(root: Path, path: Path) -> bool:
+    """Whether Git tracks ``path`` or anything below it (False outside a repository)."""
+
+    root, target = root.resolve(), path.resolve()
+    if target != root and root not in target.parents:
+        return False
+    rel = target.relative_to(root).as_posix() if target != root else "."
+    done = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--", rel], capture_output=True)
+    return done.returncode == 0 and bool(done.stdout)
+
+
+def owns_release_dir(release_dir: Path) -> bool:
+    marker = release_dir / OWNER_MARKER
+    return marker.is_file() and not is_link(marker) and marker.read_text(encoding="utf-8", errors="replace") == OWNER_TEXT
+
+
+def owns_zip(zip_path: Path) -> bool:
+    try:
+        with zipfile.ZipFile(zip_path) as archive:
+            return archive.comment == ZIP_COMMENT
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
+def _check_location(root: Path, path: Path, what: str) -> tuple[Path, Path]:
+    if is_link(path):
+        raise PackagingError(f"{what} {path} is a symbolic link or junction")
+    root_r, target = root.resolve(), path.resolve()
+    if target == root_r or target in root_r.parents:
+        raise PackagingError(f"{what} {path} would remove the project")
+    if root_r in target.parents:
+        top = target.relative_to(root_r).parts[0]
+        if top in PROTECTED:
+            raise PackagingError(f"{what} {path} is inside project content ({top})")
+    if _tracked(root, path):
+        raise PackagingError(f"{what} {path} is tracked by Git; it is never replaced")
+    return root_r, target
+
+
+def check_release_dir(root: Path, release_dir: Path) -> None:
+    """Refuse a release directory Boardwright does not own.
+
+    It is recreated, so it must not be (or resolve, through any link or
+    junction on its path, to) the project, an ancestor, project content or a
+    tracked path. An existing directory is replaced only when it is empty or
+    carries the ownership marker of an earlier package.
     """
 
-    if is_link(release_dir):
-        raise PackagingError(f"release directory {release_dir} is a symbolic link or junction")
-    root, target = root.resolve(), release_dir.resolve()
-    if target == root or target in root.parents:
-        raise PackagingError(f"release directory {release_dir} would remove the project")
-    if root in target.parents:
-        top = target.relative_to(root).parts[0]
-        if top in PROTECTED:
-            raise PackagingError(f"release directory {release_dir} is inside project content ({top})")
+    _check_location(root, release_dir, "release directory")
+    if release_dir.exists():
+        if not release_dir.is_dir():
+            raise PackagingError(f"release directory {release_dir} exists and is not a directory")
+        if any(release_dir.iterdir()) and not owns_release_dir(release_dir):
+            raise PackagingError(
+                f"release directory {release_dir} exists and was not created by Boardwright "
+                f"(no {OWNER_MARKER}); move it or choose another destination")
+
+
+def check_zip_path(root: Path, zip_path: Path, release_dir: Path) -> None:
+    """Refuse a zip destination Boardwright does not own, or one overlapping the release directory."""
+
+    _, target = _check_location(root, zip_path, "zip destination")
+    if zip_path.suffix.lower() != ".zip":
+        raise PackagingError(f"zip destination {zip_path} must end in .zip")
+    release = release_dir.resolve()
+    if target == release or release in target.parents or target in release.parents:
+        raise PackagingError(f"zip destination {zip_path} overlaps the release directory {release_dir}")
+    if zip_path.exists():
+        if not zip_path.is_file():
+            raise PackagingError(f"zip destination {zip_path} exists and is not a file")
+        if not owns_zip(zip_path):
+            raise PackagingError(
+                f"zip destination {zip_path} exists and is not a Boardwright release package; "
+                "move it or choose another destination")
 
 
 def _remove(path: Path) -> None:
@@ -329,6 +395,7 @@ def collect_assets(root: Path, tag: str, release_dir: Path) -> None:
     inputs = check_inputs(root, tag)
     _remove(release_dir)
     release_dir.mkdir(parents=True)
+    (release_dir / OWNER_MARKER).write_text(OWNER_TEXT, encoding="utf-8", newline="\n")
     for source in inputs:
         if source.is_dir():
             shutil.copytree(source, release_dir / source.name, symlinks=True)
@@ -354,6 +421,8 @@ def zip_members(release_dir: Path, arcroot: str) -> list[tuple[str, Path | None]
                 raise PackagingError(f"link in the release directory: {base}/{name}")
             members.append((f"{base}/{name}/", None))
         for name in sorted(filenames):
+            if rel == "." and name == OWNER_MARKER:
+                continue  # ownership marker: not package content
             if is_link(Path(dirpath) / name):
                 raise PackagingError(f"link in the release directory: {base}/{name}")
             members.append((f"{base}/{name}", Path(dirpath) / name))
@@ -365,6 +434,7 @@ def write_zip(release_dir: Path, zip_path: Path, arcroot: str | None = None) -> 
     if zip_path.exists():
         zip_path.unlink()
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.comment = ZIP_COMMENT  # ownership; not part of any member
         for name, source in zip_members(release_dir, arcroot):
             if source is None:
                 entry = zipfile.ZipInfo(name)
@@ -389,7 +459,7 @@ def build_package(root: Path, tag: str, *, release_dir: Path | None = None, zip_
     release_dir = release_dir or root / DEFAULT_RELEASE_DIR
     zip_path = zip_path or root / release_zip_name(tag)
     check_release_dir(root, release_dir)
-    check_release_dir(root, zip_path)
+    check_zip_path(root, zip_path, release_dir)
     check_inputs(root, tag)
     for stale in (release_dir, zip_path):
         _remove(stale)
