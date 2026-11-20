@@ -227,9 +227,9 @@ class NonAsciiPathStageTests(unittest.TestCase):
     """Git prints paths as UTF-8; decoding them with the Windows code page broke staging."""
 
     def test_stage_from_a_path_with_spaces_and_non_ascii_characters(self) -> None:
-        tmp = Path(tempfile.mkdtemp(prefix="bw stage \u00e9 \u00fc "))
+        tmp = Path(tempfile.mkdtemp(prefix="bw stage é ü "))
         try:
-            repo = tmp / "Ryan's board \u00fc"
+            repo = tmp / "Ryan's board ü"
             repo.mkdir()
             _git(repo, "init", "-q", "-b", "main")
             _git(repo, "config", "user.name", "t")
@@ -238,9 +238,14 @@ class NonAsciiPathStageTests(unittest.TestCase):
             _git(repo, "add", ".")
             _git(repo, "commit", "-q", "-m", "init")
             (repo / "board.kicad_pcb").write_bytes(b"(kicad_pcb changed)\n")
+            (repo / "notes.txt").write_bytes(b"not staged\n")
             self.assertEqual(repo.resolve(), container.repository_root(repo).resolve())
-            target = stage(repo, worktree=True, dest=tmp / "stage \u00e9")
+            target = stage(repo, worktree=True, dest=tmp / "stage é", purpose="preview",
+                           changes=(["board.kicad_pcb"], []))
             self.assertEqual(b"(kicad_pcb changed)\n", (target / "board.kicad_pcb").read_bytes())
+            self.assertFalse((target / "notes.txt").exists())  # explicit change set honoured
+            marker = json.loads((target / ".git" / container.STAGE_MARKER).read_text(encoding="utf-8"))
+            self.assertEqual(("preview", True), (marker["purpose"], marker["worktree"]))
         finally:
             _rmtree(tmp)
 

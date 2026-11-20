@@ -290,7 +290,15 @@ def worktree_changes(repo: Path) -> tuple[list[str], list[str]]:
     return sorted(set(changed) - set(deleted)), sorted(set(deleted))
 
 
-def stage(repo: Path, *, worktree: bool = False, dest: Path | None = None, label: str = "") -> Path:
+def stage(
+    repo: Path,
+    *,
+    worktree: bool = False,
+    dest: Path | None = None,
+    label: str = "",
+    changes: tuple[list[str], list[str]] | None = None,
+    purpose: str = "build",
+) -> Path:
     """Clone ``HEAD`` (plus, with ``worktree``, uncommitted changes) into a fresh LF tree.
 
     The clone has ``core.autocrlf=false`` and ``core.eol=lf``, so text files have
@@ -298,6 +306,12 @@ def stage(repo: Path, *, worktree: bool = False, dest: Path | None = None, label
     other ignored file stay behind. With ``worktree`` the uncommitted changes
     are committed inside the stage (normalised by Git) and the stage records
     that the build is not of a pushed commit.
+
+    ``changes`` replaces the default change set (every modified and
+    untracked, non-ignored file) with an explicit ``(copy, delete)`` list, as
+    chosen by the local-preview source policy. ``purpose`` is written to the
+    stage marker and from there into the build record; ``"preview"`` marks
+    the build as never release evidence.
     """
 
     repo = repository_root(repo)
@@ -318,7 +332,7 @@ def stage(repo: Path, *, worktree: bool = False, dest: Path | None = None, label
     checkout = ["checkout", "--quiet", "-B", branch, head] if branch != "detached" else ["checkout", "--quiet", "--detach", head]
     _git(target, *checkout)
     if worktree:
-        changed, deleted = worktree_changes(repo)
+        changed, deleted = changes if changes is not None else worktree_changes(repo)
         for relative in changed:
             source = repo / relative
             if source.is_file():
@@ -335,7 +349,7 @@ def stage(repo: Path, *, worktree: bool = False, dest: Path | None = None, label
             _git(target, "reset", "--hard", "--quiet")
     # Read by the build and copied into its record: a worktree build is never
     # evidence for a commit. Also identifies the directory as a stage.
-    marker = {"source": str(repo), "head": head, "worktree": worktree}
+    marker = {"source": str(repo), "head": head, "worktree": worktree, "purpose": purpose}
     (target / ".git" / STAGE_MARKER).write_text(json.dumps(marker) + "\n", encoding="utf-8")
     return target
 
@@ -434,6 +448,8 @@ def compare_builds(local: Path, remote: Path) -> tuple[list[str], list[str]]:
     for record, side in ((a_record, "first"), (b_record, "second")):
         if (record.get("stage") or {}).get("worktree"):
             problems.append(f"{side} build was staged from an uncommitted working tree")
+        if (record.get("stage") or {}).get("purpose") == "preview":
+            problems.append(f"{side} build is a local preview (never release evidence)")
         if record.get("source_modified"):
             unexplained = _unprepared_modifications(record)
             if unexplained:
