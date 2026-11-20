@@ -194,7 +194,9 @@ Behaviour:
   writes to it; a difference (for example, a save in KiCad during the build)
   is recorded and makes the preview stale.
 
-Source policy for uncommitted work:
+Source policy for uncommitted work (`source_policy.py`; the same policy, snapshot and
+lock apply to `container build --worktree` and `container stage --worktree`,
+audit C1):
 
 | Source | Included |
 | --- | --- |
@@ -204,6 +206,10 @@ Source policy for uncommitted work:
 | Untracked names like credentials (`.env*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `.netrc`, `.git-credentials`, `*credential*`, `*secret*`, `*token*`, `*.kdbx`) | Never |
 | Other untracked files | No; listed as excluded. `git add -N <file>` includes one |
 | Ignored files (including `.boardwright/local.yaml`) | Never |
+
+Tracked files whose names look like credentials are refused fail-closed (paths
+are listed; contents are never read or printed) unless each path is listed
+under `source_policy.allow_tracked` in `.boardwright/project.yaml`.
 
 Git submodules (gitlinks, or paths in `.gitmodules`) are refused: their
 content cannot be reproduced in the stage, and building without it would omit

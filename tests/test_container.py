@@ -19,6 +19,7 @@ from test_revision_model import _git, _rmtree  # noqa: E402
 
 from boardwright import container  # noqa: E402
 from boardwright.container import ContainerError, compare_builds, docker_command, image_for, stage  # noqa: E402
+from boardwright.stage_lock import stage_lock  # noqa: E402
 from boardwright.output_manifest import build_manifest  # noqa: E402
 
 
@@ -196,8 +197,17 @@ class StageTests(unittest.TestCase):
         (self.repo / "run.bat").unlink()
         (self.repo / "Manufacturing").mkdir()
         (self.repo / "Manufacturing" / "old.gbr").write_bytes(b"G04*\n")
-        target = stage(self.repo, worktree=True, dest=self.dest)
+        (self.repo / "notes.txt").write_bytes(b"scratch\n")
+        (self.repo / ".env").write_bytes(b"API_TOKEN=c1-secret-value\n")
+        with stage_lock(self.dest):
+            container.stage_worktree(self.repo, self.dest, purpose="worktree-build")
+        target = self.dest
         self.assertEqual(b"(kicad_pcb changed)\n", (target / "board.kicad_pcb").read_bytes())
+        self.assertFalse((target / ".env").exists())        # C1: credential-like, untracked
+        self.assertFalse((target / "notes.txt").exists())   # C1: unrelated, untracked
+        self.assertNotIn("c1-secret-value", (target / ".git" / container.SOURCE_RECORD).read_text(encoding="utf-8"))
+        marker = json.loads((target / ".git" / container.STAGE_MARKER).read_text(encoding="utf-8"))
+        self.assertEqual("worktree-build", marker["purpose"])
         self.assertEqual(b"(kicad_sch)\n", (target / "new.kicad_sch").read_bytes())
         self.assertFalse((target / "run.bat").exists())
         self.assertFalse((target / "Manufacturing").exists())
@@ -221,6 +231,66 @@ class StageTests(unittest.TestCase):
 
 
 GERBER = "%TF.GenerationSoftware,KiCad,Pcbnew,9.0.7*%\n%TF.CreationDate,{date}*%\n%TF.ProjectId,b,62,{rev}*%\nX{x}Y0D02*\n"
+
+
+class C1RegressionTests(unittest.TestCase):
+    """Audit C1: the old direct worktree stage copied every untracked, non-ignored file."""
+
+    OLD = "2cf6576"  # last commit with the unrestricted worktree_changes()
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="bw-c1-"))
+        self.repo = self.tmp / "project"
+        self.repo.mkdir()
+        for args in (("init", "-q", "-b", "main"), ("config", "user.name", "t"), ("config", "user.email", "t@example.invalid")):
+            _git(self.repo, *args)
+        (self.repo / "board.kicad_pcb").write_bytes(b"(kicad_pcb)\n")
+        _git(self.repo, "add", ".")
+        _git(self.repo, "commit", "-q", "-m", "init")
+        (self.repo / "board.kicad_pcb").write_bytes(b"(kicad_pcb edited)\n")
+        (self.repo / "notes.txt").write_bytes(b"scratch\n")
+        (self.repo / ".env").write_bytes(b"API_TOKEN=c1-secret-value\n")
+
+    def tearDown(self) -> None:
+        _rmtree(self.tmp)
+
+    def _old_container(self):
+        import importlib.util
+        import subprocess as sp
+
+        root = Path(__file__).resolve().parents[1]
+        done = sp.run(["git", "show", f"{self.OLD}:src/boardwright/container.py"], cwd=root, capture_output=True)
+        if done.returncode != 0:
+            self.skipTest(f"commit {self.OLD} is not available in this checkout (shallow clone)")
+        spec = importlib.util.spec_from_loader("boardwright._old_container_c1", loader=None)
+        module = importlib.util.module_from_spec(spec)
+        module.__package__ = "boardwright"
+        sys.modules[spec.name] = module  # dataclasses look their module up here
+        self.addCleanup(sys.modules.pop, spec.name, None)
+        exec(compile(done.stdout.decode("utf-8"), "old_container.py", "exec"), module.__dict__)
+        return module
+
+    def test_old_code_included_untracked_env_and_notes(self) -> None:
+        old = self._old_container()
+        changed, _deleted = old.worktree_changes(self.repo)
+        self.assertIn(".env", changed)
+        self.assertIn("notes.txt", changed)
+        target = old.stage(self.repo, worktree=True, dest=self.tmp / "old stage")
+        self.assertTrue((target / ".env").is_file())
+        self.assertTrue((target / "notes.txt").is_file())
+
+    def test_new_code_excludes_them(self) -> None:
+        dest = self.tmp / "new stage"
+        with stage_lock(dest):
+            staged = container.stage_worktree(self.repo, dest, purpose="worktree-build")
+        self.assertFalse((dest / ".env").exists())
+        self.assertFalse((dest / "notes.txt").exists())
+        self.assertEqual(b"(kicad_pcb edited)\n", (dest / "board.kicad_pcb").read_bytes())
+        excluded = dict(staged.plan.excluded)
+        self.assertEqual("looks like a credential", excluded[".env"])
+        self.assertEqual("untracked and not a KiCad project file", excluded["notes.txt"])
+        with self.assertRaises(ContainerError):
+            stage(self.repo, worktree=True, dest=self.tmp / "unpoliced")  # no implicit change set any more
 
 
 class NonAsciiPathStageTests(unittest.TestCase):

@@ -17,7 +17,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from boardwright import backends, local_preview
+from boardwright import backends, local_preview, source_policy, staging
 from boardwright.backends import Backend, DockerInfo, RemoteInfo
 
 GITHUB = RemoteInfo("github", "https://github.com/o/r.git", "o/r", True, True, True)
@@ -279,12 +279,12 @@ class SnapshotIntegrityTests(PreviewTestCase):
     """F1: the staged source is the identity; races during staging are detected."""
 
     def _hook_reads(self, on_read):
-        real = local_preview._read_bytes
+        real = source_policy._read_bytes
 
         def hooked(path: Path) -> bytes:
             return on_read(path, real)
 
-        return mock.patch.object(local_preview, "_read_bytes", side_effect=hooked)
+        return mock.patch.object(source_policy, "_read_bytes", side_effect=hooked)
 
     def test_recorded_hashes_are_the_staged_bytes(self) -> None:
         _write(self.repo / "board.kicad_sch", "(kicad_sch (saved))\n")
@@ -312,7 +312,7 @@ class SnapshotIntegrityTests(PreviewTestCase):
         with self._hook_reads(save_project_while_reading):
             outcome = self.run_preview("CHECKED")
         self.assertFalse(outcome.ok)
-        self.assertIn("changed while the preview was reading", outcome.message)
+        self.assertIn("changed while it was being read", outcome.message)
         self.assertEqual([], self.runner.calls)
         self.assertEqual(before_index, index.read_bytes())
         self.assertTrue((Path(first["outputs"]) / "Manufacturing" / "out.txt").is_file())
@@ -654,7 +654,7 @@ class TemporaryOwnershipTests(PreviewTestCase):
 
     def _temporaries(self, workdir: Path) -> list[str]:
         return sorted(p.name for p in workdir.parent.glob(".bw-*")
-                      if local_preview._is_owned_temporary(p, workdir))
+                      if staging.is_owned_temporary(p, workdir))
 
     def _assert_previous_preserved(self, workdir: Path, index_bytes: bytes) -> None:
         self.assertTrue((workdir / "Manufacturing" / "out.txt").is_file())
@@ -679,7 +679,7 @@ class TemporaryOwnershipTests(PreviewTestCase):
         _write(self.repo / "board.kicad_sch", "(kicad_sch (edit))\n")
         for exc in (BoardwrightError("planning failed"), OSError("disk read error")):
             with self.subTest(exc=type(exc).__name__), \
-                    mock.patch.object(local_preview, "plan_source", side_effect=exc):
+                    mock.patch.object(source_policy, "plan_source", side_effect=exc):
                 try:
                     outcome = self.run_preview("CHECKED")
                     self.assertFalse(outcome.ok)
@@ -690,7 +690,7 @@ class TemporaryOwnershipTests(PreviewTestCase):
 
     def test_interrupt_during_planning_cleans_up(self) -> None:
         workdir, index_bytes = self._baseline()
-        with mock.patch.object(local_preview, "plan_source", side_effect=KeyboardInterrupt), \
+        with mock.patch.object(source_policy, "plan_source", side_effect=KeyboardInterrupt), \
                 self.assertRaises(KeyboardInterrupt):
             self.run_preview("CHECKED")
         self._assert_previous_preserved(workdir, index_bytes)
@@ -707,10 +707,10 @@ class TemporaryOwnershipTests(PreviewTestCase):
 
     def test_abandoned_owned_temporaries_are_removed_and_others_kept(self) -> None:
         workdir, _ = self._baseline()
-        abandoned = local_preview._owned_temporary(workdir, "snapshot")  # a killed run's leftovers
+        abandoned = staging.owned_temporary(workdir, "snapshot")  # a killed run's leftovers
         _write(abandoned / "board.kicad_sch", "stale")
         other_stage = local_preview.preview_stage_dir(self.repo, "DRAFT", "9")
-        foreign = local_preview._owned_temporary(other_stage, "snapshot")
+        foreign = staging.owned_temporary(other_stage, "snapshot")
         self.assertTrue(self.run_preview("CHECKED").ok)
         self.assertFalse(abandoned.exists())
         self.assertTrue(foreign.exists())  # another stage's, possibly in use

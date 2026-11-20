@@ -317,8 +317,8 @@ Goal: make the generated README a useful hardware project front page.
       release store (`LOCAL_FIRST.md` section 5).
 - [ ] Local-preview testbench integration: run `44685152330` FAILED (87/88; C1).
       Repeat after the C1 fix; acceptance is a fully passing run.
-- [ ] C1: apply the preview source policy to `container build --worktree` (it
-      stages untracked `.env` and unrelated files).
+- [x] C1: `container build --worktree` and `container stage --worktree` use the
+      preview source policy, snapshot and lock (`source_policy.py`).
 - [ ] Project matrix tests and local-vs-GitHub preview benchmark.
 - [x] T1: test helpers support Python 3.11; full suite green on 3.11 and 3.12
       (Linux) and Windows.
