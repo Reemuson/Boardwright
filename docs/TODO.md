@@ -299,6 +299,13 @@ Goal: make the generated README a useful hardware project front page.
       (audit R1): `boardwright.tag_push`, verified each attempt, never forced.
 - [ ] Observe R1's retry path live at the next real release (not dispatched
       only to test it).
+- [x] Backend selection policy and inspection (`backends.py`, `LOCAL_FIRST.md` section 3).
+- [ ] Extract release packaging and the release-commit step into shared Python
+      (`LOCAL_FIRST.md` section 6), proven against the 0.1.7 package.
+- [ ] Local-first previews in the CLI and TUI, including uncommitted changes.
+- [ ] Local release backend: candidate, review, approval, finalize, publish,
+      release store (`LOCAL_FIRST.md` section 5).
+- [ ] Project matrix tests and local-vs-GitHub preview benchmark.
 - [x] Upload the bound revision-history CSVs with the held candidate, and
       accept an explicit `release_date` for held runs (testbench `349e174`).
 - [x] Adopt the commit-message convention (`COMMITS.md`): generated release

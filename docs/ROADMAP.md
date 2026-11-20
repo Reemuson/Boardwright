@@ -284,6 +284,19 @@ Remaining:
   the tag push and needed manual recovery (`AUDIT-2026-11.md`)
 - R1: confirm the bounded tag-push retry at the next real release
 
+## Milestone 9: Local-First Previews And Release Backends
+
+Status: design in review (`LOCAL_FIRST.md`); backend selection implemented on
+`feat/local-first-backends`.
+
+- `DRAFT`/`CHECKED` previews in local Docker by default, including uncommitted
+  changes through isolated staging
+- releases on GitHub when a usable GitHub remote exists, fully local without
+  a remote; explicit overrides; no silent backend switching
+- one release engine: packaging and the release commit move from workflow
+  shell into shared Python used by both backends
+- local release review, approval provenance labelled as local, release store
+
 ## Later
 
 - multi-board or assembly variants once KiCad/KiBot variant support is stable
