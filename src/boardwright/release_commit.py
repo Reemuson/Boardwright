@@ -51,15 +51,6 @@ def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProc
     return done
 
 
-def _bash_glob(root: Path, pattern: str) -> list[str]:
-    """Bash expansion without nullglob: sorted matches, else the pattern itself."""
-
-    matches = sorted(
-        Path(m).relative_to(root).as_posix() for m in glob.glob(str(root / pattern))
-    )
-    return matches or [pattern]
-
-
 def stage_release(root: Path) -> None:
     """Stage exactly what the workflow staged."""
 
@@ -67,11 +58,15 @@ def stage_release(root: Path) -> None:
     _git(root, "add", *TRACKED)
     for group in FORCED:
         _git(root, "add", "-f", *group)
-    # Best effort, as "git add README.md assets/renders/*.png || true". Git
-    # adds nothing from one call when any pathspec fails (for example, no
-    # renders), so README.md is then left unstaged; kept for parity
-    # (docs/AUDIT-2026-11.md, extraction notes).
-    _git(root, "add", "README.md", *_bash_glob(root, RENDERS), check=False)
+    # README.md and the renders are staged independently (audit E1): the
+    # legacy "git add README.md assets/renders/*.png || true" staged nothing,
+    # README included, when there were no renders. Either may be absent; a
+    # real staging failure is no longer swallowed.
+    if (root / "README.md").is_file():
+        _git(root, "add", "README.md")
+    renders = sorted(Path(m).relative_to(root).as_posix() for m in glob.glob(str(root / RENDERS)))
+    if renders:
+        _git(root, "add", "--", *renders)
 
 
 def trailers(

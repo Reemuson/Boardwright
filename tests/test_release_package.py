@@ -339,9 +339,64 @@ class CommitEquivalenceTests(unittest.TestCase):
     def test_unreviewed_release_commit_matches_the_workflow(self) -> None:
         self._compare("")
 
-    def test_without_renders_matches_the_workflow(self) -> None:
-        # Parity includes the legacy quirk: README.md is not staged then.
-        self._compare("", renders=False)
+    def _changed(self, root: Path) -> set[str]:
+        out = subprocess.run(["git", "diff", "--name-only", "HEAD~1", "HEAD"], cwd=root,
+                             capture_output=True, text=True, check=True).stdout
+        return set(out.split())
+
+    def test_legacy_shell_dropped_readme_without_renders(self) -> None:
+        # Documents audit E1 against the frozen shell; the module now differs here.
+        legacy, python = self.base / "legacy", self.base / "python"
+        for root in (legacy, python):
+            make_release_repo(root, renders=False)
+        done = _bash(_legacy_commit_script(), legacy, IN_VERSION=TAG, IN_VARIANT="RELEASED",
+                     IN_APPROVED_REVIEW_RUN="", BOARDWRIGHT_SOURCE_SHA=self.SOURCE,
+                     GITHUB_SERVER_URL="https://github.com", GITHUB_REPOSITORY="o/board")
+        self.assertEqual(0, done.returncode, done.stderr)
+        release_commit.commit_release(python, version=TAG, variant="RELEASED", source_sha=self.SOURCE)
+        self.assertNotIn("README.md", self._changed(legacy))
+        self.assertEqual(self._changed(legacy) | {"README.md"}, self._changed(python))
+
+    def test_readme_is_staged_without_renders(self) -> None:
+        root = self.base / "no-renders"
+        make_release_repo(root, renders=False)
+        release_commit.commit_release(root, version=TAG, variant="RELEASED", source_sha=self.SOURCE)
+        changed = self._changed(root)
+        self.assertIn("README.md", changed)
+        self.assertFalse(any(p.startswith("assets/renders/") for p in changed))
+
+    def test_readme_and_renders_are_staged_together(self) -> None:
+        root = self.base / "renders"
+        make_release_repo(root)
+        release_commit.commit_release(root, version=TAG, variant="RELEASED", source_sha=self.SOURCE)
+        self.assertTrue({"README.md", "assets/renders/top.png", "assets/renders/bottom.png"} <= self._changed(root))
+
+    def test_unchanged_or_missing_readme_is_not_an_error(self) -> None:
+        root = self.base / "unchanged"
+        make_release_repo(root, renders=False)
+        subprocess.run(["git", "checkout", "--", "README.md"], cwd=root, check=True, capture_output=True)
+        release_commit.commit_release(root, version=TAG, variant="RELEASED", source_sha=self.SOURCE)
+        self.assertNotIn("README.md", self._changed(root))
+
+        root = self.base / "missing"
+        make_release_repo(root)
+        (root / "README.md").unlink()
+        subprocess.run(["git", "rm", "-q", "--cached", "README.md"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-q", "-m", "drop readme"], cwd=root, check=True, capture_output=True)
+        release_commit.commit_release(root, version=TAG, variant="RELEASED", source_sha=self.SOURCE)
+        changed = self._changed(root)
+        self.assertNotIn("README.md", changed)
+        self.assertIn("assets/renders/bottom.png", changed)
+
+    def test_ignored_readme_now_fails_loudly(self) -> None:
+        # The legacy "|| true" hid staging errors; an ignored README.md is one.
+        root = self.base / "ignored"
+        make_release_repo(root, renders=False)
+        subprocess.run(["git", "rm", "-q", "--cached", "README.md"], cwd=root, check=True, capture_output=True)
+        with (root / ".gitignore").open("a", encoding="utf-8") as handle:
+            handle.write("README.md\n")
+        with self.assertRaises(subprocess.CalledProcessError):
+            release_commit.commit_release(root, version=TAG, variant="RELEASED", source_sha=self.SOURCE)
 
     def test_nothing_to_commit_is_refused(self) -> None:
         root = self.base / "empty"

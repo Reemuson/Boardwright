@@ -288,9 +288,13 @@ exercised by a live GitHub run.
 
 Parity notes:
 
-- `release_commit` keeps a legacy quirk: when there are no
-  `assets/renders/*.png`, `git add README.md assets/renders/*.png` fails as a
-  whole, so `README.md` is not staged. Kept for parity; recorded as audit E1.
+- Audit E1: the legacy `git add README.md assets/renders/*.png || true`
+  staged nothing, `README.md` included, when there were no renders. The
+  extraction first kept that for parity; the next commit fixed it.
+  `release_commit` now stages `README.md` and the renders independently, and
+  a staging error (for example, an ignored `README.md`) fails the step
+  instead of being swallowed. This is the one intended difference from the
+  legacy shell.
 - Running the legacy shell on Windows needs three meaning-preserving test
   shims (Git for Windows `sha256sum` binary mode, its `awk` dynamic-regex
   escapes, and CRLF from Windows Python). The runner needs none.

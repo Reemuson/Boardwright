@@ -306,8 +306,8 @@ Goal: make the generated README a useful hardware project front page.
       package and the frozen workflow shell (`LOCAL_FIRST.md` section 6).
 - [ ] Install the extracted workflows on boardwright-ci-test after review and
       observe them in a real release (with R1).
-- [ ] Audit E1: decide whether the release commit should stage `README.md`
-      when there are no renders (legacy parity kept).
+- [x] Audit E1: the release commit stages `README.md` whether or not board
+      renders exist; staging errors are no longer swallowed.
 - [ ] Local-first previews in the CLI and TUI, including uncommitted changes.
 - [ ] Local release backend: candidate, review, approval, finalize, publish,
       release store (`LOCAL_FIRST.md` section 5).
