@@ -315,8 +315,11 @@ Goal: make the generated README a useful hardware project front page.
       (`local_preview.py`, `LOCAL_FIRST.md` section 4).
 - [ ] Local release backend: candidate, review, approval, finalize, publish,
       release store (`LOCAL_FIRST.md` section 5).
-- [ ] Local-preview testbench integration: run `44685152330` FAILED (87/88; C1).
-      Repeat after the C1 fix; acceptance is a fully passing run.
+- [ ] Local-preview testbench integration: runs `44685152330` FAILED (87/88; C1),
+      `44692377491` FAILED (91/92; substring check), `44708112597` FAILED
+      (105/106; bytecode caches in the checkout). Acceptance is a fully passing run.
+- [ ] T2: ci-test `tests/` is outdated against the installed payload (22
+      failures, 6 errors); refresh or remove it independently of previews.
 - [ ] C1: implemented in `a347ce3` (`container build --worktree` and `container
       stage --worktree` use the preview source policy, snapshot and lock); NOT
       closed until a fully passing preview integration run.
