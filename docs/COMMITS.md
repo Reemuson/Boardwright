@@ -63,7 +63,7 @@ Write `Provenance:` the same way every time: the origin first, then a
 reference in parentheses when there is one, one trailer per origin:
 
 ```text
-Provenance: KDT_Hierarchical_KiBot template (nguyen-v, upstream 1f2e3d4)
+Provenance: KDT_Hierarchical_KiBot template (nguyen-v, upstream <sha>)
 Provenance: November 2026 audit (finding F16)
 ```
 
