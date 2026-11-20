@@ -256,6 +256,50 @@ class PrepareWorkflowDateTests(unittest.TestCase):
         self.assertIn('${IN_RELEASE_DATE:+--release-date "$IN_RELEASE_DATE"}', step["run"])
         self.assertIn("release-date --candidate", self.steps[self.names.index("Use the reviewed release date")]["run"])
 
+    def _run_step(self, name: str, env: dict[str, str]) -> subprocess.CompletedProcess:
+        script = self.steps[self.names.index(name)]["run"]
+        with tempfile.TemporaryDirectory() as tmp:
+            github_env = Path(tmp) / "env"
+            summary = Path(tmp) / "summary"
+            full = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "GITHUB_ENV": str(github_env),
+                    "GITHUB_STEP_SUMMARY": str(summary), **env}
+            done = subprocess.run(["bash", "-c", script], env=full, capture_output=True, text=True)
+            done.exported = github_env.read_text(encoding="utf-8") if github_env.exists() else ""
+            return done
+
+    def test_requested_date_applies_only_without_an_approved_run(self) -> None:
+        step = self.steps[self.names.index("Use the requested release date")]
+        self.assertEqual("${{ inputs.approved_review_run == '' && inputs.release_date != '' }}", step["if"])
+        self.assertLess(self.names.index("Use the requested release date"),
+                        self.names.index("Build release candidate in the pinned container"))
+
+    @unittest.skipUnless(shutil.which("bash"), "needs bash")
+    def test_requested_date_is_validated_and_exported(self) -> None:
+        done = self._run_step("Use the requested release date", {"IN_RELEASE_DATE_INPUT": "2026-11-20"})
+        self.assertEqual(0, done.returncode, done.stderr)
+        self.assertIn("IN_RELEASE_DATE=2026-11-20", done.exported)
+        bad = self._run_step("Use the requested release date", {"IN_RELEASE_DATE_INPUT": "2026-11-31"})
+        self.assertNotEqual(0, bad.returncode)
+        self.assertEqual("", bad.exported)
+
+    @unittest.skipUnless(shutil.which("bash"), "needs bash")
+    def test_approved_run_rejects_a_date_other_than_the_reviewed_one(self) -> None:
+        tmp = Path(tempfile.mkdtemp(prefix="bw-reviewed-date-"))
+        try:
+            (tmp / ".boardwright").mkdir()
+            candidate = {"schema": 2, "release_date": "2026-11-20", "ledger_entry": {"date": "2026-11-20"}}
+            (tmp / CANDIDATE_FILE).write_text(json.dumps(candidate), encoding="utf-8")
+            name = "Use the reviewed release date"
+            same = self._run_step(name, {"REVIEWED_CANDIDATE": str(tmp), "IN_RELEASE_DATE_INPUT": "2026-11-20"})
+            self.assertEqual(0, same.returncode, same.stderr)
+            self.assertIn("IN_RELEASE_DATE=2026-11-20", same.exported)
+            other = self._run_step(name, {"REVIEWED_CANDIDATE": str(tmp), "IN_RELEASE_DATE_INPUT": "2026-11-21"})
+            self.assertNotEqual(0, other.returncode)
+            self.assertIn("differs from the reviewed date", other.stderr)
+            self.assertEqual("", other.exported)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
     def test_reviewed_candidate_stays_outside_the_work_tree(self) -> None:
         download = self.steps[self.names.index("Download reviewed candidate")]
         self.assertTrue(download["with"]["path"].startswith("${{ runner.temp }}"))

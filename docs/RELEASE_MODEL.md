@@ -215,7 +215,10 @@ drill-map PDFs.
    candidate (`review_gate release-date`) and prepares with it. The ledger,
    CHANGELOG and drawings therefore carry the reviewed date, whenever the
    approval runs. The tagged publish build reads the same date from the
-   committed `release.env`. Candidates recorded before review-candidate
+   committed `release.env`. A held run may fix the date with the
+   `release_date` input (for example to keep the intended date when the run
+   starts on a later UTC day); an approved run fails if `release_date` names
+   any date other than the reviewed one. Candidates recorded before review-candidate
    schema 2 cannot be approved and must be held again.
 
 The CLI `--dispatch` and the TUI do not pass these inputs yet. Use
