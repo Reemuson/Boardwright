@@ -162,7 +162,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("Summarize accepted output request", text)
         self.assertIn("Verify reviewed source SHA", text)
         self.assertIn("ref: ${{ inputs.source_sha || inputs.source_ref || github.ref_name }}", text)
-        self.assertIn("git merge --no-ff --no-edit -X theirs \"$source_sha\"", text)
+        self.assertIn("git merge --no-ff -X theirs \\", text)
+        self.assertIn('-m "chore(outputs): accept ${source_sha:0:12} from ${IN_SOURCE_REF_OR_GH_REF_NAME}"', text)
+        self.assertIn('            "$source_sha"\n', text)
         self.assertIn("git switch -C \"boardwright-accepted-${target_branch}\" \"origin/${target_branch}\"", text)
         self.assertIn("git push origin HEAD:\"$target_branch\"", text)
         self.assertIn(
