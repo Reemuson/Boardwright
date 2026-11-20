@@ -272,6 +272,112 @@ class LocalRunTests(PreviewTestCase):
         self.assertTrue(self.run_preview("CHECKED").ok)  # third run on the same state
 
 
+class SnapshotIntegrityTests(PreviewTestCase):
+    """F1: the staged source is the identity; races during staging are detected."""
+
+    def _hook_reads(self, on_read):
+        real = local_preview._read_bytes
+
+        def hooked(path: Path) -> bytes:
+            return on_read(path, real)
+
+        return mock.patch.object(local_preview, "_read_bytes", side_effect=hooked)
+
+    def test_recorded_hashes_are_the_staged_bytes(self) -> None:
+        _write(self.repo / "board.kicad_sch", "(kicad_sch (saved))\n")
+        _write(self.repo / "extra sheet ü.kicad_sch", "(kicad_sch extra)\n")
+        record = self.run_preview("CHECKED").record
+        staged = Path(record["outputs"])
+        for change in record["source"]["included"]:
+            self.assertEqual(change["sha256"], hashlib.sha256((staged / change["path"]).read_bytes()).hexdigest(), change)
+        self.assertEqual(_git(staged, "rev-parse", "HEAD^{tree}").strip(), record["source"]["staged_tree"])
+        self.assertFalse(Path(str(staged) + ".snapshot").exists())  # snapshot removed after staging
+
+    def test_change_to_another_file_while_reading_refuses_and_keeps_the_previous_preview(self) -> None:
+        first = self.run_preview("CHECKED").record
+        index = local_preview.index_path(self.repo, "CHECKED", "9")
+        before_index = index.read_bytes()
+        _write(self.repo / "board.kicad_sch", "(kicad_sch (edit 1))\n")
+        seen = []
+
+        def save_project_while_reading(path, real):
+            if not seen:  # KiCad saves the project file while the schematic is read
+                _write(self.repo / "board.kicad_pro", "{\"saved\": true}\n")
+            seen.append(path)
+            return real(path)
+
+        with self._hook_reads(save_project_while_reading):
+            outcome = self.run_preview("CHECKED")
+        self.assertFalse(outcome.ok)
+        self.assertIn("changed while the preview was reading", outcome.message)
+        self.assertEqual([], self.runner.calls)
+        self.assertEqual(before_index, index.read_bytes())
+        self.assertTrue((Path(first["outputs"]) / "Manufacturing" / "out.txt").is_file())
+
+    def test_edit_and_revert_during_the_read_records_what_was_built_and_is_stale(self) -> None:
+        original = "(kicad_sch (version 20250114))\n"
+        intermediate = "(kicad_sch (half-saved))\n"
+        _write(self.repo / "board.kicad_pcb", "(kicad_pcb (dirty))\n")  # make the tree dirty
+
+        # The schematic is unchanged on disk before and after; only a racing
+        # read could see the intermediate content. Simulate it on the schematic.
+        _write(self.repo / "board.kicad_sch", original + ";")
+
+        def racing(path, real):
+            if path.name == "board.kicad_sch":
+                _write(path, intermediate)
+                data = real(path)
+                _write(path, original + ";")  # reverted before the second fingerprint
+                return data
+            return real(path)
+
+        with self._hook_reads(racing):
+            outcome = self.run_preview("CHECKED")
+        self.assertTrue(outcome.ok, outcome.message)
+        record = outcome.record
+        recorded = {c["path"]: c["sha256"] for c in record["source"]["included"]}
+        self.assertEqual(hashlib.sha256(intermediate.encode()).hexdigest(), recorded["board.kicad_sch"])
+        self.assertEqual(intermediate, (Path(record["outputs"]) / "board.kicad_sch").read_text(encoding="utf-8"))
+        status = local_preview.preview_status(self.repo)[0]
+        self.assertEqual("stale", status.state)  # the tree now differs from what was built
+
+    def test_save_during_the_build_marks_stale_without_changing_the_identity(self) -> None:
+        _write(self.repo / "board.kicad_sch", "(kicad_sch (before build))\n")
+        expected = local_preview.plan_source(self.repo).source_digest
+
+        class SavingRunner(FakeRunner):
+            def __call__(inner, kicad, workdir, command):
+                status = FakeRunner.__call__(inner, kicad, workdir, command)
+                _write(self.repo / "board.kicad_sch", "(kicad_sch (saved during build))\n")
+                return status
+
+        record = self.run_preview("CHECKED", runner=SavingRunner()).record
+        self.assertEqual("succeeded", record["status"])
+        self.assertTrue(record["worktree_changed_during_preview"])
+        self.assertEqual(expected, record["source"]["source_digest"])
+        self.assertEqual("(kicad_sch (before build))\n",
+                         (Path(record["outputs"]) / "board.kicad_sch").read_text(encoding="utf-8"))
+        status = local_preview.preview_status(self.repo)[0]
+        self.assertEqual("stale", status.state)
+        self.assertIn("changed while it ran", " ".join(status.reasons))
+
+    def test_head_moving_while_staging_is_refused(self) -> None:
+        from boardwright import container
+
+        real_stage = container.stage
+
+        def commit_then_stage(*args, **kwargs):
+            _write(self.repo / "README.md", "# moved\n")
+            _git(self.repo, "commit", "-q", "-am", "moved during staging")
+            return real_stage(*args, **kwargs)
+
+        with mock.patch.object(container, "stage", side_effect=commit_then_stage):
+            outcome = self.run_preview("CHECKED")
+        self.assertFalse(outcome.ok)
+        self.assertIn("HEAD moved while staging", outcome.message)
+        self.assertEqual([], self.runner.calls)
+
+
 class LockTests(PreviewTestCase):
     def test_busy_preview_does_not_touch_the_stage_or_the_index(self) -> None:
         from boardwright.stage_lock import stage_lock

@@ -298,6 +298,7 @@ def stage(
     label: str = "",
     changes: tuple[list[str], list[str]] | None = None,
     purpose: str = "build",
+    copy_from: Path | None = None,
 ) -> Path:
     """Clone ``HEAD`` (plus, with ``worktree``, uncommitted changes) into a fresh LF tree.
 
@@ -311,7 +312,9 @@ def stage(
     untracked, non-ignored file) with an explicit ``(copy, delete)`` list, as
     chosen by the local-preview source policy. ``purpose`` is written to the
     stage marker and from there into the build record; ``"preview"`` marks
-    the build as never release evidence.
+    the build as never release evidence. ``copy_from`` reads the changed
+    files from a snapshot directory instead of the working tree, so the
+    staged bytes are exactly the ones the caller hashed.
     """
 
     repo = repository_root(repo)
@@ -334,7 +337,7 @@ def stage(
     if worktree:
         changed, deleted = changes if changes is not None else worktree_changes(repo)
         for relative in changed:
-            source = repo / relative
+            source = (copy_from or repo) / relative
             if source.is_file():
                 (target / relative).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source, target / relative)

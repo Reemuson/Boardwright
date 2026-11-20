@@ -134,8 +134,32 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def plan_source(repo: Path) -> SourcePlan:
-    """Apply the source policy to the working tree (read-only)."""
+def _read_once(repo: Path, path: str, snapshot: Path | None) -> str:
+    """Hash a file; with ``snapshot``, also write exactly the hashed bytes there.
+
+    The working tree is read once per file, so the recorded hash and the staged
+    bytes cannot differ even if the file is saved again meanwhile.
+    """
+
+    if snapshot is None:
+        return _sha256(repo / path)
+    data = _read_bytes(repo / path)
+    target = snapshot / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+    return hashlib.sha256(data).hexdigest()
+
+
+def _read_bytes(path: Path) -> bytes:
+    return path.read_bytes()
+
+
+def plan_source(repo: Path, snapshot: Path | None = None) -> SourcePlan:
+    """Apply the source policy to the working tree (read-only).
+
+    With ``snapshot``, the included files' bytes are also copied there (read
+    once); the stage is then built from the snapshot, not the live tree.
+    """
 
     repo = Path(_git(repo, "rev-parse", "--show-toplevel").strip())
     base = _git(repo, "rev-parse", "HEAD").strip()
@@ -151,7 +175,7 @@ def plan_source(repo: Path) -> SourcePlan:
         elif not (repo / path).is_file() or (repo / path).is_symlink():
             excluded.append((path, "not a regular file"))
         else:
-            included.append(SourceChange(path, "modified", _sha256(repo / path)))
+            included.append(SourceChange(path, "modified", _read_once(repo, path, snapshot)))
     for path in sorted(untracked):
         if _matches(path, ALWAYS_EXCLUDED):
             excluded.append((path, "per-user or private file"))
@@ -162,7 +186,7 @@ def plan_source(repo: Path) -> SourcePlan:
         elif (repo / path).is_symlink() or not (repo / path).is_file():
             excluded.append((path, "not a regular file"))
         else:
-            included.append(SourceChange(path, "untracked", _sha256(repo / path)))
+            included.append(SourceChange(path, "untracked", _read_once(repo, path, snapshot)))
     kept_deleted = []
     for path in sorted(deleted):
         if _matches(path, ALWAYS_EXCLUDED):
@@ -278,11 +302,22 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
     from .build import BUILD_DIR
     from .container import ContainerError, image_for, stage
 
-    plan = plan_source(repo)
     if _git(repo, "ls-files", "--", LOCAL_OVERRIDES).strip():
         raise BoardwrightError(f"{LOCAL_OVERRIDES} is tracked by Git; it must stay local (untrack it) before previewing.")
-    before = worktree_fingerprint(repo)
     started, start = _now(), clock()
+    # Snapshot integrity (the stage is the source of truth):
+    # 1. fingerprint the tree; 2. read every included file once into a
+    # snapshot, hashing those bytes; 3. fingerprint again. A difference means
+    # the tree changed while it was read (for example a KiCad save writing
+    # several files), so nothing is staged and the previous preview is kept.
+    snapshot = workdir.with_name(workdir.name + ".snapshot")
+    _remove_dir(snapshot)
+    before = worktree_fingerprint(repo)
+    plan = plan_source(repo, snapshot=snapshot)
+    if worktree_fingerprint(repo) != before:
+        _remove_dir(snapshot)
+        raise BoardwrightError("The working tree changed while the preview was reading it (a save in KiCad?). "
+                               "Nothing was built and the previous preview is unchanged; run the preview again.")
     record: dict = {
         "schema": PREVIEW_SCHEMA,
         "purpose": "preview",
@@ -313,8 +348,17 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
         echo(f"[preview] excluded {path}: {reason}")
     index = index_path(repo, variant, kicad)
     try:
-        stage(repo, worktree=plan.dirty, dest=workdir, purpose="preview",
-              changes=([c.path for c in plan.included], list(plan.deleted)))
+        try:
+            stage(repo, worktree=plan.dirty, dest=workdir, purpose="preview",
+                  changes=([c.path for c in plan.included], list(plan.deleted)), copy_from=snapshot)
+        finally:
+            _remove_dir(snapshot)
+        marker = json.loads((workdir / ".git" / "boardwright-stage").read_text(encoding="utf-8"))
+        if marker.get("head") != plan.base_commit:
+            # A commit or checkout happened while staging: the stage would not
+            # be the planned base plus the snapshot.
+            raise BoardwrightError(f"HEAD moved while staging ({plan.base_commit[:12]} -> "
+                                   f"{str(marker.get('head'))[:12]}); run the preview again.")
         staged_commit = _git(workdir, "rev-parse", "HEAD").strip()
         record["source"]["staged_commit"] = staged_commit
         record["source"]["staged_tree"] = _git(workdir, "rev-parse", "HEAD^{tree}").strip()
@@ -362,6 +406,13 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
         _write_json(workdir / ".git" / PREVIEW_RECORD, record)
     _write_json(index, record)
     return record
+
+
+def _remove_dir(path: Path) -> None:
+    if path.exists():
+        from .container import _remove_tree
+
+        _remove_tree(path)
 
 
 def preview_identity(record: dict) -> str:
