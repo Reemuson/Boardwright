@@ -180,6 +180,10 @@ def status_lines(repo: Path, store: ReleaseStore, version: str = "") -> list[str
     lines = store_lines(store, version)
     if not store.exists():
         return lines
+    if store.verify_index():
+        # Reported above as INCONSISTENT; no state is derived from an index that cannot be trusted.
+        return lines + ["Releases not evaluated: the release-store index is inconsistent. Nothing is changed "
+                        "automatically; restore the index from a backup or inspect it."]
     for name in [version] if version else versions(store):
         state = version_state(repo, store, name)
         lines.append(f"Release {name}: {state.stage} ({state.detail})")

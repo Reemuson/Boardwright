@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import unittest
 from unittest import mock
 
@@ -96,6 +97,24 @@ class CrashRecoveryTests(Case):
             local_recovery.status_lines(self.repo, self.store)
             local_release.plan(self.config, "1.1.0", self.store)
         self.assertEqual(before, snapshot())  # no object written, index not refreshed, refs unchanged
+
+    def test_a_truncated_index_is_reported_not_a_crash(self) -> None:
+        from boardwright import local_release_ops
+
+        self.approved()
+        index = self.store.root / "index.jsonl"
+        os.chmod(index, 0o600)
+        index.write_bytes(index.read_bytes()[:-20])  # an interrupted or damaged last line
+        lines = local_recovery.status_lines(self.repo, self.store)
+        self.assertTrue(any("INCONSISTENT" in line for line in lines), lines)
+        self.assertIn("Releases not evaluated", lines[-1])
+        out: list[str] = []
+        self.assertEqual(0, local_release_ops.run(self.config, "status", local_release_ops.LocalArgs(), echo=out.append))
+        header, items = local_release_ops.summaries(self.config)
+        self.assertEqual(([], True), (items, "INCONSISTENT" in header))
+        self.assertIn("INCONSISTENT", local_release_ops.overview_line(self.config))
+        with self.assertRaisesRegex(LocalReleaseError, "inconsistent"):
+            self.finalize()  # mutating commands refuse
 
     def test_candidate_and_approval_entries_without_events_are_recovered(self) -> None:
         for lost in ("candidate", "approval"):

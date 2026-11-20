@@ -247,6 +247,8 @@ def summaries(config, version: str = "") -> tuple[str, list[VersionSummary]]:
     index = store.verify_index()
     header = f"Release store {store.root}; index " + ("intact" if not index else "INCONSISTENT: " + "; ".join(index))
     result = []
+    if index:
+        return header + " (releases not evaluated)", result
     for name in [version] if version else versions(store):
         state = version_state(Path(config.root), store, name)
         approvals = store.entries("approvals", name)
@@ -314,7 +316,7 @@ def overview_line(config) -> str:
     except Exception as exc:  # status must never break a dashboard
         return f"local releases unavailable: {exc}"
     if not items:
-        return "no local releases"
+        return "release-store index INCONSISTENT" if "INCONSISTENT" in header else "no local releases"
     return "; ".join(f"{s.version} {s.stage}" + (" (PROBLEM)" if s.problems else "")
                      + (" (interrupted)" if s.recoverable else "") for s in items)
 

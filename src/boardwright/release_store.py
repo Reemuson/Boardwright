@@ -320,7 +320,10 @@ class ReleaseStore:
         path = self.root / INDEX
         if not path.is_file():
             return []
-        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        try:
+            return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        except json.JSONDecodeError as exc:
+            raise StoreError(f"The release-store index {path} is unreadable ({exc}); nothing was changed.") from exc
 
     def verify_index(self) -> list[str]:
         path = self.root / INDEX
