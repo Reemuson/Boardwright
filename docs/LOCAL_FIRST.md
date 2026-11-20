@@ -6,9 +6,11 @@
 Status: **in progress.** Implemented on `feat/local-first-backends`: backend
 selection (section 3), local previews (section 4, integration-validated) and
 the shared release engine (section 6, live-tested on the testbench). Local
-releases (section 5): plan, candidate, review, approval, status and recovery
-are implemented (5.4). Finalisation (release commit and tag) and publication
-are **not implemented yet**; a local release cannot be completed.
+releases (section 5): the full command-line lifecycle (plan, candidate,
+review, approval, finalisation, publication, status and recovery) is
+implemented (5.1a, 5.1b) and verified with pinned-Docker builds in disposable
+repositories only. Not yet: the TUI release screen, a real-project or
+testbench release, and the project matrix (section 8).
 
 ## 1. Decisions (owner, 2026-11-20)
 
@@ -451,6 +453,47 @@ boardwright release local recover
   `status` reports modified entries and interrupted writes; `recover` removes
   interrupted writes only.
 
+### 5.1b Finalisation, publication and recovery (2026-11-20)
+
+```text
+boardwright release local finalize VERSION [--sign] [--backend local]
+boardwright release local publish  VERSION [--backend local]
+boardwright release local status   [VERSION]
+boardwright release local recover  [VERSION]
+```
+
+`local_finalize.py`, `local_publish.py`, `local_recovery.py`. Every state is
+proven from objects (store entries and checksums, index events, refs, tags),
+never from a status flag:
+
+| State | Proven by | Made by |
+| --- | --- | --- |
+| candidate | `candidates/<v>/<id>/` + event | `candidate` |
+| approved | `approvals/<v>/<id>/` bound to the candidate + event | `approve` |
+| prepared | `finalizations/<v>/` (`finalize.json`, `release.bundle`) + event | `finalize`: fresh stage of `HEAD` on the release branch (proven to be the approved source), the candidate steps with the reviewed inputs and date, `review_gate.verify_candidate` against the frozen candidate, `ci_cleanup` (same keep list as `prepare-release.yaml`), `.boardwright/approval.json`, `release_commit` (`Reviewed-Candidate`, `Approval-Authority: local`; `-S` with `--sign`) |
+| imported | `refs/boardwright/local-release/<v>` = the recorded commit | `git fetch` from the frozen bundle, create-only |
+| advanced | the release branch contains the commit | `git update-ref <branch> <commit> <source>` (expected old SHA), then `git read-tree -m -u <source> <commit>` |
+| tagged | annotated tag `<v>` on the commit, naming the candidate | `git tag -a [-s]` (never pushed) |
+| published | `releases/<v>/` (zip, `MANIFEST.txt`, `RELEASE_IDENTITY.json`, `ACCEPTED_OUTPUT_MANIFEST.json`, notes, renders, `publish.json`) + event | `publish`: fresh stage of the tag, `container.build_command`, outputs against the tagged accepted manifest, `release_package`; the package checked against the tag (identity = tagged ledger entry, accepted manifest and `approval.json` = tagged files, `MANIFEST.txt` = contents) before it is stored |
+
+The bundle is frozen before any ref changes, so every interruption can be
+completed without a rebuild. `finalize` resumes from the proven state (no
+rebuild once prepared) and must be resumed with the same `--sign` choice.
+`recover` does only build-free completions: remove interrupted store writes,
+append the event of a complete checksummed entry whose event was not written,
+re-import the release commit from its bundle, and bring the working tree to
+the release commit after an interrupted branch advance (only when it still
+holds exactly the source tree). Refused, never repaired: a different tag, a
+moved release branch, a changed candidate, approval, review or package, an
+edited index. Nothing forces, resets, rewrites or deletes a branch or tag,
+and nothing is pushed. The pending ref is kept as a record.
+
+Signing: `--sign` needs `user.signingkey` (refused before any build without
+it); a commit or tag that cannot be signed fails the step and nothing unsigned
+is made; signatures are checked with `git verify-commit` and `git tag -v`.
+`signing_configured` in `approval.json` and `signed` in `publish.json` report
+signing; the approval itself stays `authenticated: false`.
+
 ### 5.2 What is persisted where
 
 | Data | Location | Immutability |
@@ -521,9 +564,8 @@ Parity notes:
   Saved uncommitted work is always included by policy; there is no
   `--committed` switch (commit or stash to preview a commit exactly).
 - `boardwright release local …`: `plan`, `candidate`, `review`, `approve`,
-  `status` and `recover` are implemented (section 5.1a); `finalize` and
-  `publish` are planned. The TUI release screen does not offer local
-  releases yet.
+  `finalize`, `publish`, `status` and `recover` are implemented (sections
+  5.1a and 5.1b). The TUI release screen does not offer local releases yet.
 - `boardwright backends`: prints the selection for each operation and why
   (`select_backend` with no side effects).
 - TUI: the Preview action shows the selected backend and offers the override.
