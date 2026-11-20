@@ -609,6 +609,7 @@ boardwright suggest-commit
 boardwright validate
 boardwright revision-history
 boardwright preview
+boardwright backends
 boardwright promote
 boardwright accepted
 boardwright review

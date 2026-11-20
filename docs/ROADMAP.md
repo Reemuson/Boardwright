@@ -286,8 +286,9 @@ Remaining:
 
 ## Milestone 9: Local-First Previews And Release Backends
 
-Status: design in review (`LOCAL_FIRST.md`); backend selection and the shared
-release engine implemented on `feat/local-first-backends` (not yet live).
+Status: in progress (`LOCAL_FIRST.md`): backend selection, the shared release
+engine (live-tested on the testbench) and local previews are implemented on
+`feat/local-first-backends`; local releases are next.
 
 - all preview variants in local Docker by default, including uncommitted
   changes through isolated staging; never release evidence

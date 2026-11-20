@@ -3,11 +3,11 @@
 
 # Local-First Previews and Release Backends (design)
 
-Status: **design for review.** Implemented on `feat/local-first-backends`
-(unpushed, not yet installed on the testbench): backend selection
-(`backends.py`, section 3) and the shared release engine (`release_package.py`,
-`release_commit.py`, section 6). Local previews and local releases are planned
-and must not be described as available until they are built and tested.
+Status: **in progress.** Implemented on `feat/local-first-backends`: backend
+selection (section 3), local previews (section 4) and the shared release
+engine (section 6, live-tested on the testbench). Local releases (section 5)
+are planned and must not be described as available until they are built and
+tested.
 
 ## 1. Decisions (owner, 2026-11-20)
 
@@ -146,23 +146,115 @@ backends:
 A command-line `--backend` beats the project setting, which beats the
 default.
 
-## 4. Local previews
+## 4. Local previews (implemented)
 
-Previews run `container build` in a stage. Without uncommitted changes the
-stage is a clean clone of `HEAD`. With them (default when the tree is dirty,
-or `--worktree`), `stage(worktree=True)` copies the changed and untracked,
-non-ignored files into the stage and commits them there. The developer's tree
-is compared before and after the build, as now; any change fails the command.
+One implementation, `src/boardwright/local_preview.py`, serves the CLI and the
+TUI (`run_preview`, `preview_status`). Selection is `backends.select_backend`
+only; neither front end decides anything itself.
 
-The build record already marks such a stage (`stage.worktree: true`), and
-`container compare` and the review gate already reject it. The design adds:
+```text
+boardwright preview [-v VARIANT] [--backend auto|local|github] [--kicad 9|10]
+boardwright preview --plan        # selection and source plan; builds nothing
+boardwright preview --status      # recorded local previews, current or stale
+boardwright preview --dispatch    # same as --backend github (unchanged workflow)
+boardwright backends              # selection for previews and releases; runs nothing
+```
 
-- `record.json` `purpose: "preview"` and `backend: "local"`; the release
-  steps refuse any evidence whose purpose is not `release-candidate`;
-- a preview index (`~/.boardwright/previews/<project>/index.json`) of stage
-  path, source commit, worktree flag, variant and time, for the TUI;
-- the reviewed-preview marker gains the backend and the worktree flag. A
-  marker for a worktree preview cannot be used to accept to `main`.
+TUI: **Preview** (`g`) opens a dialog with the variant and the backend
+(default local Docker, local, GitHub). The run happens in the background with
+progress in the status line; the dashboard's preview line lists each recorded
+local preview as current, stale, failed or incomplete. **Folder** (`o`) opens
+the latest successful local preview's outputs when no GitHub artifact has
+been fetched.
+
+Behaviour:
+
+- Every variant builds locally by default. A default run inspects the remote
+  without contacting GitHub, so it needs no remote, no `gh` login and no
+  pushed commit. `--backend github` (or `backends.preview: github`) uses the
+  existing `dev-preview.yaml` dispatch, with its preconditions (dev branch,
+  clean, pushed) now checked by the shared module.
+- The backend is chosen once. Missing Docker, a failed build or a failed
+  dispatch is reported with the override that would use the other backend;
+  nothing is retried elsewhere.
+- The build runs in a stage (`container.stage`, an LF clone) under
+  `~/.boardwright/stages/<project-key>-preview-<variant>-k<N>/`, never in the
+  working tree. `<project-key>` is the checkout's name plus a hash of its
+  absolute path. A repeated preview of the same variant replaces that stage.
+  The in-container command is the same as `container build`'s.
+- The working tree is fingerprinted (HEAD, status, the bytes of every
+  non-ignored file and `local.yaml`) before and after. Boardwright never
+  writes to it; a difference (for example, a save in KiCad during the build)
+  is recorded and makes the preview stale.
+
+Source policy for uncommitted work:
+
+| Source | Included |
+| --- | --- |
+| Modified or deleted tracked files | Yes, as saved on disk, except `.boardwright/local.yaml`, `*.kicad_prl`, `*-backups/`, `*.lck`, `fp-info-cache`, `_autosave-*`, `*.bak`, `*~` |
+| Untracked KiCad sources (`*.kicad_sch`, `*.kicad_pcb`, `*.kicad_pro`, `*.kicad_sym`, `*.kicad_mod`, `*.kicad_wks`, `*.kicad_dru`, `fp-lib-table`, `sym-lib-table`, `*.step`, `*.stp`, `*.wrl`) | Yes, unless the name looks like a credential |
+| Untracked names like credentials (`.env*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `.netrc`, `.git-credentials`, `*credential*`, `*secret*`, `*token*`, `*.kdbx`) | Never |
+| Other untracked files | No; listed as excluded. `git add -N <file>` includes one |
+| Ignored files (including `.boardwright/local.yaml`) | Never |
+
+`--plan` prints the included, deleted and excluded files. A tracked
+`local.yaml` is refused. `local.yaml` therefore never reaches a preview, a
+build record, a fingerprint or a release package; the build itself also
+refuses a tree that contains it.
+
+Records and identity. Each run writes `boardwright-preview.json` (in the
+stage's `.git`) and an index entry
+(`~/.boardwright/previews/<project-key>/<VARIANT>-k<N>.json`):
+
+| Field | Content |
+| --- | --- |
+| `purpose`, `release_evidence`, `backend` | `preview`, `false`, `local` |
+| `source.base_commit`, `branch`, `dirty` | The last commit and whether uncommitted work was included |
+| `source.staged_commit`, `staged_tree` | The stage's commit and Git tree: the content identity |
+| `source.source_digest` | SHA-256 over the base commit and each staged change's path and content; used for staleness |
+| `source.included`, `deleted`, `excluded` | Each file with its SHA-256 or exclusion reason |
+| `toolchain` | Pinned image reference, local image ID, Boardwright tree, KiBot configuration tree, tool versions (from the build record) |
+| `variant`, `kicad`, `experimental_toolchain` | KiCad 10 is marked experimental |
+| `outputs`, `evidence` | Stage directory and its `boardwright-build/` |
+| `status`, `exit_status`, `error`, `started_at`, `finished_at`, `elapsed_seconds` | |
+| `identity` | `VARIANT@<staged tree>`, plus `(dirty, base <commit>)` when not clean |
+
+A dirty preview is never identified by the base commit alone. A preview is
+stale when the source digest, the pinned image or the outputs no longer
+match; `--status` and the TUI say which.
+
+Never release evidence: the host writes `boardwright-build/preview.json`
+(`purpose: preview`, `release_evidence: false`) after every local preview, and
+`container compare` refuses evidence carrying it. The marker does not depend on
+the project's payload: the in-container build is the project's own Boardwright,
+and an older payload's `record.json` has no `stage.purpose` (found in the live
+run below). A newer payload also records `stage.purpose: preview`. A
+local preview has no review candidate, no GitHub run and no artifact, so it
+cannot satisfy `approved_review_run`; it never writes the reviewed-preview
+marker used to accept to `main`.
+
+Live measurements (2026-11-20, Windows 11, Docker Desktop, image
+`kicad9_auto_full@sha256:4d47f3b8…` already pulled; project: boardwright-ci-test
+`4ba66c2` cloned under a path with spaces, one saved schematic edit):
+
+| Run | Elapsed | Working tree after |
+| --- | --- | --- |
+| Local CHECKED preview, empty 3D cache (cold) | 201.1 s | byte-identical (222 files), HEAD unchanged |
+| Local CHECKED preview, warm, repeat 1 | 185.9 s | byte-identical |
+| Local CHECKED preview, warm, repeat 2 | 185.1 s | byte-identical |
+| Direct `container build --variant CHECKED --worktree`, warm | 183.7 s | byte-identical |
+| Local DRAFT preview, clean tree, warm | 61.6 s | byte-identical |
+
+The cold 3D cache costs about 15 s; image pull time was not measured (the
+5 GB image was already present). Preview overhead over a direct build is
+about 2 s (planning, fingerprints, records). Preview vs direct build of the
+same state: identical staged tree, image, tools, configuration, normaliser and
+Boardwright tree; 49/49 controlled outputs, 22 normalised notes, 0 blocking
+differences. The 36 byte-differing files are the documented
+nondeterministic categories: PDFs, zips (containers of regenerated files),
+DRC/ERC reports, and Gerbers/drills that differ only in timestamps and
+generator banners. The testbench board reports one DRC error in both builds
+(a design property, not a preview effect).
 
 ## 5. Local releases
 
@@ -304,7 +396,9 @@ Parity notes:
 
 ## 7. CLI and TUI
 
-- `boardwright preview [--variant V] [--backend auto|local|github] [--worktree|--committed]`.
+- `boardwright preview` and `boardwright backends`: implemented, section 4.
+  Saved uncommitted work is always included by policy; there is no
+  `--committed` switch (commit or stash to preview a commit exactly).
 - `boardwright release <version> … [--backend …]`, with the local subcommands
   `candidate`, `review`, `approve`, `finalize`, `publish` and `status`.
 - `boardwright backends`: prints the selection for each operation and why

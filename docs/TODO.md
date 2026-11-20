@@ -311,7 +311,8 @@ Goal: make the generated README a useful hardware project front page.
       (with R1).
 - [x] Audit E1: the release commit stages `README.md` whether or not board
       renders exist; staging errors are no longer swallowed.
-- [ ] Local-first previews in the CLI and TUI, including uncommitted changes.
+- [x] Local-first previews in the CLI and TUI, including uncommitted changes
+      (`local_preview.py`, `LOCAL_FIRST.md` section 4).
 - [ ] Local release backend: candidate, review, approval, finalize, publish,
       release store (`LOCAL_FIRST.md` section 5).
 - [ ] Project matrix tests and local-vs-GitHub preview benchmark.
