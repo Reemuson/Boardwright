@@ -316,8 +316,8 @@ Goal: make the generated README a useful hardware project front page.
 - [ ] Local release backend: candidate, review, approval, finalize, publish,
       release store (`LOCAL_FIRST.md` section 5).
 - [ ] Project matrix tests and local-vs-GitHub preview benchmark.
-- [ ] T1: make the test helpers' `shutil.rmtree(onexc=...)` work on Python 3.11
-      (`requires-python >=3.11`); product code already falls back.
+- [x] T1: test helpers support Python 3.11; full suite green on 3.11 and 3.12
+      (Linux) and Windows.
 - [x] Upload the bound revision-history CSVs with the held candidate, and
       accept an explicit `release_date` for held runs (testbench `349e174`).
 - [x] Adopt the commit-message convention (`COMMITS.md`): generated release
