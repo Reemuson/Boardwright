@@ -355,6 +355,8 @@ def stage(
 
 
 REMOTE_REFS_FILE = "boardwright-remote-refs.json"
+# Host-written beside record.json by a local preview (local_preview.py).
+PREVIEW_EVIDENCE_MARKER = "preview.json"
 
 
 def pin_release_refs(repo: Path, target: Path) -> Path:
@@ -429,6 +431,10 @@ def compare_builds(local: Path, remote: Path) -> tuple[list[str], list[str]]:
 
     def load(directory: Path) -> tuple[dict, dict]:
         base = directory / BUILD_DIR if (directory / BUILD_DIR / "record.json").is_file() else directory
+        if (base / PREVIEW_EVIDENCE_MARKER).is_file():
+            # Written by the host after a local preview, whatever Boardwright
+            # version the project's payload (which wrote record.json) is.
+            preview_sides.append(str(directory))
         try:
             record = json.loads((base / "record.json").read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
@@ -439,8 +445,9 @@ def compare_builds(local: Path, remote: Path) -> tuple[list[str], list[str]]:
             raise ContainerError(str(exc)) from exc
         return record, manifest
 
+    preview_sides: list[str] = []
     (a_record, a_manifest), (b_record, b_manifest) = load(local), load(remote)
-    problems: list[str] = []
+    problems: list[str] = [f"{side} is local preview evidence (never release evidence)" for side in preview_sides]
     notes: list[str] = []
     for key, label in (("source_commit", "source commit"), ("variant", "variant"), ("image", "container image"), ("normaliser", "manifest normaliser")):
         if a_record.get(key) != b_record.get(key):
