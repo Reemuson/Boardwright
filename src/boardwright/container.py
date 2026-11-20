@@ -434,9 +434,17 @@ def compare_builds(local: Path, remote: Path) -> tuple[list[str], list[str]]:
 
     def load(directory: Path) -> tuple[dict, dict]:
         base = directory / BUILD_DIR if (directory / BUILD_DIR / "record.json").is_file() else directory
-        if (base / PREVIEW_EVIDENCE_MARKER).is_file():
-            # Written by the host after a local preview, whatever Boardwright
-            # version the project's payload (which wrote record.json) is.
+        # Three independent preview markers, any of which refuses the side:
+        # the host-written evidence marker (before Docker starts), the
+        # host-written stage marker in the stage's .git (written when the
+        # stage is created), and the record's stage purpose (newer payloads).
+        stage_root = base.parent if base.name == Path(BUILD_DIR).name else base
+        stage_marker = stage_root / ".git" / STAGE_MARKER
+        try:
+            stage_purpose = json.loads(stage_marker.read_text(encoding="utf-8")).get("purpose") if stage_marker.is_file() else None
+        except (OSError, ValueError):
+            stage_purpose = "unreadable"
+        if (base / PREVIEW_EVIDENCE_MARKER).is_file() or stage_purpose in ("preview", "unreadable"):
             preview_sides.append(str(directory))
         try:
             record = json.loads((base / "record.json").read_text(encoding="utf-8"))

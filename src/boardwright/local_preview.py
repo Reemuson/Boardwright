@@ -363,6 +363,9 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
         record["source"]["staged_commit"] = staged_commit
         record["source"]["staged_tree"] = _git(workdir, "rev-parse", "HEAD^{tree}").strip()
         record["identity"] = preview_identity(record)
+        # Before Docker starts: an interrupted build's evidence is already
+        # marked as preview evidence (the post-build write repeats it).
+        _write_evidence_marker(record)
         _write_json(workdir / ".git" / PREVIEW_RECORD, record)
         _write_json(index, record)
         echo(f"[preview] staged {workdir}")
@@ -374,16 +377,8 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
     record["finished_at"] = _now()
     record["elapsed_seconds"] = round(clock() - start, 1)
     evidence = Path(record["evidence"]) / "record.json"
-    if Path(record["evidence"]).is_dir():
-        # Marks the evidence itself, independent of the project's payload
-        # version (an older payload's record.json has no stage purpose).
-        from .container import PREVIEW_EVIDENCE_MARKER
-
-        _write_json(Path(record["evidence"]) / PREVIEW_EVIDENCE_MARKER, {
-            "purpose": "preview", "release_evidence": False, "backend": "local",
-            "variant": variant, "source_digest": plan.source_digest,
-            "staged_tree": record["source"].get("staged_tree", ""),
-        })
+    if Path(record["evidence"]).parent.is_dir():
+        _write_evidence_marker(record)
     if evidence.is_file():
         built = json.loads(evidence.read_text(encoding="utf-8"))
         record["toolchain"].update({
@@ -406,6 +401,22 @@ def _run_locked(repo: Path, variant: str, kicad: str, workdir: Path, runner: Run
         _write_json(workdir / ".git" / PREVIEW_RECORD, record)
     _write_json(index, record)
     return record
+
+
+def _write_evidence_marker(record: dict) -> None:
+    """Mark the evidence directory itself, whatever the project's payload version.
+
+    An older payload's ``record.json`` has no stage purpose, and a copied
+    ``boardwright-build`` directory loses the stage's ``.git`` marker.
+    """
+
+    from .container import PREVIEW_EVIDENCE_MARKER
+
+    _write_json(Path(record["evidence"]) / PREVIEW_EVIDENCE_MARKER, {
+        "purpose": "preview", "release_evidence": False, "backend": "local",
+        "variant": record["variant"], "source_digest": record["source"].get("source_digest", ""),
+        "staged_tree": record["source"].get("staged_tree", ""),
+    })
 
 
 def _remove_dir(path: Path) -> None:

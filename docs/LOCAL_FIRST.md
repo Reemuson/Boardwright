@@ -223,15 +223,31 @@ A dirty preview is never identified by the base commit alone. A preview is
 stale when the source digest, the pinned image or the outputs no longer
 match; `--status` and the TUI say which.
 
-Never release evidence: the host writes `boardwright-build/preview.json`
-(`purpose: preview`, `release_evidence: false`) after every local preview, and
-`container compare` refuses evidence carrying it. The marker does not depend on
-the project's payload: the in-container build is the project's own Boardwright,
-and an older payload's `record.json` has no `stage.purpose` (found in the live
-run below). A newer payload also records `stage.purpose: preview`. A
-local preview has no review candidate, no GitHub run and no artifact, so it
-cannot satisfy `approved_review_run`; it never writes the reviewed-preview
-marker used to accept to `main`.
+Never release evidence. Three independent markers identify a preview, and
+`container compare` refuses evidence carrying any of them:
+
+1. `.git/boardwright-stage` with `purpose: preview`, written by the host when
+   the stage is created, before any build;
+2. `boardwright-build/preview.json` (`purpose: preview`,
+   `release_evidence: false`), written by the host **before Docker starts**
+   and again afterwards, so it travels with copied evidence and marks an
+   interrupted build;
+3. `stage.purpose: preview` in `record.json`, written by payloads that include
+   this change.
+
+A local preview has no review candidate, no GitHub run and no artifact, so it
+cannot satisfy `approved_review_run` (`review_gate verify` finds no
+`review_candidate.json`), and `mark_preview_reviewed` (CHECKED acceptance)
+requires a ready GitHub preview run.
+
+Older payloads: the build inside the container, and `python -m boardwright
+container compare` run from a project, use the **project's own** Boardwright.
+A project whose payload predates these checks (for example `0df916a`) does not
+check any preview marker and would accept a clean local preview's evidence in
+`container compare`. Those controls exist only once the project's payload is
+updated; older software cannot enforce them. Deliberately deleting every
+marker from copied evidence also defeats them; the markers guard against
+mistakes, not tampering.
 
 Live measurements (2026-11-20, Windows 11, Docker Desktop, image
 `kicad9_auto_full@sha256:4d47f3b8…` already pulled; project: boardwright-ci-test

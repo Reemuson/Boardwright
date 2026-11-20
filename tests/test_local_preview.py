@@ -378,6 +378,93 @@ class SnapshotIntegrityTests(PreviewTestCase):
         self.assertEqual([], self.runner.calls)
 
 
+class EvidenceSeparationTests(PreviewTestCase):
+    """F2: preview evidence is marked before Docker starts and refused by every check."""
+
+    class EvidenceRunner(FakeRunner):
+        """Writes comparable evidence; can die (KeyboardInterrupt) after writing it."""
+
+        def __init__(self, interrupt: bool = False, keep_purpose: bool = False) -> None:
+            super().__init__()
+            self.interrupt, self.keep_purpose = interrupt, keep_purpose
+            self.marker_before_docker = None
+
+        def __call__(self, kicad, workdir, command):
+            self.marker_before_docker = (workdir / "boardwright-build" / "preview.json").is_file()
+            status = super().__call__(kicad, workdir, command)
+            path = workdir / "boardwright-build" / "record.json"
+            built = json.loads(path.read_text(encoding="utf-8"))
+            if not self.keep_purpose:
+                built["stage"].pop("purpose")  # an older payload
+            built.update({"source_commit": "a" * 40, "normaliser": 2})
+            path.write_text(json.dumps(built), encoding="utf-8")
+            (workdir / "boardwright-build" / "manifest.json").write_text(
+                json.dumps({"schema": 2, "normaliser": 2, "files": {}}), encoding="utf-8")
+            if self.interrupt:
+                raise KeyboardInterrupt  # the host dies after the container finished
+            return status
+
+    def _refused(self, directory: Path) -> list[str]:
+        from boardwright.container import compare_builds
+
+        problems, _ = compare_builds(directory, directory)
+        return [p for p in problems if "preview" in p]
+
+    def test_marker_is_written_before_docker_starts(self) -> None:
+        runner = self.EvidenceRunner()
+        self.run_preview("CHECKED", runner=runner)
+        self.assertTrue(runner.marker_before_docker)
+
+    def test_interrupted_build_evidence_is_never_acceptable(self) -> None:
+        runner = self.EvidenceRunner(interrupt=True)
+        with self.assertRaises(KeyboardInterrupt):
+            self.run_preview("CHECKED", runner=runner)
+        stage_dir = local_preview.preview_stage_dir(self.repo, "CHECKED", "9")
+        evidence = stage_dir / "boardwright-build"
+        self.assertTrue((evidence / "record.json").is_file())
+        self.assertTrue(self._refused(evidence))
+        self.assertTrue(self._refused(stage_dir))
+        # Each marker alone still refuses it.
+        (evidence / "preview.json").unlink()
+        self.assertTrue(self._refused(evidence), "stage marker alone")
+        copied = self.base / "copied evidence"
+        shutil.copytree(evidence, copied)
+        self.assertFalse(self._refused(copied))  # no markers left at all: documented limit
+        runner2 = self.EvidenceRunner()
+        self.run_preview("DRAFT", runner=runner2)
+        draft_evidence = local_preview.preview_stage_dir(self.repo, "DRAFT", "9") / "boardwright-build"
+        copied2 = self.base / "copied draft evidence"
+        shutil.copytree(draft_evidence, copied2)
+        self.assertTrue(self._refused(copied2), "evidence marker travels with copied evidence")
+        # The stage is not left locked by the interrupted run.
+        self.assertTrue(self.run_preview("CHECKED").ok)
+
+    def test_newer_payload_record_purpose_alone_refuses(self) -> None:
+        self.run_preview("CHECKED", runner=self.EvidenceRunner(keep_purpose=True))
+        evidence = local_preview.preview_stage_dir(self.repo, "CHECKED", "9") / "boardwright-build"
+        copied = self.base / "copied"
+        shutil.copytree(evidence, copied)
+        (copied / "preview.json").unlink()
+        self.assertTrue(self._refused(copied), "record stage.purpose alone")
+
+    def test_a_preview_cannot_satisfy_held_candidate_approval_or_checked_acceptance(self) -> None:
+        from boardwright.preview import PreviewState, mark_preview_reviewed
+        from boardwright.review_gate import verify_candidate
+        from boardwright.errors import BoardwrightError
+
+        record = self.run_preview("CHECKED", runner=self.EvidenceRunner()).record
+        stage_dir = Path(record["outputs"])
+        self.assertFalse(any(stage_dir.rglob("review_candidate.json")))
+        try:
+            problems = verify_candidate(stage_dir, stage_dir, environ={})
+        except Exception:
+            problems = ["refused"]
+        self.assertTrue(problems)
+        state = PreviewState("ready", "boardwright-preview-CHECKED", record["source"]["base_commit"], run=None)
+        with self.assertRaises(BoardwrightError):
+            mark_preview_reviewed(SimpleNamespace(root=self.repo), state)
+
+
 class LockTests(PreviewTestCase):
     def test_busy_preview_does_not_touch_the_stage_or_the_index(self) -> None:
         from boardwright.stage_lock import stage_lock
