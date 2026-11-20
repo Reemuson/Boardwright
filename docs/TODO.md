@@ -304,8 +304,11 @@ Goal: make the generated README a useful hardware project front page.
 - [x] Extract release packaging and the release-commit step into shared Python
       (`release_package.py`, `release_commit.py`), proven against the 0.1.7
       package and the frozen workflow shell (`LOCAL_FIRST.md` section 6).
-- [ ] Install the extracted workflows on boardwright-ci-test after review and
-      observe them in a real release (with R1).
+- [x] Install the extracted workflows on boardwright-ci-test and exercise them
+      without publishing: engine integration run `44670039452`, held 0.1.8
+      candidate `44670323650` (`AUDIT-2026-11.md`).
+- [ ] Observe the extracted workflows in a real approved release and publish
+      (with R1).
 - [x] Audit E1: the release commit stages `README.md` whether or not board
       renders exist; staging errors are no longer swallowed.
 - [ ] Local-first previews in the CLI and TUI, including uncommitted changes.
