@@ -602,25 +602,41 @@ def _candidate(args: argparse.Namespace) -> int:
         "BOARDWRIGHT_SOURCE_SHA": _git(workdir, "rev-parse", "HEAD").strip(),
         **extra,
     }
+    failed = run_candidate_steps(workdir, args, env, skip_baseline=args.skip_baseline)
+    if failed:
+        print(f"error: candidate step failed: {failed}", file=sys.stderr)
+        return 1
+    print(f"Release candidate {args.version} built in {workdir}")
+    print("Nothing was committed, pushed or tagged. Approval, tagging and publication stay in prepare-release.yaml.")
+    return 0
+
+
+def run_candidate_steps(workdir: Path, args: argparse.Namespace, env: dict[str, str], *, skip_baseline: bool = False,
+                        local: bool = False, runner=None, host_runner=None) -> str:
+    """Run ``candidate_steps`` in order; return the failed step's name, or "".
+
+    Shared by the rehearsal (``container candidate``) and the local release
+    backend (``local_release``), so both run exactly prepare-release's steps.
+    ``check-baseline`` runs on the host; with ``local`` it never falls back to
+    a published GitHub package (``--local``: fail closed).
+    """
+
+    runner = runner or run_in_container
+    host_runner = host_runner or (lambda command: subprocess.run(
+        command, cwd=workdir, env={**os.environ, "PYTHONPATH": str(workdir / "src")}).returncode)
     for step in candidate_steps(args):
         name, command = step[0], step[1:]
         print(f"[candidate] {name}", flush=True)
         if name == "check-baseline":
-            if args.skip_baseline:
+            if skip_baseline:
                 print("[candidate] check-baseline skipped (--skip-baseline); the CI run always performs it.")
                 continue
-            # On the host: legacy baselines are fetched with the GitHub CLI.
-            status = subprocess.run(
-                [sys.executable, *command[1:]], cwd=workdir, env={**os.environ, "PYTHONPATH": str(workdir / "src")}
-            ).returncode
+            status = host_runner([sys.executable, *command[1:], *(["--local"] if local else [])])
         else:
-            status = run_in_container(args.kicad, workdir, command, environment=env)
+            status = runner(args.kicad, workdir, command, environment=env)
         if status != 0:
-            print(f"error: candidate step failed: {name}", file=sys.stderr)
-            return 1
-    print(f"Release candidate {args.version} built in {workdir}")
-    print("Nothing was committed, pushed or tagged. Approval, tagging and publication stay in prepare-release.yaml.")
-    return 0
+            return name
+    return ""
 
 
 def candidate_steps(args: argparse.Namespace) -> list[list[str]]:

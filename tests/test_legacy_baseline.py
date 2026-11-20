@@ -274,9 +274,27 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("python -m boardwright.container candidate", step["run"])
         self.assertIn("set -o pipefail", step["run"])  # a failing check fails the step despite tee
         self.assertEqual("${{ github.token }}", step["env"]["GH_TOKEN"])
-        from boardwright.container import _candidate
-        import inspect
-        self.assertIn("check-baseline", inspect.getsource(_candidate))
+        # The shared step runner (GitHub and local) runs check-baseline on the
+        # host. The GitHub path may fetch legacy packages; the local path is
+        # fail-closed (--local).
+        import argparse
+
+        from boardwright.container import run_candidate_steps
+
+        args = argparse.Namespace(version="1.0.0", variant="RELEASED", kind="release", drawing_revision="A",
+                                  revision_description="d", change_class="", justification="", release_date="",
+                                  kicad="9")
+        for local in (False, True):
+            container_steps, host_steps = [], []
+            failed = run_candidate_steps(Path("."), args, {}, local=local,
+                                         runner=lambda kicad, workdir, command, environment=None:
+                                         container_steps.append(command) or 0,
+                                         host_runner=lambda command: host_steps.append(command) or 0)
+            self.assertEqual("", failed)
+            self.assertEqual(1, len(host_steps))
+            self.assertEqual(["boardwright.output_manifest", "check-baseline"], host_steps[0][2:4])
+            self.assertEqual(local, "--local" in host_steps[0])
+            self.assertFalse(any("check-baseline" in command for command in container_steps))
         checkout = next(s for s in steps if "actions/checkout" in str(s.get("uses")))
         self.assertEqual(0, checkout["with"]["fetch-depth"])  # tags and ancestry available
 
