@@ -462,7 +462,8 @@ def pin_release_refs(repo: Path, target: Path) -> Path:
 def host_tree_fingerprint(repo: Path) -> str:
     """``git status`` of the developer's tree; compared before and after a local build."""
 
-    return _git(repo, "status", "--porcelain=v1", "--untracked-files=all", "--ignored=no")
+    # --no-optional-locks: never refresh or lock the developer's index (read-only)
+    return _git(repo, "--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=all", "--ignored=no")
 
 
 # --- evidence comparison -------------------------------------------------------

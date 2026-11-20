@@ -80,6 +80,23 @@ class CrashRecoveryTests(Case):
         self.finalize()
         self.assertEqual("tagged", self.state().stage)
 
+    def test_status_and_plan_never_write_to_the_repository(self) -> None:
+        from boardwright import local_release
+
+        self.approved()
+        self.finalize()
+        git_dir = self.repo / ".git"
+
+        def snapshot():
+            return (sorted(str(p) for p in (git_dir / "objects").rglob("*")),
+                    (git_dir / "index").stat().st_mtime_ns, _git(self.repo, "for-each-ref"))
+
+        before = snapshot()
+        for _ in range(2):
+            local_recovery.status_lines(self.repo, self.store)
+            local_release.plan(self.config, "1.1.0", self.store)
+        self.assertEqual(before, snapshot())  # no object written, index not refreshed, refs unchanged
+
     def test_candidate_and_approval_entries_without_events_are_recovered(self) -> None:
         for lost in ("candidate", "approval"):
             with self.subTest(lost=lost):

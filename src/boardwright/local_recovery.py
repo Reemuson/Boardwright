@@ -160,8 +160,9 @@ def version_state(repo: Path, store: ReleaseStore, version: str) -> VersionState
     if finalized.stage == "prepared":
         state.recoverable.append("the release commit is recorded but not imported")
     if finalized.stage in ("advanced", "tagged") and _rev(repo, "HEAD") == finalized.release_commit:
-        index = subprocess.run(["git", "write-tree"], cwd=repo, capture_output=True, text=True).stdout.strip()
-        if index != _rev(repo, f"{finalized.release_commit}^{{tree}}"):
+        # Read-only: compare the index with the release tree (write-tree would write an object).
+        if subprocess.run(["git", "diff-index", "--cached", "--quiet", finalized.release_commit, "--"],
+                          cwd=repo, capture_output=True).returncode != 0:
             state.recoverable.append("the branch advanced but the working tree still holds the source tree")
     if finalized.stage == "tagged" and store.entries("releases", version):
         try:
