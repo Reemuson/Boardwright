@@ -292,9 +292,11 @@ Goal: make the generated README a useful hardware project front page.
       `release.env`; review-candidate schema 2 binds it (`SPEC.md`).
 - [x] Live-verify the fixes through a review-held candidate: ci-test 0.1.7,
       held run `44644257445`, matched by a local candidate (`AUDIT-2026-11.md`).
-- [ ] Approve, tag and publish 0.1.7 from replacement held run `44648605373`
-      (owner authorisation), then confirm the approved run reuses the
-      reviewed date and the publish build shows it. Never approve `44644257445`.
+- [x] Approve, tag and publish 0.1.7 from replacement held run `44648605373`:
+      the approved run reused the reviewed date and the published cover shows
+      2026-11-20 (`AUDIT-2026-11.md`). Never approve `44644257445`.
+- [ ] Retry the tag push a bounded number of times in `prepare-release.yaml`
+      (audit R1: transient `remote rejected (failed)` during 0.1.7).
 - [x] Upload the bound revision-history CSVs with the held candidate, and
       accept an explicit `release_date` for held runs (testbench `349e174`).
 - [x] Adopt the commit-message convention (`COMMITS.md`): generated release
