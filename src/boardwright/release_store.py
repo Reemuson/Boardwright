@@ -56,7 +56,8 @@ INDEX_HEAD = "index.head"  # count and SHA-256 of the last line: anchors the cha
 SUMS = "SHA256SUMS"
 STORE_SCHEMA = 1
 GENESIS = "0" * 64
-KINDS = ("candidates", "approvals", "releases")
+KINDS = ("candidates", "approvals", "finalizations", "releases")
+PER_VERSION = ("finalizations", "releases")  # one entry per version: <kind>/<version>/
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
 
 
@@ -227,9 +228,9 @@ class ReleaseStore:
         an owned ``.tmp-*`` directory (``abandoned()``), never a partial entry.
         """
 
-        final = self.entry_path(kind, version, name if kind != "releases" else "")
+        final = self.entry_path(kind, version, name if kind not in PER_VERSION else "")
         if final.exists() or is_link(final):
-            raise StoreError(f"{kind}/{version}{'/' + name if name and kind != 'releases' else ''} already exists "
+            raise StoreError(f"{kind}/{version}{'/' + name if name and kind not in PER_VERSION else ''} already exists "
                              "in the release store; it is never overwritten.")
         temporary = self.root / f".tmp-{secrets.token_hex(8)}"
         temporary.mkdir()
@@ -292,7 +293,7 @@ class ReleaseStore:
         for version_dir in sorted(base.iterdir()):
             if version and version_dir.name != version:
                 continue
-            if kind == "releases":
+            if kind in PER_VERSION:
                 found.append(Entry(kind, version_dir.name, version_dir.name, version_dir))
                 continue
             for entry in sorted(version_dir.iterdir()) if version_dir.is_dir() else []:

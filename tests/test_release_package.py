@@ -709,8 +709,15 @@ class CommitEquivalenceTests(unittest.TestCase):
     def test_local_approval_trailers(self) -> None:
         root = self.base / "local"
         make_release_repo(root)
+        with self.assertRaises(FileNotFoundError):  # a local release commit carries its approval
+            release_commit.commit_release(root, version=TAG, variant="RELEASED", source_sha=self.SOURCE,
+                                          reviewed_candidate="ab" * 32, local_approval=True)
+        _write(root / ".boardwright" / "approval.json", '{"authority": "local"}\n')
         release_commit.commit_release(root, version=TAG, variant="RELEASED", source_sha=self.SOURCE,
                                       reviewed_candidate="ab" * 32, local_approval=True)
+        committed = subprocess.run(["git", "show", "HEAD:.boardwright/approval.json"], cwd=root,
+                                   capture_output=True, text=True, check=True).stdout
+        self.assertEqual('{"authority": "local"}\n', committed)
         body = _head(root)[1]
         parsed = subprocess.run(["git", "interpret-trailers", "--parse"], input=body, cwd=root,
                                 capture_output=True, text=True, check=True).stdout
