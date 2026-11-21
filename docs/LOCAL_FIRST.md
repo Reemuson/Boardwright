@@ -490,14 +490,39 @@ moved release branch, a changed candidate, approval, review or package, an
 edited index. Nothing forces, resets, rewrites or deletes a branch or tag,
 and nothing is pushed. The pending ref is kept as a record.
 
-Signing: `--sign` needs `user.signingkey` (refused before any build without
-it); a commit or tag that cannot be signed fails the step and nothing unsigned
-is made; signatures are checked with `git verify-commit` and `git tag -v`
-when made and again on every later `finalize`, before `publish` and by
-`status`, so a signature that no longer verifies is reported, never shown as
-a signed release.
-`signing_configured` in `approval.json` and `signed` in `publish.json` report
-signing; the approval itself stays `authenticated: false`.
+Signing (`local_signing.py`, audit F-R7): a signed release must be signed by
+the approver recorded in the frozen approval, not merely by some valid key.
+
+- `--sign` supports SSH signing only (`gpg.format ssh`). Before any build, and
+  before a tag is made on a resumed finalisation, the configured key
+  (`user.signingkey`) must appear in `gpg.ssh.allowedSignersFile` for exactly
+  one literal principal: the approver's e-mail. OpenPGP and X.509 signing are
+  refused: their signer is not bound to the approver, so they are never
+  reported as verified.
+- The commit (in the stage, before anything is recorded) and the tag (after
+  it is made) are verified, and again on every later `finalize`, before
+  `publish` and by `status`. Three facts are kept apart:
+  `signature_valid` (`ssh-keygen -Y check-novalidate`: cryptographically
+  valid, whoever signed); `signer_matches_approver` (`ssh-keygen -Y verify
+  -I <approver e-mail>`, with `gpg.ssh.revocationFile` when set, **and** the
+  signing key, read from the SSHSIG blob, listed for that principal alone);
+  and `authenticated`, which is always false, because the key-to-approver
+  mapping is the developer's own configuration.
+- Refused, failing closed: a valid signature by another allowed signer, a
+  key absent from the allowed signers, a key listed for several principals,
+  wildcard or negated principals, `cert-authority` or any option other than
+  `namespaces="git"` on the key's line, a missing allowed-signers file or
+  signature, a corrupted signature, and an approval without an approver
+  e-mail. Human-readable verification output is not parsed.
+- A finalisation is resumed only with the same `--sign` choice, so a signed
+  release is never downgraded to unsigned and the reverse. `status` and the
+  TUI show a `signature:` line; `publish.json` records `signature` with
+  `signed`, `approver`, `signature_valid`, `signer_matches_approver` and
+  `authenticated: false`. An unsigned release is labelled `unsigned (local
+  approval, unauthenticated)`.
+
+`signing_configured` in `approval.json` reports that a key was configured at
+approval time; the approval itself stays `authenticated: false`.
 
 ### 5.2 What is persisted where
 
