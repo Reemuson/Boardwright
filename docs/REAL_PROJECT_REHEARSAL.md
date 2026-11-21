@@ -3,10 +3,11 @@
 
 # Local Releases: Real-Project Rehearsal (FIC-100A 0.1.1)
 
-Status: **plan, not executed (2026-11-21).** The read-only audit in
-section 2 is complete. Nothing in sections 5 to 8 has been run. The owner
-reviews this plan before any preparation commit, candidate, approval,
-finalisation or publication.
+Status: **stopped after the candidate (2026-11-21).** Clone preparation
+and candidate `e2302055…` are done (section 11). The candidate is **not
+fit for approval**: its fabrication and assembly drawings show the
+schematic's revision table (F-R8). Nothing was approved, finalised, tagged
+or published.
 
 This follows the ci-test integration (`LOCAL_RELEASE_INTEGRATION.md`, run
 `44868431634`). The local-release engine is described in `LOCAL_FIRST.md`
@@ -408,3 +409,76 @@ after the owner accepts them.
 3. Clone, R1, P1 to P4 executed and reviewed; stop before the candidate.
 4. Candidate built and reviewed by the owner; stop before approval.
 5. Approve, finalize, publish; results reviewed and recorded.
+
+## 11. Result: preparation and candidate (2026-11-21)
+
+Evidence: `~/Documents/boardwright-e2e/evidence/runs/rehearsal-fic-100a-0.1.1/`
+(`SHA256SUMS`, 64 files). The engine is `5d4bceb` (G1 tests; full suite 857
+OK, 7 skipped).
+
+### 11.1 Clone and history
+
+The clone was made from GitHub and has no remote. `original/main`,
+`original/dev`, `original/preview` and the lightweight `0.1.0` are kept.
+FIC-100A `ls-remote` and its release list are identical before and after.
+
+| Commit | Change |
+| --- | --- |
+| `662d32a` | R1 merge, parents `91a52c5` and `4dcaf5a`; its tree equals dev `c73d319`; `0.1.0` is an ancestor. Every main-only change since `0603f21` was reviewed (`R1-reconciliation.md`, `main-content-preservation.txt`). Generated trees, 3D and images are not carried. The post-release layout and Project Architecture edits are already in dev, and the 64 teardrop zones differ only in UUID and priority (identical fills). Legacy KDT variables are superseded |
+| `d3143ff` | P1 payload `5d4bceb`: 144 of 154 managed files equal the engine blobs. Obsolete Docker scripts removed (CRLF-only "customisation"). The project AS1100 sheet is kept because it is the sheet the drawings render. `kibot_main.yaml` is upstream with its metadata regenerated |
+| `7c8f5fd` | B5: title block `${PCB_REVISION}` |
+| `590949d` | B4: `board_revision: B` |
+| `a360579` | P4: changelog; the schematic row A now reads `ISSUED AS 0.1.0; LETTER A ASSIGNED AT MIGRATION`; four stale board properties aligned |
+| `079a505` | The drawings use `Templates/` AS1100 (byte-identical to the embedded sheet; see F-W1) |
+
+B3 needed no source change: the updated payload plots footprint values,
+which adds only the TP1 `GND` and TP2 `+3V3` labels.
+
+### 11.2 Checks before the candidate
+
+- `validate`: 0 errors, 0 warnings.
+- Electrical: netlists exported with the pinned `kicad-cli` from 0.1.0 and
+  from the prepared schematic have the same 40 components, values and
+  footprints and identical connectivity on all 34 nets. ERC has 0 errors
+  (71 warnings now, 75 at 0.1.0). The `electrical` class is not needed.
+- Impact: previous `0.1.0, legacy tag`, `B/1 (new)`, `B-A (new)`, no
+  problems. The negative control (PCB revision A, in memory) is refused.
+
+### 11.3 Candidate
+
+The first attempt failed closed in 17 s (F-W1); nothing was frozen.
+
+| Item | Value |
+| --- | --- |
+| Candidate id | `e2302055f17d7931671ac8801f92e1e26cde7879d5e901b858639ee1c6a6a5f7` |
+| Source | `079a5056276e0e24d5bbff5ea6c4560add03a4cd` |
+| Manifest | `db91722a…` (fabrication 23, assembly 4, informational 23) |
+| Build | 3 min 19 s, pinned image `4d47f3b8…` |
+| Baselines | `check-baseline`: B/1 new, B-A new, "No reused baselines" |
+| Ledger | One entry, `0.1.1`, `previous_version: 0.1.0`, PCB B, schematic B, assembly A, fabrication A |
+| Store | Index intact; state "candidate frozen; not approved"; the review draft is not completed |
+
+Outputs compared with the published 0.1.0 assets (Gerber zip digest
+verified):
+
+- Every Gerber has revision `B` (was `0.1.0`). Edge cuts and paste are
+  unchanged, PTH holes go from 74 to 78, and NPTH is unchanged.
+- Silkscreen: the new labels are TP1 and TP2 only. All other silk
+  differences lie on vias that moved, were added or were removed, where the
+  mask clearance is subtracted from silk. In-build silk verification passed.
+- BOM and CPL are byte-identical (test points are excluded from placement).
+  Assembly notes are unchanged.
+- Fabrication notes are reworded: IPC-6012 Class 2, FR-4 is stated,
+  conformal coating is not required, and vias are not required to be
+  tented. The 0.1.0 Gerbers already opened the mask over all 66 vias.
+- DRC: one clearance error, 0.1917 mm against 0.200 mm inside footprint
+  ID1. The same error is in the 0.1.0 report.
+
+### 11.4 Findings
+
+| # | Finding | Effect |
+| --- | --- | --- |
+| F-R8 | The build writes one `revision_history_variables.env` from the schematic rows. The fabrication and assembly drawings therefore show the schematic table (B and `ISSUED AS 0.1.0`, drawn date 2026-04-24) instead of their own single row A | Blocks approval: drawings misstate history. Engine fix and a new candidate needed |
+| F-W1 | The pinned image's Python cannot decode embedded worksheets (no zstd). Host `validate` passes, the container drawing-sheet check fails | Worked around by adopting the identical `Templates/` sheet. The engine should report it in `validate` |
+| F-U1 | `update apply` records hashes from a CRLF template checkout | Cosmetic; `TODO.md` |
+| — | The pre-existing ID1 DRC clearance error | Owner decision |

@@ -328,9 +328,23 @@ Goal: make the generated README a useful hardware project front page.
 - [ ] Local release on a real project (controlled rehearsal in an isolated
       clone first; needs owner review). Plan for FIC-100A `0.1.1`:
       `REAL_PROJECT_REHEARSAL.md` (not executed; blockers B1–B5).
-- [ ] G1: test a local candidate whose previous release is a legacy tag (no
-      committed manifest) and whose baselines are both new
-      (`REAL_PROJECT_REHEARSAL.md` 2.5).
+- [x] G1: a legacy previous-release tag (no committed manifest) with both
+      baselines new passes `check-baseline --local`; a claimed reuse or
+      reissue fails closed (`test_local_release.LegacyPredecessorTests`,
+      `test_revision_model`, `5d4bceb`).
+- [ ] F-R8: the build writes one `revision_history_variables.env` from the
+      schematic rows, so the fabrication and assembly drawings show the
+      schematic revision table and drawn date. Write per-document tables
+      (blocks the FIC-100A `0.1.1` candidate; `REAL_PROJECT_REHEARSAL.md` 11.4).
+- [ ] F-W1: the pinned image cannot decode embedded worksheets (no zstd), so
+      host `validate` passes while the container drawing-sheet check fails.
+      Report it in `validate`, or make the image check independent of zstd.
+- [ ] F-U1: `update apply` records the hash of the template's working-tree
+      file for merged files, so a CRLF Windows checkout of Boardwright
+      leaves LF-installed files reported as modified. The obsolete-file check
+      also compares raw hashes, so CRLF-only differences are reported as
+      "obsolete file is customized". Normalise line endings in both
+      (FIC-100A rehearsal, `REAL_PROJECT_REHEARSAL.md` section 11).
 - [x] Local-preview testbench integration: validated by run `44711268100`
       (106/106, ci-test `6972067`). Earlier runs failed: `44685152330` (87/88; C1),
       `44692377491` (91/92; substring check), `44708112597` (105/106; bytecode
