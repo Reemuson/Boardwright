@@ -332,10 +332,10 @@ Goal: make the generated README a useful hardware project front page.
       baselines new passes `check-baseline --local`; a claimed reuse or
       reissue fails closed (`test_local_release.LegacyPredecessorTests`,
       `test_revision_model`, `5d4bceb`).
-- [ ] F-R8: the build writes one `revision_history_variables.env` from the
-      schematic rows, so the fabrication and assembly drawings show the
-      schematic revision table and drawn date. Write per-document tables
-      (blocks the FIC-100A `0.1.1` candidate; `REAL_PROJECT_REHEARSAL.md` 11.4).
+- [x] F-R8: each drawing renders its own revision table
+      (`REVTABLE_DOCUMENT`, `get_revision_history_var.py --document`;
+      `21c3a5a`). Verified in pinned-Docker PDFs and in FIC-100A candidate
+      `ffbf2560`.
 - [ ] F-W1: the pinned image cannot decode embedded worksheets (no zstd), so
       host `validate` passes while the container drawing-sheet check fails.
       Report it in `validate`, or make the image check independent of zstd.

@@ -3,11 +3,10 @@
 
 # Local Releases: Real-Project Rehearsal (FIC-100A 0.1.1)
 
-Status: **stopped after the candidate (2026-11-21).** Clone preparation
-and candidate `e2302055…` are done (section 11). The candidate is **not
-fit for approval**: its fabrication and assembly drawings show the
-schematic's revision table (F-R8). Nothing was approved, finalised, tagged
-or published.
+Status: **stopped after the replacement candidate (2026-11-21).** The
+replacement candidate `ffbf2560…` (section 12) is frozen and not approved.
+The first candidate `e2302055…` was rejected for F-R8 and is kept as
+evidence. Nothing was approved, finalised, tagged or published.
 
 This follows the ci-test integration (`LOCAL_RELEASE_INTEGRATION.md`, run
 `44868431634`). The local-release engine is described in `LOCAL_FIRST.md`
@@ -482,3 +481,79 @@ verified):
 | F-W1 | The pinned image's Python cannot decode embedded worksheets (no zstd). Host `validate` passes, the container drawing-sheet check fails | Worked around by adopting the identical `Templates/` sheet. The engine should report it in `validate` |
 | F-U1 | `update apply` records hashes from a CRLF template checkout | Cosmetic; `TODO.md` |
 | — | The pre-existing ID1 DRC clearance error | Owner decision |
+
+## 12. Replacement candidate (2026-11-21)
+
+Owner decisions after reviewing `e2302055…`: fix F-R8 in Boardwright,
+correct the inherited ID1 clearance in the clone, and build a replacement
+candidate. Nothing is approved. Evidence: `replacement/` in the evidence
+directory, and `candidate-e2302055-REJECTED.md`.
+
+### 12.1 F-R8 fix (Boardwright `21c3a5a`)
+
+The generated fabrication and assembly KiBot configs set
+`REVTABLE_DOCUMENT`. `get_revision_history_var.py --document` then computes
+each drawing's own table at render time, so nothing per document is written
+to the project. The build also restores KiBot's project edits when a step
+fails. Tests: 6 new F-R8 tests (three histories with different revisions,
+dates, descriptions and authors) and a build restore-on-failure test. Each
+fix component was mutation-checked. Full suite: 864 OK (7 skipped).
+
+Pinned-Docker PDF check: a throwaway copy of the clone with three
+synthetic histories was built with `container build --variant CHECKED`
+(3 min 29 s). In the rendered PDFs (text and images), the schematic shows
+B and A, fabrication A only, and assembly C, B and A, each with its own
+dates and authors and none of the others' rows.
+
+### 12.2 ID1 clearance
+
+ID1 is the stackup marker `RD-Symbols-Silkscreen:STACKUP_ID_2L_SML`
+(no-net copper: an outline rectangle and a layer digit on each copper
+layer). On L2, the mirrored digit "2" (1.0 mm high, 0.25 mm stroke) was
+0.1917 mm from its rectangle. The project minimum is 0.200 mm (board rules,
+all net classes, `.kicad_dru`, fabrication notes). The violation is also in
+0.1.0. Measured with the pinned DRC (temporary 0.40 mm measurement rule on
+scratch copies):
+
+| Digit "2" | Clearance |
+| --- | --- |
+| 1.0 mm, 0.25 stroke (original) | 0.1917 |
+| 1.0, 0.20 | 0.2167 |
+| 0.9, 0.25 | 0.2375 |
+| **0.9, 0.20 (applied)** | **0.2500** |
+| 0.8, 0.20 | 0.2833 |
+
+The digit on F.Cu ("1") clears by 0.222 mm. The marker rectangles are 0.2005 mm
+from the GND pours, which is the 0.2 mm pour clearance working as intended.
+The board and the project library footprint are changed identically (`115686d`). DRC
+before: 1 error. After: 0 violations, 0 unconnected, 0 schematic-parity
+issues. No net, pad or track changed.
+
+### 12.3 Board revision marking
+
+The front silkscreen "FIC-100A REV [A]" was fixed text from 0.1.0, so a
+revision B board would be marked A. The knockout text is now
+`${PCB_REVISION}` and the pinned plot shows "REV [B]" (`6bea1b1`). This is a
+design correction made in addition to the approved inputs and is recorded
+in the changelog. The release inputs are unchanged.
+
+### 12.4 Replacement candidate
+
+| Item | Value |
+| --- | --- |
+| Prepared source | `6bea1b12200f44226c9ff9026246659f461389fe` (payload `21c3a5a` in `3db47dc`) |
+| Candidate id | `ffbf2560c1288f5fd4597e22e725f333f12a88d8997968f01af2148deff0e774` |
+| Store | `fic-100a-0.1.1/store-2` (the first store is kept) |
+| Manifest | `9f958da8…` |
+| Build | 3 min 32 s; DRC 0 errors and 27 `lib_footprint_mismatch` warnings, the same as before; silk verification passed |
+| Baselines | B/1 new, B-A new, "No reused baselines" |
+| Ledger | `0.1.1`, previous `0.1.0`, PCB B, schematic B, assembly A, fabrication A |
+| Drawings | Schematic B and A (`ISSUED AS 0.1.0; LETTER A ASSIGNED AT MIGRATION`). Fabrication A only. Assembly A only. All R. HICKS, 2026-11-21 for the new rows |
+| Store state | Both stores intact; "candidate frozen; not approved"; review draft not filled |
+
+Controlled outputs compared with `e2302055…` (normalised): assembly 4 of 4
+identical. Fabrication 19 of 23 identical. The 4 that differ are
+F.Silkscreen and L2, each loose and in the zip. The F.Silkscreen change is
+only the revision-marking glyph and the L2 change is only the ID1 digit. Every
+Gerber has revision B. The schematic is unchanged, so connectivity is still
+identical to 0.1.0.
