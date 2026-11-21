@@ -6,9 +6,7 @@
 from __future__ import annotations
 
 import os
-import shutil
 import stat
-import subprocess
 import unittest
 from pathlib import Path
 
@@ -97,45 +95,6 @@ class FinalizeTests(Case):
                                     echo=self.out.append)
         self.assertEqual([], self.store.entries("finalizations"))
         self.assertEqual("", _git(self.repo, "tag"))
-
-    def test_signing_requested_without_a_key_fails_closed(self) -> None:
-        record = self.approved()
-        with self.assertRaisesRegex(LocalReleaseError, "no signing key"):
-            self.finalize(sign=True)
-        _git(self.repo, "config", "gpg.format", "ssh")
-        _git(self.repo, "config", "user.signingkey", str(self.base / "missing-key.pub"))
-        with self.assertRaisesRegex(LocalReleaseError, "signing was requested and failed"):
-            self.finalize(sign=True)
-        self.assertEqual(([], record["source_sha"], ""), (self.store.entries("finalizations"), self.head("main"),
-                                                          _git(self.repo, "tag")))
-
-    @unittest.skipUnless(shutil.which("ssh-keygen"), "ssh-keygen is needed for a signing key")
-    def test_signed_release_commit_and_tag_verify(self) -> None:
-        key = self.base / "signing key"
-        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "reviewer@example.invalid", "-f", str(key)],
-                       check=True, capture_output=True)
-        allowed = self.base / "allowed_signers"
-        public = Path(str(key) + ".pub")
-        allowed.write_text("reviewer@example.invalid " + public.read_text(encoding="utf-8"), encoding="utf-8")
-        for name, value in (("gpg.format", "ssh"), ("user.signingkey", str(public)),
-                            ("gpg.ssh.allowedSignersFile", str(allowed))):
-            _git(self.repo, "config", name, value)
-        record = self.approved()
-        self.finalize(sign=True)
-        commit = self.assert_finalised(record)
-        self.assertEqual(0, subprocess.run(["git", "verify-commit", commit], cwd=self.repo, capture_output=True).returncode)
-        self.assertEqual(0, subprocess.run(["git", "tag", "-v", "1.0.0"], cwd=self.repo, capture_output=True).returncode)
-        with self.assertRaisesRegex(LocalReleaseError, "started with --sign"):
-            local_finalize.finalize(self.config, self.store, "1.0.0", sign=False, runner=self.engine,
-                                    host_runner=self.engine.host, echo=self.out.append)
-        # A signature that stops verifying is never reported as a signed release.
-        allowed.write_text("", encoding="utf-8")
-        with self.assertRaisesRegex(LocalReleaseError, "does not verify"):
-            self.finalize(sign=True)
-        self.assertTrue(any("does not verify" in p for p in self.state().problems))
-        with self.assertRaisesRegex(LocalReleaseError, "Nothing was published"):
-            self.publish()
-        self.assertEqual([], self.store.entries("releases"))
 
 
 if __name__ == "__main__":

@@ -35,7 +35,6 @@ from .local_finalize import (
     import_release_commit,
     load_finalization,
     pending_ref,
-    signature_problems,
     sync_worktree,
 )
 from .local_publish import PUBLISH_FILE, load_release
@@ -60,6 +59,7 @@ class VersionState:
     detail: str = ""
     problems: list[str] = field(default_factory=list)
     recoverable: list[str] = field(default_factory=list)
+    signature: str = ""  # the signature facts of a finalised release (SignatureReport.line)
 
     @property
     def next_action(self) -> str:
@@ -139,9 +139,10 @@ def version_state(repo: Path, store: ReleaseStore, version: str) -> VersionState
         state.recoverable.append(f"the {event['event']} entry is complete but its index event was not written")
     if state.recoverable:
         return state
+    approval: dict = {}
     if store.entries("approvals", version):
         try:
-            verify_approval(store, version)
+            approval = verify_approval(store, version)[3]
         except BoardwrightError as exc:
             state.problems.append(str(exc))
             return state
@@ -155,8 +156,13 @@ def version_state(repo: Path, store: ReleaseStore, version: str) -> VersionState
         return state
     state.stage, state.detail = finalized.stage, finalized.detail
     if finalized.stage in ("advanced", "tagged"):
+        from .local_signing import release_signatures
+
         found = load_finalization(store, version)
-        state.problems.extend(signature_problems(repo, version, found[1]) if found else [])
+        if found:
+            report = release_signatures(repo, version, found[1], approval)
+            state.signature = report.line()
+            state.problems.extend(report.problems)
     if finalized.stage == "prepared":
         state.recoverable.append("the release commit is recorded but not imported")
     if finalized.stage in ("advanced", "tagged") and _rev(repo, "HEAD") == finalized.release_commit:
@@ -187,6 +193,8 @@ def status_lines(repo: Path, store: ReleaseStore, version: str = "") -> list[str
     for name in [version] if version else versions(store):
         state = version_state(repo, store, name)
         lines.append(f"Release {name}: {state.stage} ({state.detail})")
+        if state.signature:
+            lines.append(f"  {state.signature}")
         lines += [f"  PROBLEM: {p}" for p in state.problems]
         lines += [f"  interrupted: {r}" for r in state.recoverable]
         lines.append(f"  next: {state.next_action}")

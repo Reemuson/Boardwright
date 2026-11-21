@@ -26,7 +26,7 @@ import subprocess
 from pathlib import Path
 
 from . import container
-from .local_finalize import checkpoint, finalize_state, load_finalization, signature_problems
+from .local_finalize import checkpoint, finalize_state, load_finalization
 from .local_release import LocalReleaseError, ReleaseRequest, verify_approval
 from .release_store import ReleaseStore, safe_name, sha256_bytes, sha256_file
 from .stage_lock import stage_lock
@@ -53,11 +53,17 @@ def _release_env(text: str) -> dict[str, str]:
 
 
 def local_notes_section(approval: dict, finalization: dict) -> str:
+    if finalization["signed"]:
+        signing = ("signed; the signatures are valid and were made by the key that the developer's allowed-signers "
+                   "file lists for the approver alone. That mapping is local configuration, **not authenticated** "
+                   "by any independent authority.")
+    else:
+        signing = "unsigned (the approval is unauthenticated)."
     return (
         "\n## Local release\n\n"
         "This release was prepared and approved locally. The approval is **local and not server-enforced**; "
         f"the approver ({approval['approver']}) is the Git identity, **asserted, not authenticated**. "
-        f"Release commit and tag: {'signed' if finalization['signed'] else 'unsigned'}. "
+        f"Release commit and tag: {signing} "
         f"Reviewed candidate: `{approval['candidate_id']}`. The tag was not pushed and nothing was published "
         "on GitHub.\n"
     )
@@ -125,9 +131,11 @@ def publish(config, store: ReleaseStore, version: str, *, runner=None, echo=prin
         if state.stage != "tagged":
             raise LocalReleaseError(f"Release {version} is not finalised ({state.detail}); run finalize first.")
         _fpath, finalization = load_finalization(store, version)
-        unsigned = signature_problems(repo, version, finalization)
-        if unsigned:
-            raise LocalReleaseError("Nothing was published: " + " ".join(unsigned))
+        from .local_signing import release_signatures
+
+        signatures = release_signatures(repo, version, finalization, approval)
+        if signatures.problems:
+            raise LocalReleaseError("Nothing was published: " + " ".join(signatures.problems))
         commit = finalization["release_commit"]
         approval_bytes = (store.entry_path("approvals", version, record["candidate_id"]) / "approval.json").read_bytes()
         request = ReleaseRequest(**record["request"])
@@ -187,6 +195,7 @@ def publish(config, store: ReleaseStore, version: str, *, runner=None, echo=prin
                 "source_sha": finalization["source_sha"], "candidate_id": record["candidate_id"],
                 "approval_sha256": sha256_bytes(approval_bytes), "authority": "local", "server_enforced": False,
                 "authenticated": False, "signed": finalization["signed"], "variant": variant,
+                "signature": signatures.as_dict(),
                 "zip": package.zip_path.name, "zip_sha256": sha256_file(package.zip_path),
                 "manifest_txt_sha256": sha256_file(package.manifest), "package_files": package.files,
                 "output_notes": len(differences), "output_blocking": 0,

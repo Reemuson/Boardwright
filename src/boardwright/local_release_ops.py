@@ -205,6 +205,7 @@ class VersionSummary:
     approval: str = ""
     release_commit: str = ""
     package: str = ""
+    signature: str = ""
     problems: list[str] = field(default_factory=list)
     recoverable: list[str] = field(default_factory=list)
 
@@ -255,7 +256,7 @@ def summaries(config, version: str = "") -> tuple[str, list[VersionSummary]]:
         details = _candidate_summary(store, name, approvals[0].name if approvals else "")
         summary = VersionSummary(
             name, state.stage, state.detail, state.next_action, candidates=len(store.entries("candidates", name)),
-            problems=list(state.problems), recoverable=list(state.recoverable),
+            problems=list(state.problems), recoverable=list(state.recoverable), signature=state.signature,
             **{k: v for k, v in details.items() if k != "unreadable"})
         if details.get("unreadable"):
             summary.problems.append(f"candidate unreadable: {details['unreadable']}")
@@ -300,6 +301,8 @@ def format_summary(summary: VersionSummary) -> str:
         lines.append(f"  {summary.approval}")
     if summary.release_commit:
         lines.append(f"  release commit {summary.release_commit[:12]}")
+    if summary.signature:
+        lines.append(f"  {summary.signature}")
     if summary.package:
         lines.append(f"  package {summary.package}")
     lines += [f"  PROBLEM: {p}" for p in summary.problems]
@@ -341,7 +344,7 @@ def confirmation_text(config, operation: str, args: LocalArgs) -> str:
                     "(asserted, not authenticated)."),
         "finalize": (f"Rebuild {version} (several minutes), verify it against the approved candidate, create the "
                      f"release commit, advance {branch} to it, update your working tree, and create the annotated tag "
-                     f"{version} ({'signed' if args.sign else 'unsigned'}). The tag is not pushed. The branch and tag "
+                     f"{version} ({'signed: SSH only, and the signing key must be listed for the approver alone in your allowed-signers file; that local mapping is not authentication' if args.sign else 'unsigned'}). The tag is not pushed. The branch and tag "
                      "changes are never undone automatically."),
         "publish": (f"Rebuild {version} from its tag (several minutes), verify the outputs against the tagged accepted "
                     "manifest, and write the release package to the local release store once; it is never replaced. "

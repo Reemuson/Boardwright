@@ -42,7 +42,6 @@ from .local_release import (
     LocalReleaseError,
     ReleaseRequest,
     git_identity,
-    signing_configured,
     tag_exists,
     verify_approval,
     write_local_refs,
@@ -145,19 +144,12 @@ def verify_release_commit(repo: Path, commit: str, record: dict, approval_bytes:
     return problems
 
 
-def signature_problems(repo: Path, version: str, record: dict) -> list[str]:
-    """For a signed finalisation: the release commit and (if present) the tag must verify, every time."""
+def signature_problems(repo: Path, version: str, record: dict, approval: dict) -> list[str]:
+    """For a signed finalisation: the commit and (if present) the tag must be signed by the approver, every time."""
 
-    if not record.get("signed"):
-        return []
-    problems = []
-    if _git(repo, "verify-commit", record["release_commit"], check=False).returncode != 0:
-        problems.append(f"The signed release commit {record['release_commit'][:12]} does not verify "
-                        "(git verify-commit); check the signing configuration.")
-    if _rev(repo, f"refs/tags/{version}") and _git(repo, "tag", "-v", version, check=False).returncode != 0:
-        problems.append(f"The signed tag {version} does not verify (git tag -v); check the signing configuration. "
-                        "It is never deleted automatically.")
-    return problems
+    from .local_signing import release_signatures
+
+    return release_signatures(repo, version, record, approval).problems
 
 
 def finalize_state(repo: Path, store: ReleaseStore, version: str) -> FinalizeState:
@@ -249,14 +241,20 @@ def _prepare(config, store: ReleaseStore, version: str, candidate_path: Path, re
             raise LocalReleaseError("The release commit could not be created"
                                     + (" (signing was requested and failed; nothing was released unsigned)" if sign else "")
                                     + f": {(exc.stderr or '').strip()}") from exc
-        if sign and _git(workdir, "verify-commit", commit, check=False).returncode != 0:
-            raise LocalReleaseError("The release commit's signature does not verify; nothing was released.")
+        if sign:
+            from .local_signing import approver_email, verify_object
+
+            _valid, matches, problem = verify_object(workdir, commit, "commit", approver_email(approval))
+            if not matches:
+                raise LocalReleaseError(f"{problem} Nothing was recorded, imported or tagged.")
         finalization = {
             "schema": 1, "version": version, "candidate_id": record["candidate_id"],
             "approval_sha256": sha256_bytes(approval_bytes), "source_sha": source, "branch": record["branch"],
             "release_commit": commit, "release_tree": _rev(workdir, f"{commit}^{{tree}}"), "signed": sign,
             "review_gate": "match", "image": container.image_for(request.kicad).reference,
             "pending_ref": pending_ref(version),
+            # Signed: the commit was verified as signed by this approver (signer binding, audit F-R7).
+            "signing": {"format": "ssh", "approver": approval["approver"], "authenticated": False} if sign else None,
         }
         problems = verify_release_commit(workdir, commit, finalization, approval_bytes)
         if problems:
@@ -333,7 +331,7 @@ def advance_branch(repo: Path, record: dict) -> bool:
     return True
 
 
-def create_tag(repo: Path, version: str, record: dict, *, sign: bool) -> bool:
+def create_tag(repo: Path, version: str, record: dict, *, sign: bool, approval: dict | None = None) -> bool:
     commit = record["release_commit"]
     if _rev(repo, f"refs/tags/{version}"):
         return False  # finalize_state verified it
@@ -345,9 +343,12 @@ def create_tag(repo: Path, version: str, record: dict, *, sign: bool) -> bool:
                                 + (" (signing was requested and failed; no unsigned tag was made)" if sign else "")
                                 + f": {(done.stderr or done.stdout).strip()}")
     checkpoint("after-tag")
-    if sign and _git(repo, "tag", "-v", version, check=False).returncode != 0:
-        raise LocalReleaseError(f"Tag {version}'s signature does not verify. The tag exists; check the signing "
-                                "configuration. It is never deleted automatically.")
+    if sign:
+        from .local_signing import approver_email, verify_object
+
+        _valid, matches, problem = verify_object(repo, version, "tag", approver_email(approval or {}))
+        if not matches:
+            raise LocalReleaseError(f"{problem} The tag exists; it is never deleted automatically.")
     return True
 
 
@@ -374,10 +375,12 @@ def finalize(config, store: ReleaseStore, version: str, *, sign: bool = False, r
         if any(store.entries("releases", version)):
             raise LocalReleaseError(f"Release {version} is already published.")
         state = finalize_state(repo, store, version)
+        if sign and state.stage != "tagged":
+            # Before any build or tag: the configured key must stand for the approver alone (F-R7).
+            from .local_signing import preflight
+
+            preflight(repo, approval)
         if state.stage == "approved":
-            if sign and not signing_configured(repo):
-                raise LocalReleaseError("Signing was requested but no signing key is configured (user.signingkey); "
-                                        "nothing was done.")
             if not _clean(repo):
                 raise LocalReleaseError("The working tree has uncommitted or untracked changes; nothing was done.")
             if _rev(repo, "HEAD") != approval["source_sha"]:
@@ -404,15 +407,17 @@ def finalize(config, store: ReleaseStore, version: str, *, sign: bool = False, r
         _record_events(store, version, finalization, finalize_state(repo, store, version))
         advance_branch(repo, finalization)
         _record_events(store, version, finalization, finalize_state(repo, store, version))
-        create_tag(repo, version, finalization, sign=sign)
+        create_tag(repo, version, finalization, sign=sign, approval=approval)
         state = finalize_state(repo, store, version)
         if state.stage != "tagged" or _rev(repo, f"refs/heads/{finalization['branch']}") is None:
             raise LocalReleaseError(f"Finalisation did not reach the tagged state ({state.detail}).")
         _record_events(store, version, finalization, state)
-        problems = signature_problems(repo, version, finalization)
+        problems = signature_problems(repo, version, finalization, approval)
         if problems:
             raise LocalReleaseError(" ".join(problems))
+    signed = (f" (signed by the approver {approval['approver']}; the key mapping is local, not authenticated)" if sign
+              else " (unsigned)")
     echo(f"Finalised {version}: release commit {finalization['release_commit'][:12]} on {finalization['branch']}, "
-         f"annotated tag {version}{' (signed)' if sign else ' (unsigned)'}.")
+         f"annotated tag {version}{signed}.")
     echo("Local approval: not server-enforced; the approver is asserted, not authenticated. The tag was not pushed.")
     return state
