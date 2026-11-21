@@ -393,6 +393,20 @@ class RevisionModelTests(unittest.TestCase):
         self.assertEqual((), assessment.problems)
         self.assertTrue(any("predates the release ledger" in r for r in assessment.reviews))
 
+    def test_legacy_tag_with_changed_geometry_issues_new_baselines(self) -> None:
+        # G1: a legacy predecessor cannot be compared, so a geometry change must
+        # move to a new PCB revision with both baselines newly issued.
+        _git(self.tmp, "tag", "0.9.0")
+        self.project.write(width="0.3")
+        kept = self.project.assess("0.9.1", "fabrication,documentation", "A.1")
+        self.assertTrue(any("PCB revision is still A" in p for p in kept.problems))
+        self.project.set_revisions(pcb_rev="B")
+        assessment = self.project.assess("0.9.1", "fabrication,documentation", "B.0")
+        self.assertEqual((), assessment.problems)
+        self.assertTrue(assessment.baseline_legacy)
+        self.assertEqual(("B/1", "new"), (assessment.fabrication_baseline.id, assessment.fabrication_baseline.status))
+        self.assertEqual("new", assessment.assembly_baseline.status)
+
     def test_historic_ledger_entry_tampering_detected(self) -> None:
         self._released_a()
         path = self.tmp / ".boardwright" / "releases.yaml"

@@ -372,6 +372,59 @@ class BaselineFailClosedTests(Case):
         self.assertIn("no committed output manifest at its local tag", err.getvalue())
 
 
+LEGACY_SUCCESSOR = """schema: 1
+releases:
+  - version: 1.0.0
+    date: '2026-11-21'
+    source_commit: 2222222222222222222222222222222222222222
+    previous_version: 0.9.0
+    variant: RELEASED
+    identities: {{pcb_revision: B, schematic_revision: B, assembly_revision: A, fabrication_revision: A}}
+    change_classes: [fabrication, assembly, tooling, documentation]
+    justification: First ledgered release after legacy 0.9.0.
+    fabrication_baseline: {{id: {fab_id}, status: {fab}}}
+    assembly_baseline: {{id: {asm_id}, status: {asm}}}
+    fingerprint: {{schema: 3, source: tag, pcb_geometry: g, pcb_netnames: n, fabrication_spec: f, assembly: a, schematic: s}}
+"""
+
+
+class LegacyPredecessorTests(Case):
+    """G1: the previous release is a legacy tag (lightweight, no ledger entry, no committed manifest)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        _git(self.repo, "tag", "0.9.0")  # lightweight, as pre-Boardwright releases were
+
+    def check_baseline(self, fab: str, fab_id: str, asm: str, asm_id: str) -> tuple[int, str, str]:
+        from boardwright import legacy_baseline, output_manifest
+
+        _write(self.repo / ".boardwright" / "releases.yaml",
+               LEGACY_SUCCESSOR.format(fab=fab, fab_id=fab_id, asm=asm, asm_id=asm_id))
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(legacy_baseline, "fetch_published_package",
+                               side_effect=AssertionError("GitHub must not be contacted")), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = output_manifest.main(["check-baseline", "--root", str(self.repo), "--local"])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_plan_accepts_a_legacy_tag_without_ledger_entry(self) -> None:
+        self.assertEqual([], local_release.plan(self.config, "1.0.0", self.store).problems)
+
+    def test_new_baselines_need_no_legacy_comparison(self) -> None:
+        code, out, err = self.check_baseline("new", "B/1", "new", "B-A")
+        self.assertEqual(0, code, err)
+        self.assertIn("No reused baselines", out)
+
+    def test_claimed_reuse_or_reissue_fails_closed(self) -> None:
+        for fab, fab_id, asm, asm_id in (("reused", "A/1", "new", "B-A"),
+                                         ("new", "B/1", "reused", "A"),
+                                         ("reissued", "A/2", "new", "B-A")):
+            with self.subTest(fabrication=fab, assembly=asm):
+                code, _, err = self.check_baseline(fab, fab_id, asm, asm_id)
+                self.assertEqual(1, code)
+                self.assertIn("no committed output manifest at its local tag", err)
+
+
 class CandidateTests(Case):
     def test_candidate_is_built_from_the_committed_head_and_frozen(self) -> None:
         before = snapshot(self.repo)
