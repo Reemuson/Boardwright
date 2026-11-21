@@ -3,10 +3,10 @@
 
 # Local Releases: ci-test Integration Plan
 
-Status: **approved for preparation (owner, 2026-11-21), not run.** The
-installation commit is prepared locally and held for review; nothing has
-been pushed to boardwright-ci-test and no run has been dispatched. The local-release engine is described in `LOCAL_FIRST.md` sections 5
-and 7.1. Earlier results are in `AUDIT-2026-11.md`.
+Status: **complete (owner-accepted, 2026-11-21).** Run `44868431634` on
+ci-test `358c3b1` passed 102/102 checks against the replacement held
+candidate `44868048472`. Results are in section 6 and `AUDIT-2026-11.md`.
+The local-release engine is described in `LOCAL_FIRST.md` sections 5 and 7.1.
 
 ## 1. Purpose
 
@@ -28,7 +28,7 @@ Each of these rules is also checked by the run itself.
 | Engine | This branch's Boardwright is committed in the clone only, as in the live runs; ci-test `main` keeps its installed payload |
 | Store and stages | `BOARDWRIGHT_RELEASE_STORE` and `BOARDWRIGHT_STAGE_ROOT` under `$RUNNER_TEMP` |
 | No push, tag or release on GitHub | No `git push`, no `gh release`, no workflow dispatch from the run. Before and after the run, record `git ls-remote` of ci-test and `gh release list` (read-only token) and require them to be identical |
-| Held GitHub candidates | Not approved, not named, not downloaded except read-only for comparison (check 4) |
+| Held GitHub candidates | Not approved, not named, not downloaded except read-only for comparison (check 4). The run is the required dispatch input `held_run_id`. It must be a successful held 0.1.8 `prepare-release.yaml` run on `main` at the integration commit, with its approval, commit, tag and dispatch steps skipped. Its artifact's SHA-256 must match GitHub's digest; otherwise the run fails |
 
 ## 3. Installation (owner, after review)
 
@@ -47,7 +47,7 @@ writes only under `$RUNNER_TEMP` and to its own artifact.
 | 1 | Backend selection | No remote: local by default; `--backend github` refused ("no remote"); a GitHub `origin` URL without `gh` login: release refused with the problem, and `--backend local` warns local-only; nothing falls back |
 | 2 | Plan refusals | Dirty tree, untracked file and existing tag are each refused before any build. Refs, tree, store and index are unchanged |
 | 3 | Read-only views | `status`, `plan`, the TUI summaries and the dashboard line leave `.git/objects`, refs, the index (mtime) and the store byte-identical |
-| 4 | Release A `0.1.8` (tooling) | Candidate with the held candidate's inputs and date. Fabrication `A/2` and assembly `A` reused against `0.1.7`'s committed manifest. An untouched review draft is refused. Approve, finalise, duplicate finalise (no rebuild), publish. Package: 392 zip members and 358 `MANIFEST.txt` entries. Controlled outputs equivalent to held run `44670323650` (0 blocking) |
+| 4 | Release A `0.1.8` (tooling) | Candidate with the held candidate's inputs and date. Fabrication `A/2` and assembly `A` reused against `0.1.7`'s committed manifest. An untouched review draft is refused. Approve, finalise, duplicate finalise (no rebuild), publish. Package: 392 zip members and 358 `MANIFEST.txt` entries. Controlled outputs equivalent to the held run given as `held_run_id` (0 blocking) |
 | 5 | Release B `0.1.9` (fabrication) | Silkscreen label moved 1 mm. With PCB revision `A` kept, preparation is refused before building. With `board_revision: B`: new baselines `B/1` and `B-A`, and exactly the front silkscreen Gerber differs |
 | 6 | Interrupted finalisation | A driver wrapper raises at `after-branch` (the test checkpoint). `status` reports `advanced` and the interrupted step. TUI Recover brings the tree to the release commit. `finalize` resumes without a rebuild |
 | 7 | Lost index events (F-R1) | A wrapper drops the candidate event after the freeze. `status` names `recover`, `recover` appends the event, and the same candidate is then approvable with no new entry |
@@ -71,3 +71,17 @@ zips. Estimated time: about 30 minutes for checks 1 to 8 (Windows took
    authorises a dispatch.
 4. Results are reviewed, and recorded in `AUDIT-2026-11.md`, before any
    local release on a real project or on ci-test `main`.
+
+## 6. Result (2026-11-21)
+
+| Item | Value |
+| --- | --- |
+| ci-test source | `358c3b112d4d3a17cfa1adce17914e095fad812e` (fast-forward from `b601f31`) |
+| Held candidate | Run `44868048472`, `review_hold`, not approved; artifact `sha256:38563911e3da87086af06d9621f337de024165667172b30a05ba4c696a402d99` |
+| Integration | Run `44868431634`: 102/102 checks passed |
+| Docker builds | 160.8, 157.2, 155.6, 155.3, 156.2 and 155.0 s |
+| ci-test | Refs and releases identical before and after |
+
+The original held candidate `44670323650` is no longer available on GitHub
+(HTTP 404), so it was replaced, not reused. Details are in
+`AUDIT-2026-11.md` ("Local releases: independent ci-test integration").

@@ -322,9 +322,11 @@ Goal: make the generated README a useful hardware project front page.
 - [x] TUI release screen for local releases ("Local release (not
       server-enforced)"), sharing `local_release_ops.run` with the CLI
       (`LOCAL_FIRST.md` section 7.1).
-- [ ] Review the ci-test integration plan (`LOCAL_RELEASE_INTEGRATION.md`),
-      then write its driver script; nothing is installed on ci-test yet.
-- [ ] Local release on a real project or the testbench (needs owner review).
+- [x] Independent local-release integration on ci-test: run `44868431634`
+      (102/102, ci-test `358c3b1`) against replacement held candidate
+      `44868048472` (`LOCAL_RELEASE_INTEGRATION.md`, `AUDIT-2026-11.md`).
+- [ ] Local release on a real project (controlled rehearsal in an isolated
+      clone first; needs owner review).
 - [x] Local-preview testbench integration: validated by run `44711268100`
       (106/106, ci-test `6972067`). Earlier runs failed: `44685152330` (87/88; C1),
       `44692377491` (91/92; substring check), `44708112597` (105/106; bytecode

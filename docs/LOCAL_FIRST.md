@@ -10,8 +10,9 @@ releases (section 5): the full command-line lifecycle (plan, candidate,
 review, approval, finalisation, publication, status and recovery) is
 implemented (5.1a, 5.1b) and verified with pinned-Docker builds in disposable
 repositories only; the TUI release screen (section 7.1) runs the same
-operations. Not yet: a real-project or testbench release (plan:
-`LOCAL_RELEASE_INTEGRATION.md`, not run) and the project matrix (section 8).
+operations. The ci-test integration passed (run `44868431634`,
+`LOCAL_RELEASE_INTEGRATION.md`). Not yet: a real-project release and the
+project matrix (section 8).
 
 ## 1. Decisions (owner, 2026-11-20)
 

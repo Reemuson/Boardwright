@@ -20,7 +20,7 @@ Use this index to find the correct document for each task.
 | [`PROVENANCE.md`](PROVENANCE.md) | File origins, attribution, and licence boundaries. |
 | [`COMMITS.md`](COMMITS.md) | Commit-message convention, trailers and generated commits. |
 | [`LOCAL_FIRST.md`](LOCAL_FIRST.md) | Design (in review): local-first previews, local releases and backend selection. |
-| [`LOCAL_RELEASE_INTEGRATION.md`](LOCAL_RELEASE_INTEGRATION.md) | Proposed ci-test integration plan for local releases (not run). |
+| [`LOCAL_RELEASE_INTEGRATION.md`](LOCAL_RELEASE_INTEGRATION.md) | ci-test integration of local releases (passed, run `44868431634`). |
 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Contribution and verification requirements. |
 
 Use `../LICENSE`, `../NOTICE.md`, `../THIRD_PARTY_NOTICES.md`, and `../LICENSES/` for legal terms and notices.
