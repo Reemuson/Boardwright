@@ -21,6 +21,7 @@ Use this index to find the correct document for each task.
 | [`COMMITS.md`](COMMITS.md) | Commit-message convention, trailers and generated commits. |
 | [`LOCAL_FIRST.md`](LOCAL_FIRST.md) | Design (in review): local-first previews, local releases and backend selection. |
 | [`LOCAL_RELEASE_INTEGRATION.md`](LOCAL_RELEASE_INTEGRATION.md) | ci-test integration of local releases (passed, run `44868431634`). |
+| [`REAL_PROJECT_REHEARSAL.md`](REAL_PROJECT_REHEARSAL.md) | Plan (not executed): local release `0.1.1` rehearsal on FIC-100A in a disposable clone. |
 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Contribution and verification requirements. |
 
 Use `../LICENSE`, `../NOTICE.md`, `../THIRD_PARTY_NOTICES.md`, and `../LICENSES/` for legal terms and notices.

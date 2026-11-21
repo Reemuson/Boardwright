@@ -326,7 +326,11 @@ Goal: make the generated README a useful hardware project front page.
       (102/102, ci-test `358c3b1`) against replacement held candidate
       `44868048472` (`LOCAL_RELEASE_INTEGRATION.md`, `AUDIT-2026-11.md`).
 - [ ] Local release on a real project (controlled rehearsal in an isolated
-      clone first; needs owner review).
+      clone first; needs owner review). Plan for FIC-100A `0.1.1`:
+      `REAL_PROJECT_REHEARSAL.md` (not executed; blockers B1–B5).
+- [ ] G1: test a local candidate whose previous release is a legacy tag (no
+      committed manifest) and whose baselines are both new
+      (`REAL_PROJECT_REHEARSAL.md` 2.5).
 - [x] Local-preview testbench integration: validated by run `44711268100`
       (106/106, ci-test `6972067`). Earlier runs failed: `44685152330` (87/88; C1),
       `44692377491` (91/92; substring check), `44708112597` (105/106; bytecode
