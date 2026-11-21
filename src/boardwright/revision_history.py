@@ -150,11 +150,16 @@ def document_revision_rows(
     return [row for row in rows if isinstance(row, dict) and any(str(value).strip() for value in row.values())]
 
 
-def write_revision_variables(
+def revision_variables(
     config: BoardwrightConfig,
     document_key: str = "schematic",
-) -> Path:
-    path = config.root / ".boardwright" / "revision_history_variables.env"
+) -> dict[str, str]:
+    """The ``REVTABLE_*`` title-block values of one drawing's own revision table.
+
+    Schematic, fabrication and assembly drawings share the KiCad project and
+    worksheet but each has its own history in ``document_revisions.yaml``.
+    """
+
     slots = build_revision_slots(config, document_key, TITLE_BLOCK_REVISION_ROWS)
     total_rows = len(document_revision_rows(config, document_key))
     values: dict[str, str] = {}
@@ -173,6 +178,23 @@ def write_revision_variables(
         if total_rows > TITLE_BLOCK_REVISION_ROWS
         else ""
     )
+    return values
+
+
+def write_revision_variables(
+    config: BoardwrightConfig,
+    document_key: str = "schematic",
+) -> Path:
+    """Write the schematic table to ``revision_history_variables.env``.
+
+    The file and the KiCad project variables hold the schematic's table. The
+    fabrication and assembly drawings read their own tables at render time
+    (``get_revision_history_var.py --document``), so nothing per document is
+    stored in the project.
+    """
+
+    path = config.root / ".boardwright" / "revision_history_variables.env"
+    values = revision_variables(config, document_key)
     lines = [f"{key}={_quote(value)}" for key, value in values.items()]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     write_full_revision_history(config, document_key)

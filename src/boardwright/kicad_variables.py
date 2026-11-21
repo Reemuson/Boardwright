@@ -67,7 +67,13 @@ def build_kicad_text_variables(
 ) -> dict[str, str]:
     project = config.project.get("project", {})
     variables = dict(config.drawing_variables(document_key))
-    variables.update(_read_revision_variables(config.root / ".boardwright" / "revision_history_variables.env"))
+    if str(document_key or "schematic").strip().lower() == "schematic":
+        variables.update(_read_revision_variables(config.root / ".boardwright" / "revision_history_variables.env"))
+    else:
+        # Fabrication and assembly drawings have their own revision tables.
+        from .revision_history import revision_variables
+
+        variables.update(revision_variables(config, document_key))
     variables.update(
         {
             "LOGO": str(config.assets.get("logo") or ""),

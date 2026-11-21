@@ -495,9 +495,15 @@ ${REVTABLE_1_REV}
 ${REVTABLE_1_DESC}
 ```
 
-Boardwright writes every configured slot to
-`.boardwright/revision_history_variables.env`. Newest visible release content
-fills slot 1, and unused slots are written as blank values. The KiBot preflight
+Each drawing shows its own revision table from
+`.boardwright/document_revisions.yaml`. The schematic table is written to
+`.boardwright/revision_history_variables.env` and the KiCad project
+variables. The fabrication and assembly drawings share the PCB project and
+worksheet, so their generated KiBot configs set `REVTABLE_DOCUMENT` and
+`get_revision_history_var.py --document` computes their own tables at render
+time. No per-document file is written to the project, and the build restores
+KiBot's temporary project edits even when a step fails. Unused slots are
+written as blank values. The KiBot preflight
 defines a larger ceiling than the default visible slot count so projects can
 expand their revision-history sheets later.
 

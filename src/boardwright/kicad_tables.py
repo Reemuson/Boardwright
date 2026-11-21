@@ -129,6 +129,8 @@ def _write_document_kibot_configs(root: Path, main_text: str, config, base_repla
     for document_key, relative_path in DOCUMENT_KIBOT_CONFIGS.items():
         replacements = dict(base_replacements)
         replacements.update(config.drawing_variables(document_key))
+        # Each drawing renders its own revision table, not the schematic's.
+        replacements["REVTABLE_DOCUMENT"] = document_key
         page_title_worksheet = _pcb_page_title_worksheet_definition(root, replacements.get("SHEET_WKS", ""))
         if page_title_worksheet:
             replacements["SHEET_WKS"] = page_title_worksheet

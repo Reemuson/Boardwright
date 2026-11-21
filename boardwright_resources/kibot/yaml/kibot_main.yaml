@@ -216,6 +216,7 @@ import:
       RELEASE_DATE: @RELEASE_DATE@
       DRAWN_BY: @DRAWN_BY@
       DRAWN_DATE: '@DRAWN_DATE@'
+      REVTABLE_DOCUMENT: @REVTABLE_DOCUMENT@
       SHEET_LEGAL_NOTICE: @SHEET_LEGAL_NOTICE@
       TEMPLATE_LOGO: @TEMPLATE_LOGO@
       SCRIPTS_DIR: @SCRIPTS_DIR@
@@ -563,6 +564,7 @@ definitions:
   RELEASE_DATE: ''
   DRAWN_BY: ''
   DRAWN_DATE: ''
+  REVTABLE_DOCUMENT: schematic
 
   LOGO: 'assets/logos/logo-wordmark-colour.png'
   TEMPLATE_LOGO: 'assets/logos/logo-block-black.png'

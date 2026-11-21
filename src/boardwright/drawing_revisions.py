@@ -185,6 +185,8 @@ def plan_revision_history(
             draft.get("drawn_by")
             or str(config.document_settings(document).get("drawn_by") or "").strip()
             or next((row.get("drawn_by", "") for row in history if row.get("drawn_by")), "")
+            # The author the drawing's title block shows (falls back to the schematic's).
+            or config.drawing_variables(document).get("DRAWN_BY", "")
         )
         added = normalise_row({"revision": new, "date": date, "description": row_description, "drawn_by": drawn_by})
         plans.append(DocumentRevisionPlan(document, old, new, (added, *history), added))

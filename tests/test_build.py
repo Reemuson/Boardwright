@@ -169,6 +169,20 @@ class PreflightAndBuildTests(unittest.TestCase):
         self._fake_build(mutate)
         self.assertEqual("* text=auto\n", (self.root / ".gitattributes").read_text(encoding="utf-8"))
 
+    def test_failed_step_still_restores_document_specific_edits(self) -> None:
+        # KiBot's set_text_variables writes each drawing's values into project
+        # files; a failing step must not leave them behind.
+        def fail_after_edit(plan, root, echo=print):
+            (root / "board.kicad_pcb").write_text("(kicad_pcb fabrication-table)\n", encoding="utf-8")
+            raise BuildError("Step failed: Regenerate fabrication drawing")
+
+        with patch.object(build, "detect_kicad", return_value="9.0.7"), patch.object(build, "install_fonts"), \
+                patch.object(build, "install_python_requirements"), patch.object(build, "run_plan", side_effect=fail_after_edit):
+            with self.assertRaisesRegex(BuildError, "Regenerate fabrication drawing"):
+                build.build(self.root, "CHECKED", "9", "test", (), echo=lambda *_: None)
+        self.assertEqual("(kicad_pcb)\n", (self.root / "board.kicad_pcb").read_text(encoding="utf-8"))
+        self.assertEqual("", _git(self.root, "status", "--porcelain"))
+
     def test_boardwright_imported_from_elsewhere_is_refused(self) -> None:
         # self.root has no src/boardwright, so the running package is not the checkout's.
         with self.assertRaisesRegex(BuildError, "not from the checkout"):

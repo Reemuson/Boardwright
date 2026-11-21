@@ -246,6 +246,8 @@ definitions:
   SCRIPTS_DIR: boardwright_resources/kibot/resources/scripts
   REPORT_TEMPLATE_DIR: boardwright_resources/kibot/resources/templates
   GET_SHEET_CMD: python3 @SCRIPTS_DIR@/get_sheet_title.py -f "${KIBOT_SCH_NAME}" --dots-number 32 -p
-  GET_REVTABLE_CMD: python3 @SCRIPTS_DIR@/get_revision_history_var.py
+  # Drawing whose own revision table fills REVTABLE_* (schematic, fabrication, assembly).
+  REVTABLE_DOCUMENT: schematic
+  GET_REVTABLE_CMD: python3 @SCRIPTS_DIR@/get_revision_history_var.py --document @REVTABLE_DOCUMENT@
   FABRICATION_DIR: Manufacturing/Fabrication
   ASSEMBLY_DIR: Manufacturing/Assembly
