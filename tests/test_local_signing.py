@@ -35,8 +35,11 @@ OTHER = "someone-else@example.invalid"
 class SigningTests(Case):
     def setUp(self) -> None:
         super().setUp()
+        # Non-ASCII paths: git config values are UTF-8 whatever the host locale (Windows: cp1252).
+        self.keys = self.base / "clés de signature"
+        self.keys.mkdir()
         self.public = self.key("signing key")
-        self.allowed = self.base / "allowed_signers"
+        self.allowed = self.keys / "allowed_signers é"
         self.allow(f"{APPROVER} {self.text(self.public)}")
         for name, value in (("gpg.format", "ssh"), ("user.signingkey", str(self.public)),
                             ("gpg.ssh.allowedSignersFile", str(self.allowed))):
@@ -44,7 +47,7 @@ class SigningTests(Case):
 
     # -- helpers ---------------------------------------------------------------
     def key(self, name: str) -> Path:
-        path = self.base / name
+        path = self.keys / name
         subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", name, "-f", str(path)], check=True,
                        capture_output=True)
         return Path(str(path) + ".pub")

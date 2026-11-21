@@ -82,7 +82,8 @@ class SignatureReport:
 # -- configuration -----------------------------------------------------------
 
 def _config(repo: Path, key: str) -> str:
-    done = subprocess.run(["git", "config", key], cwd=repo, capture_output=True, text=True)
+    done = subprocess.run(["git", "config", key], cwd=repo, capture_output=True, text=True,
+                          encoding="utf-8")  # git config is UTF-8 whatever the locale
     return done.stdout.strip() if done.returncode == 0 else ""
 
 
@@ -162,7 +163,8 @@ def signing_key_blob(repo: Path) -> bytes:
         if public.is_file():
             text = public.read_text(encoding="utf-8")
         elif path.is_file():
-            done = subprocess.run([_program(repo), "-y", "-f", str(path)], capture_output=True, text=True)
+            done = subprocess.run([_program(repo), "-y", "-f", str(path)], capture_output=True, text=True,
+                                  encoding="utf-8")
             if done.returncode != 0:
                 raise SigningError(f"The public key of the signing key {path} cannot be read.")
             text = done.stdout
